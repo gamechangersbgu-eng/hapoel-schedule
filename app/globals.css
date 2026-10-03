@@ -1,0 +1,84 @@
+@import "tailwindcss";
+
+:root {
+  --club-red: #c8102e;
+  --club-red-dark: #8e0b20;
+  --club-red-deep: #5c0814;
+  --grid-border: #d7b4b8;
+  --paper: #fff8f6;
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background: var(--paper);
+  color: #1a1214;
+  min-height: 100%;
+}
+
+@page {
+  size: A4 landscape;
+  margin: 8mm;
+}
+
+@media print {
+  html,
+  body {
+    background: white !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-full {
+    overflow: visible !important;
+    max-height: none !important;
+  }
+
+  .schedule-table {
+    min-width: 0 !important;
+    width: 100% !important;
+    font-size: 9px;
+  }
+
+  .schedule-table th,
+  .schedule-table td,
+  .schedule-table div {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+}
+
+.schedule-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.schedule-table {
+  min-width: 920px;
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.schedule-table th,
+.schedule-table td {
+  border: 1px solid var(--grid-border);
+  vertical-align: stretch;
+}
+
+.team-col {
+  position: sticky;
+  right: 0;
+  width: 7.25rem;
+  z-index: 1;
+  white-space: nowrap;
+  box-shadow: -6px 0 8px -8px rgba(80, 0, 16, 0.35);
+}
+
+.schedule-table thead .team-col {
+  z-index: 4;
+}
