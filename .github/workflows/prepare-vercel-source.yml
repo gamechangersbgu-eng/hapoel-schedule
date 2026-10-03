@@ -98,4 +98,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -m "Extract app and prepare for Vercel [skip extract]" || exit 0
+          git pull --rebase origin vercel-ready
           git push
