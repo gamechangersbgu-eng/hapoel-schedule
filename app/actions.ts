@@ -3,7 +3,8 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { prisma } from "@/lib/db";
+import { and, eq, gte, lte, ne } from "drizzle-orm";
+import { db, slots, teams } from "@/lib/db";
 import { COOKIE_NAME, createSession, requireAdmin } from "@/lib/auth";
 import { getSlotsInWeek } from "@/lib/schedule";
 import { getSlotType, isPitchSlot, SLOT_TYPES } from "@/lib/slot-types";
@@ -75,22 +76,24 @@ export async function saveSlot(input: SlotInput) {
   }
 
   if (isPitchSlot(input.type) && startTime) {
-    const conflictingSlot = await prisma.slot.findFirst({
-      where: {
-        date: input.date,
-        startTime,
-        type: input.type,
-        ...(input.id ? { id: { not: input.id } } : {}),
-      },
-      include: {
-        team: { select: { name: true } },
-      },
-    });
+    const [conflictingSlot] = await db
+      .select({ teamName: teams.name })
+      .from(slots)
+      .innerJoin(teams, eq(slots.teamId, teams.id))
+      .where(
+        and(
+          eq(slots.date, input.date),
+          eq(slots.startTime, startTime),
+          eq(slots.type, input.type),
+          input.id ? ne(slots.id, input.id) : undefined,
+        ),
+      )
+      .limit(1);
 
     if (conflictingSlot) {
       const pitch = getSlotType(input.type).label;
       return {
-        error: `${pitch} כבר תפוס בשעה ${startTime} על ידי ${conflictingSlot.team.name}`,
+        error: `${pitch} כבר תפוס בשעה ${startTime} על ידי ${conflictingSlot.teamName}`,
       };
     }
   }
@@ -105,9 +108,9 @@ export async function saveSlot(input: SlotInput) {
   };
 
   if (input.id) {
-    await prisma.slot.update({ where: { id: input.id }, data });
+    await db.update(slots).set(data).where(eq(slots.id, input.id));
   } else {
-    await prisma.slot.create({ data });
+    await db.insert(slots).values(data);
   }
 
   refreshSchedule();
@@ -116,7 +119,7 @@ export async function saveSlot(input: SlotInput) {
 
 export async function deleteSlot(id: number) {
   await requireAdmin();
-  await prisma.slot.delete({ where: { id } });
+  await db.delete(slots).where(eq(slots.id, id));
   refreshSchedule();
   return { ok: true };
 }
@@ -191,14 +194,14 @@ export async function copyPreviousWeek(weekStart: string) {
   }
 
   const currentDates = weekDates(weekStart);
-  await prisma.slot.deleteMany({
-    where: {
-      date: { gte: currentDates[0], lte: currentDates[6] },
-    },
-  });
+  await db
+    .delete(slots)
+    .where(
+      and(gte(slots.date, currentDates[0]), lte(slots.date, currentDates[6])),
+    );
 
-  await prisma.slot.createMany({
-    data: source.map((slot) => ({
+  await db.insert(slots).values(
+    source.map((slot) => ({
       teamId: slot.teamId,
       date: addDaysISO(slot.date, 7),
       endDate: slot.endDate ? addDaysISO(slot.endDate, 7) : null,
@@ -206,7 +209,7 @@ export async function copyPreviousWeek(weekStart: string) {
       type: slot.type,
       note: slot.note,
     })),
-  });
+  );
 
   refreshSchedule();
   return { ok: true, count: source.length };

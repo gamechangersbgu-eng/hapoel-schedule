@@ -1,6 +1,5 @@
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { db } from "./index";
+import { settings, slots as slotsTable, teams as teamsTable } from "./schema";
 
 const TEAM_NAMES = [
   "נוער",
@@ -46,33 +45,35 @@ function addDaysISO(iso: string, days: number) {
 }
 
 async function main() {
-  await prisma.slot.deleteMany();
-  await prisma.team.deleteMany();
-  await prisma.settings.deleteMany();
+  await db.delete(slotsTable);
+  await db.delete(teamsTable);
+  await db.delete(settings);
 
-  await prisma.settings.create({
-    data: {
-      id: 1,
-      clubName: "הפועל באר שבע",
-      seasonStartDate: "2026-06-28",
-    },
+  await db.insert(settings).values({
+    id: 1,
+    clubName: "הפועל באר שבע",
+    seasonStartDate: "2026-06-28",
   });
 
-  const teams = await Promise.all(
-    TEAM_NAMES.map((name, index) =>
-      prisma.team.create({
-        data: { name, sortOrder: index, isComments: false },
-      }),
-    ),
-  );
+  const teams = await db
+    .insert(teamsTable)
+    .values(
+      TEAM_NAMES.map((name, index) => ({
+        name,
+        sortOrder: index,
+        isComments: false,
+      })),
+    )
+    .returning();
 
-  const comments = await prisma.team.create({
-    data: {
+  const [comments] = await db
+    .insert(teamsTable)
+    .values({
       name: "הערות",
       sortOrder: TEAM_NAMES.length,
       isComments: true,
-    },
-  });
+    })
+    .returning();
 
   const byName = Object.fromEntries(teams.map((team) => [team.name, team]));
   const weekStart = formatISODate(sundayOf(new Date()));
@@ -140,8 +141,8 @@ async function main() {
     { teamName: "מ.קייץ", dateOffset: 0, type: "off", note: "סיום מחנה" },
   ];
 
-  await prisma.slot.createMany({
-    data: slots.map((slot) => ({
+  await db.insert(slotsTable).values(
+    slots.map((slot) => ({
       teamId: byName[slot.teamName].id,
       date: d(slot.dateOffset),
       endDate: slot.endOffset != null ? d(slot.endOffset) : null,
@@ -149,24 +150,19 @@ async function main() {
       type: slot.type,
       note: slot.note ?? null,
     })),
-  });
+  );
 
-  await prisma.slot.create({
-    data: {
-      teamId: comments.id,
-      date: d(6),
-      type: "other",
-      note: "משחקי בית בשבת — להגיע שעה לפני. עדכון אחרון באתר.",
-    },
+  await db.insert(slotsTable).values({
+    teamId: comments.id,
+    date: d(6),
+    type: "other",
+    note: "משחקי בית בשבת — להגיע שעה לפני. עדכון אחרון באתר.",
   });
 }
 
 main()
-  .then(async () => {
-    await prisma.$disconnect();
-  })
-  .catch(async (error) => {
+  .then(() => process.exit(0))
+  .catch((error) => {
     console.error(error);
-    await prisma.$disconnect();
     process.exit(1);
   });

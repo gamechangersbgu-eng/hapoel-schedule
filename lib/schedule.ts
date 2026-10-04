@@ -1,4 +1,5 @@
-import { prisma } from "@/lib/db";
+import { and, asc, eq, gte, lte, or } from "drizzle-orm";
+import { db, settings as settingsTable, slots as slotsTable, teams as teamsTable } from "@/lib/db";
 import type { SlotDTO, WeekData } from "@/lib/types";
 import { resolveWeekStart, weekDates, weekNumber } from "@/lib/week";
 
@@ -26,28 +27,27 @@ export async function getWeekData(weekParam?: string | null): Promise<WeekData> 
   const weekStart = resolveWeekStart(weekParam);
   const dates = weekDates(weekStart);
 
-  const [settings, teams, slots] = await Promise.all([
-    prisma.settings.findUnique({ where: { id: 1 } }),
-    prisma.team.findMany({ orderBy: { sortOrder: "asc" } }),
-    prisma.slot.findMany({
-      where: {
-        OR: [
-          { date: { gte: dates[0], lte: dates[6] } },
-          {
-            AND: [
-              { type: "camp" },
-              { date: { lte: dates[6] } },
-              { endDate: { gte: dates[0] } },
-            ],
-          },
-        ],
-      },
-      orderBy: [{ startTime: "asc" }, { id: "asc" }],
-    }),
+  const [[settings], teams, slots] = await Promise.all([
+    db.select().from(settingsTable).where(eq(settingsTable.id, 1)).limit(1),
+    db.select().from(teamsTable).orderBy(asc(teamsTable.sortOrder)),
+    db
+      .select()
+      .from(slotsTable)
+      .where(
+        or(
+          and(gte(slotsTable.date, dates[0]), lte(slotsTable.date, dates[6])),
+          and(
+            eq(slotsTable.type, "camp"),
+            lte(slotsTable.date, dates[6]),
+            gte(slotsTable.endDate, dates[0]),
+          ),
+        ),
+      )
+      .orderBy(asc(slotsTable.startTime), asc(slotsTable.id)),
   ]);
 
   if (!settings) {
-    throw new Error("Settings are missing. Run prisma db seed.");
+    throw new Error("Settings are missing. Check that database migrations have been applied.");
   }
 
   return {
@@ -63,7 +63,8 @@ export async function getWeekData(weekParam?: string | null): Promise<WeekData> 
 
 export async function getSlotsInWeek(weekStart: string) {
   const dates = weekDates(weekStart);
-  return prisma.slot.findMany({
-    where: { date: { gte: dates[0], lte: dates[6] } },
-  });
+  return db
+    .select()
+    .from(slotsTable)
+    .where(and(gte(slotsTable.date, dates[0]), lte(slotsTable.date, dates[6])));
 }
