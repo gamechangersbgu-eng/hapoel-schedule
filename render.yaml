@@ -9,6 +9,14 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: POSTGRES_PRISMA_URL
+        fromDatabase:
+          name: hapoel-schedule-db
+          property: connectionString
+      - key: POSTGRES_URL_NON_POOLING
+        fromDatabase:
+          name: hapoel-schedule-db
+          property: connectionString
 
 databases:
   - name: hapoel-schedule-db
