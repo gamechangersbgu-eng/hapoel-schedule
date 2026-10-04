@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: hapoel-schedule
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    preDeployCommand: npx prisma migrate deploy
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: POSTGRES_PRISMA_URL
+        fromDatabase:
+          name: hapoel-schedule-db
+          property: connectionString
+      - key: POSTGRES_URL_NON_POOLING
+        fromDatabase:
+          name: hapoel-schedule-db
+          property: connectionString
+
+databases:
+  - name: hapoel-schedule-db
+    plan: free
