@@ -9,7 +9,6 @@ const nextConfig: NextConfig = {
     "*.ngrok.app",
     "*.ngrok.io",
   ],
-  serverExternalPackages: ["@prisma/client", "prisma"],
 };
 
 export default nextConfig;
