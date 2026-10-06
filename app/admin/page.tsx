@@ -2,7 +2,6 @@ import Link from "next/link";
 import { AppHeader } from "@/components/AppHeader";
 import { EditSlotForm } from "@/components/EditSlotForm";
 import { ScheduleView } from "@/components/ScheduleView";
-import { requireAdmin } from "@/lib/auth";
 import { getWeekData } from "@/lib/schedule";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +18,6 @@ type AdminProps = {
 };
 
 export default async function AdminPage({ searchParams }: AdminProps) {
-  await requireAdmin();
   const params = await searchParams;
   const data = await getWeekData(params.week);
   const selectedTeam = data.teams.find(
