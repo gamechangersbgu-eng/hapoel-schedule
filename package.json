@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "db:seed": "tsx db/seed.ts",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "dev:local": "npx netlify dev",
+    "setup:local": "npm ci"
   },
   "dependencies": {
     "@netlify/database": "^1.1.0",
