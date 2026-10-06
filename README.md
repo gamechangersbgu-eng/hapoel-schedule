@@ -1,35 +1,103 @@
 # Hapoel Schedule
 
-Next.js schedule management app for Hapoel Be'er Sheva.
+A Hebrew youth-football schedule management app for Hapoel Be'er Sheva.
 
 ## Stack
 
-- Next.js 16
-- React 19
+- Next.js 16 / React 19
+- TypeScript
 - Drizzle ORM
-- Netlify Database (managed PostgreSQL)
-- Netlify
+- Netlify Database
+- Netlify for the hosted version
 
-## Local development
+## Open locally on a new computer
 
-1. Copy `.env.example` to `.env.local` and set a strong `ADMIN_PASSWORD` and `AUTH_SECRET`.
-2. Run `npm install`.
-3. Run `netlify dev` — it connects the app to a local Netlify Database automatically.
+The repository is intentionally set up so an AI coding assistant can take over the local setup with minimal instructions.
 
-## Database
+### For a human
 
-The schema lives in `db/schema.ts`. After changing it, run `npm run db:generate -- --name <change_name>`
-to create a migration in `netlify/database/migrations/`. Netlify applies pending migrations automatically
-on every deploy. The initial migrations create the tables and seed the club settings and team list.
+Requirements:
 
-`npm run db:seed` resets the database and loads demo schedule data (local development only).
+- Node.js 22
+- Git
 
-## Netlify
+Then:
 
-This repository is configured for Netlify with `netlify.toml`. The database is provided by Netlify Database,
-so no connection strings are needed. In the Netlify site settings, add these environment variables:
+```bash
+git clone https://github.com/gamechangersbgu-eng/hapoel-schedule.git
+cd hapoel-schedule
+npm ci
+npm run dev:local
+```
 
-- `ADMIN_PASSWORD`
-- `AUTH_SECRET`
+The app will be available at the local URL printed by Netlify CLI (normally `http://localhost:8888`).
 
-Never commit production credentials.
+### For an AI coding assistant
+
+If the user says:
+
+> "Open hapoel-schedule locally"
+
+use this repository, install dependencies with `npm ci`, and start it with:
+
+```bash
+npm run dev:local
+```
+
+If Node.js is missing or is not version 22, install/use Node 22 first.
+
+Do **not** start with `npm start`; that command requires a production build.
+
+### Local database
+
+The app uses Netlify Database through Netlify's local development environment. `netlify dev` is the intended local entry point because it provides the local Netlify environment the app expects.
+
+The repository contains database migrations under `netlify/database/migrations/` and demo data in `db/seed.ts`.
+
+## Demo data
+
+The database seed contains realistic demo schedule data.
+
+To reset/seed the local database when the local database environment is available:
+
+```bash
+npm run db:seed
+```
+
+## Useful commands
+
+```bash
+npm run dev:local   # Recommended local development
+npm run build       # Production build
+npm start           # Run an already-built production app
+npm run lint        # Lint
+npm run db:seed     # Reset and load demo schedule data
+```
+
+## Project structure
+
+- `app/` — Next.js pages and server actions
+- `components/` — UI components
+- `db/` — Drizzle schema and seed data
+- `lib/` — schedule/domain helpers
+- `netlify/database/migrations/` — database migrations
+- `public/` — static assets
+- `netlify.toml` — Netlify configuration
+
+## Admin
+
+The schedule editor is at:
+
+```
+/admin
+```
+
+The public schedule is at:
+
+```
+/
+```
+
+## Important
+
+Do not commit real credentials or production environment variables. Local environment files such as `.env.local` are ignored by Git.
