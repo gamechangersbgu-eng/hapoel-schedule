@@ -1,11 +1,9 @@
 "use server";
 
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { and, eq, gte, lte, ne } from "drizzle-orm";
 import { db, slots, teams } from "@/lib/db";
-import { COOKIE_NAME, createSession, requireAdmin } from "@/lib/auth";
 import { getSlotsInWeek } from "@/lib/schedule";
 import { getSlotType, isPitchSlot, SLOT_TYPES } from "@/lib/slot-types";
 import { addDaysISO, weekDates } from "@/lib/week";
@@ -15,32 +13,6 @@ const VALID_TYPES: Set<string> = new Set(SLOT_TYPES.map((item) => item.id));
 function refreshSchedule() {
   revalidatePath("/");
   revalidatePath("/admin");
-}
-
-export async function loginAction(
-  _prev: { error?: string } | null,
-  formData: FormData,
-) {
-  const password = String(formData.get("password") ?? "");
-  if (!process.env.ADMIN_PASSWORD || password !== process.env.ADMIN_PASSWORD) {
-    return { error: "סיסמה שגויה" };
-  }
-
-  const token = await createSession();
-  (await cookies()).set(COOKIE_NAME, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 7,
-  });
-
-  redirect("/admin");
-}
-
-export async function logoutAction() {
-  (await cookies()).delete(COOKIE_NAME);
-  redirect("/");
 }
 
 export type SlotInput = {
@@ -54,8 +26,6 @@ export type SlotInput = {
 };
 
 export async function saveSlot(input: SlotInput) {
-  await requireAdmin();
-
   if (!VALID_TYPES.has(input.type)) {
     return { error: "סוג אימון לא חוקי" };
   }
@@ -184,8 +154,6 @@ export async function copyPreviousWeekForm(formData: FormData) {
 }
 
 export async function copyPreviousWeek(weekStart: string) {
-  await requireAdmin();
-
   const previousStart = addDaysISO(weekStart, -7);
   const source = await getSlotsInWeek(previousStart);
 
