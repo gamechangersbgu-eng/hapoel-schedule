@@ -102,9 +102,36 @@ The public schedule is at:
 
 Do not commit real credentials or production environment variables. Local environment files such as `.env.local` are ignored by Git.
 
-## Static demo on GitHub Pages (read-only)
+## Static site on GitHub Pages (with in-browser admin editing)
 
-`npm run build:pages` builds a static, read-only copy of the public schedule into `out/`
-using the demo data from `db/seed.ts` (no database, no admin, no server actions). It is
-deployed by `.github/workflows/pages.yml` to `https://<user>.github.io/hapoel-schedule/`.
-The normal app / Netlify setup (`npm run build`) is not affected. See `static-site/build.mjs`.
+`npm run build:pages` builds a static copy of the schedule into `out/` (no database, no server
+actions, no passwords). It is deployed by `.github/workflows/pages.yml` to
+`https://<user>.github.io/hapoel-schedule/`. The normal app / Netlify setup (`npm run build`)
+is not affected. The code lives in `static-site/` (`build.mjs` + `overlay/`, which replaces a few
+files in a temporary copy of the app at build time).
+
+### Editing the schedule on the static site
+
+1. Click **כניסת מנהל** (no username or password; it is just a switch in the browser, not security).
+2. Click a cell to add, edit or delete a training / game / camp (same fields and validations as `/admin`).
+   **העתק שבוע קודם** copies last week into the current one. Click **יציאה ממצב מנהל** to leave.
+3. Edits are saved in the browser's `localStorage`, layered over the base data, so they survive reload.
+   **אפס לברירת מחדל** removes all local edits.
+
+Edits are visible **only in the browser where they were made** until you publish them:
+
+### Publishing your edits for everyone
+
+1. In admin mode click **ייצוא** (downloads `schedule-data.json`; **העתק JSON** copies it instead).
+2. Put that file in the **root of the repository** as `schedule-data.json` (GitHub: *Add file → Upload files*,
+   replacing the existing file) and commit to `main`.
+3. The Pages workflow rebuilds (about a minute) and the file becomes the base data for every visitor.
+   Visitors' own local edits (if any) still layer on top; **אפס לברירת מחדל** clears them.
+
+To keep editing, open the site, enter admin mode, edit, export, and commit the new file again. **ייבוא**
+loads a previously exported file into the browser (useful on another device).
+Without a `schedule-data.json` the site shows the demo data from `db/seed.ts`.
+
+Limitations: no real authentication (anyone can click **כניסת מנהל**, but their edits stay on their own device);
+no shared live data, publishing is a manual commit; the demo data is relative to the current week while an
+exported file has fixed dates.

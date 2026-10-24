@@ -1,4 +1,4 @@
-// Builds a read-only static copy of the public schedule for GitHub Pages.
+// Builds a static, client-side-editable copy of the schedule for GitHub Pages.
 //
 //   PAGES_BASE_PATH=/hapoel-schedule node static-site/build.mjs
 //
@@ -51,6 +51,13 @@ run(
   { cwd: root },
 );
 rmSync(join(root, "static-site/.seed-capture.generated.ts"), { force: true });
+
+// 3b. Optional published schedule: a committed ./schedule-data.json (exported from the
+// site's admin mode) becomes the base data for everyone. See README.
+if (existsSync(join(root, "schedule-data.json"))) {
+  cpSync(join(root, "schedule-data.json"), join(work, "public/schedule-data.json"));
+  console.log("Using committed schedule-data.json as base data");
+}
 
 // 4. Static versions of the page, week nav, schedule view and data access.
 cpSync(join(root, "static-site/overlay"), work, { recursive: true });

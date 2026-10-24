@@ -8,6 +8,8 @@ const nextConfig: NextConfig = {
   assetPrefix: basePath || undefined,
   trailingSlash: true,
   images: { unoptimized: true },
+  // Used by the static page to fetch the optional published schedule-data.json.
+  env: { NEXT_PUBLIC_BASE_PATH: basePath },
 };
 
 export default nextConfig;

@@ -1,6 +1,7 @@
 name: Deploy static schedule to GitHub Pages
 
-# Read-only demo copy of the public schedule (no database, no admin).
+# Static copy of the schedule: demo data (or the committed schedule-data.json), with a browser-only
+# admin mode (edits in localStorage, exported as JSON). No database, no server. See README.
 # One-time setup: repo Settings -> Pages -> Build and deployment -> Source: "GitHub Actions".
 on:
   push:
