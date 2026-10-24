@@ -5,7 +5,13 @@ import { Legend } from "@/components/Legend";
 import { ScheduleGrid, type CellClick } from "@/components/ScheduleGrid";
 import type { WeekData } from "@/lib/types";
 
+export type SyncStatus = {
+  state: "idle" | "saving" | "saved" | "error" | "loadError";
+};
+
 type ScheduleViewProps = {
+  sync?: SyncStatus;
+  onRetry?: () => void;
   data: WeekData;
   admin: boolean;
   hasEdits: boolean;
@@ -24,6 +30,8 @@ export function ScheduleView({
   admin,
   hasEdits,
   message,
+  sync = { state: "idle" },
+  onRetry,
   onCellClick,
   onCopyPreviousWeek,
   onExport,
@@ -104,15 +112,36 @@ export function ScheduleView({
 
       {admin ? (
         <p className="no-print rounded-md bg-white px-3 py-2 text-sm font-medium text-[#8e0b20] shadow-sm">
-          מצב מנהל — לחצו על תא כדי להוסיף, לערוך או למחוק אימון. השינויים נשמרים בדפדפן הזה
-          בלבד. כדי לפרסם אותם לכולם לחצו ״ייצוא״ והעלו את הקובץ ל-GitHub (ראו README).
-          {hasEdits ? " יש שינויים מקומיים שלא פורסמו." : ""}
+          מצב מנהל — לחצו על תא כדי להוסיף, לערוך או למחוק אימון. כל שינוי נשמר אוטומטית ונראה
+          לכל מי שפותח את האתר (ללא סיסמה). ״ייצוא״ מוריד גיבוי של הלוח.
         </p>
       ) : null}
 
       {message ? (
         <p role="status" className="no-print text-center text-sm font-bold text-[#8e0b20]">
           {message}
+        </p>
+      ) : null}
+
+      {sync.state !== "idle" ? (
+        <p
+          role="status"
+          data-testid="sync-status"
+          className={`no-print text-center text-sm font-bold ${
+            sync.state === "saved" ? "text-green-700" : sync.state === "saving" ? "text-zinc-600" : "text-[#c8102e]"
+          }`}
+        >
+          {sync.state === "saving" ? "שומר..." : null}
+          {sync.state === "saved" ? "נשמר לכולם" : null}
+          {sync.state === "error" ? (
+            <>
+              השמירה לכולם נכשלה — השינוי נשמר רק בדפדפן הזה.{" "}
+              <button type="button" onClick={onRetry} className="underline">
+                נסו שוב
+              </button>
+            </>
+          ) : null}
+          {sync.state === "loadError" ? "לא הצלחנו לטעון עדכונים עדכניים, מוצג הלוח האחרון שנשמר." : null}
         </p>
       ) : null}
 
@@ -136,8 +165,7 @@ export function ScheduleView({
         <Legend />
       </div>
       <p className="no-print pb-6 text-center text-xs text-zinc-500">
-        אתר סטטי ב-GitHub Pages. עריכות נשמרות בדפדפן של המנהל ומתפרסמות לכולם רק דרך קובץ
-        schedule-data.json.
+        אתר סטטי ב-GitHub Pages. הלוח משותף לכולם ונשמר בשירות אחסון ציבורי וללא הרשאות.
       </p>
     </div>
   );
