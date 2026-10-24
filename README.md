@@ -115,7 +115,11 @@ files in a temporary copy of the app at build time).
 1. Click **כניסת מנהל** (no username or password; it is just a switch in the browser, not security).
 2. Click a cell to add, edit or delete a training / game / camp (same fields and validations as `/admin`).
    **העתק שבוע קודם** copies last week into the current one. Click **יציאה ממצב מנהל** to leave.
-3. Every change is saved automatically for **all visitors**; the page shows "נשמר לכולם" when it worked, or a
+3. Pitch (מגרש) bookings have a start **and** end time in 15-minute steps (e.g. 19:30–21:00); the end must be after the
+   start, and a pitch is "taken" when another booking of the same pitch and day overlaps the range. Older items that
+   only have a start time are treated as start + 90 minutes for conflicts and shown as just the start time
+   (the optional `endTime` field in the data is simply absent for them; exports/imports and shared data stay compatible).
+4. Every change is saved automatically for **all visitors**; the page shows "נשמר לכולם" when it worked, or a
    Hebrew error with a retry link when it did not. **אפס לברירת מחדל** resets the shared schedule for everyone.
 
 How it works: the static site reads and writes one small JSON document (the *edits* layered over the demo data /

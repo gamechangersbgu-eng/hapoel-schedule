@@ -3,6 +3,7 @@
 
 import type { ReactNode } from "react";
 import { getSlotType, isCampSlot } from "@/lib/slot-types";
+import { formatRange } from "@/lib/time-range";
 import type { SlotDTO, TeamDTO } from "@/lib/types";
 import { HEBREW_DAY_LETTERS, formatDayMonth } from "@/lib/week";
 
@@ -32,7 +33,9 @@ function SlotChip({ slot, compact }: { slot: SlotDTO; compact?: boolean }) {
       style={{ background: style.bg, color: style.fg }}
     >
       {slot.startTime ? (
-        <span className="text-sm font-extrabold tabular-nums">{slot.startTime}</span>
+        <span dir="ltr" className="text-sm font-extrabold tabular-nums">
+          {formatRange(slot)}
+        </span>
       ) : null}
       {slot.note ? (
         <span className="max-w-full break-words text-[10px] font-semibold opacity-95">
@@ -126,7 +129,9 @@ function TeamRow({
             >
               <span>{coveringCamp.note || style.label}</span>
               {coveringCamp.startTime ? (
-                <span className="tabular-nums">{coveringCamp.startTime}</span>
+                <span dir="ltr" className="tabular-nums">
+                  {formatRange(coveringCamp)}
+                </span>
               ) : null}
             </div>
           </CellLink>
