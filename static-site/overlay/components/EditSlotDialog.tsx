@@ -3,6 +3,14 @@
 import { useState } from "react";
 import { SLOT_TYPES, isCampSlot, isPitchSlot } from "@/lib/slot-types";
 import type { SlotInput } from "@/lib/static-schedule";
+import {
+  DEFAULT_MINUTES,
+  QUARTER_HOURS,
+  effectiveEnd,
+  formatRange,
+  fromMinutes,
+  toMinutes,
+} from "@/lib/time-range";
 import type { SlotDTO, TeamDTO } from "@/lib/types";
 import { addDaysISO } from "@/lib/week";
 
@@ -46,6 +54,8 @@ export function EditSlotDialog({
     editing?.type ?? (team.isComments ? "other" : "vasermil_1"),
   );
   const [startTime, setStartTime] = useState(editing?.startTime ?? "");
+  // Older items have no end time: pre-fill start + 90 minutes so it can be confirmed or changed.
+  const [endTime, setEndTime] = useState(editing ? (effectiveEnd(editing) ?? "") : "");
   const [endDate, setEndDate] = useState(editing?.endDate ?? date);
   const [note, setNote] = useState(editing?.note ?? "");
   const [error, setError] = useState<string | null>(null);
@@ -61,9 +71,23 @@ export function EditSlotDialog({
     setEditingId(slot?.id);
     setType(slot?.type ?? (team.isComments ? "other" : "vasermil_1"));
     setStartTime(slot?.startTime ?? "");
+    setEndTime(slot ? (effectiveEnd(slot) ?? "") : "");
     setEndDate(slot?.endDate ?? date);
     setNote(slot?.note ?? "");
     setError(null);
+  }
+
+  // Quarter-hour choices (plus an existing off-grid value, so older items stay editable).
+  function withCurrent(value: string) {
+    return value && !QUARTER_HOURS.includes(value) ? [...QUARTER_HOURS, value].sort() : QUARTER_HOURS;
+  }
+
+  // Picking a start fills a default end (+90 min) when there is none or it would not be after the start.
+  function changeStart(value: string) {
+    setStartTime(value);
+    if (value && (!endTime || toMinutes(endTime) <= toMinutes(value))) {
+      setEndTime(fromMinutes(toMinutes(value) + DEFAULT_MINUTES));
+    }
   }
 
   function submit(event: React.FormEvent) {
@@ -74,6 +98,7 @@ export function EditSlotDialog({
       date: formDate,
       endDate: isCampSlot(type) ? endDate : null,
       startTime,
+      endTime,
       type,
       note,
     });
@@ -116,7 +141,7 @@ export function EditSlotDialog({
                     style={{ background: style?.bg, color: style?.fg }}
                   >
                     <span>{style?.label}</span>
-                    <span>{slot.startTime || slot.note || "עריכה"}</span>
+                    <span dir="ltr">{formatRange(slot) || slot.note || "עריכה"}</span>
                   </button>
                   <button
                     type="button"
@@ -161,16 +186,42 @@ export function EditSlotDialog({
             </select>
           </label>
 
-          <label className="block text-sm font-bold">
-            שעה {pitch ? <span className="text-red-700">*</span> : null}
-            <input
-              type="time"
-              name="startTime"
-              value={startTime}
-              onChange={(event) => setStartTime(event.target.value)}
-              className="mt-1 w-full rounded-md border border-zinc-300 p-2"
-            />
-          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="block text-sm font-bold">
+              שעת התחלה {pitch ? <span className="text-red-700">*</span> : null}
+              <select
+                name="startTime"
+                value={startTime}
+                onChange={(event) => changeStart(event.target.value)}
+                className="mt-1 w-full rounded-md border border-zinc-300 p-2"
+                dir="ltr"
+              >
+                <option value="">בחרו שעה</option>
+                {withCurrent(startTime).map((time) => (
+                  <option key={time} value={time}>
+                    {time}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm font-bold">
+              שעת סיום {pitch ? <span className="text-red-700">*</span> : null}
+              <select
+                name="endTime"
+                value={endTime}
+                onChange={(event) => setEndTime(event.target.value)}
+                className="mt-1 w-full rounded-md border border-zinc-300 p-2"
+                dir="ltr"
+              >
+                <option value="">בחרו שעה</option>
+                {withCurrent(endTime).map((time) => (
+                  <option key={time} value={time}>
+                    {time}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
 
           {isCampSlot(type) ? (
             <label className="block text-sm font-bold">

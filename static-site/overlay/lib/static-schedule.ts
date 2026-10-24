@@ -1,5 +1,6 @@
 import snapshot from "@/lib/snapshot.json";
 import { SLOT_TYPES, getSlotType, isPitchSlot } from "@/lib/slot-types";
+import { effectiveEnd, isTime, rangesOverlap, toMinutes } from "@/lib/time-range";
 import type { SlotDTO, TeamDTO, WeekData } from "@/lib/types";
 import { addDaysISO, currentWeekStart, resolveWeekStart, weekDates, weekNumber } from "@/lib/week";
 
@@ -26,6 +27,7 @@ export type SlotInput = {
   date: string;
   endDate?: string | null;
   startTime?: string | null;
+  endTime?: string | null;
   type: string;
   note?: string | null;
 };
@@ -89,6 +91,7 @@ function cleanSlots(raw: unknown, teamIds?: Set<number>): SlotDTO[] {
       date: s.date,
       endDate: typeof s.endDate === "string" && ISO.test(s.endDate) ? s.endDate : null,
       startTime: typeof s.startTime === "string" && s.startTime ? s.startTime : null,
+      endTime: isTime(s.endTime) && typeof s.startTime === "string" && s.startTime ? s.endTime : null,
       type: s.type,
       note: typeof s.note === "string" && s.note ? s.note : null,
     });
@@ -235,21 +238,27 @@ export function saveSlot(current: ScheduleFile, edits: LocalEdits, input: SlotIn
         : input.date
       : null;
   const startTime = input.startTime?.trim() || null;
+  const endTime = input.endTime?.trim() || null;
 
-  if (isPitchSlot(input.type) && !startTime) return { error: "יש לבחור שעה עבור אימון במגרש" };
+  if (isPitchSlot(input.type) && !startTime) return { error: "יש לבחור שעת התחלה עבור אימון במגרש" };
+  if (isPitchSlot(input.type) && !endTime) return { error: "יש לבחור שעת סיום עבור אימון במגרש" };
+  if (endTime && !startTime) return { error: "יש לבחור שעת התחלה לפני שעת סיום" };
+  if (startTime && !isTime(startTime)) return { error: "שעת התחלה לא חוקית" };
+  if (endTime && !isTime(endTime)) return { error: "שעת סיום לא חוקית" };
+  if (startTime && endTime && toMinutes(endTime) <= toMinutes(startTime)) {
+    return { error: "שעת הסיום חייבת להיות אחרי שעת ההתחלה" };
+  }
 
   if (isPitchSlot(input.type) && startTime) {
+    const mine = { startTime, endTime };
     const conflict = current.slots.find(
-      (s) =>
-        s.date === input.date &&
-        s.startTime === startTime &&
-        s.type === input.type &&
-        s.id !== input.id,
+      (s) => s.date === input.date && s.type === input.type && s.id !== input.id && rangesOverlap(s, mine),
     );
     if (conflict) {
       const teamName = current.teams.find((t) => t.id === conflict.teamId)?.name ?? "";
+      const range = `${conflict.startTime}\u2013${effectiveEnd(conflict)}`;
       return {
-        error: `${getSlotType(input.type).label} כבר תפוס בשעה ${startTime} על ידי ${teamName}`,
+        error: `${getSlotType(input.type).label} כבר תפוס בשעות ${range} על ידי ${teamName}`,
       };
     }
   }
@@ -260,6 +269,7 @@ export function saveSlot(current: ScheduleFile, edits: LocalEdits, input: SlotIn
     date: input.date,
     endDate,
     startTime,
+    endTime,
     type: input.type,
     note: input.note?.trim() || null,
   };
