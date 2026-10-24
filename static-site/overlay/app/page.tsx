@@ -4,22 +4,29 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { useSearchParams } from "next/navigation";
 import { AppHeader } from "@/components/AppHeader";
 import { EditSlotDialog } from "@/components/EditSlotDialog";
-import { ScheduleView } from "@/components/ScheduleView";
+import { ScheduleView, type SyncStatus } from "@/components/ScheduleView";
 import {
   ADMIN_KEY,
+  applyDiff,
   applyEdits,
   copyPreviousWeek,
   deleteSlot,
+  diffEdits,
   emptyEdits,
   exportJson,
   fetchPublishedSchedule,
+  fetchSharedEdits,
   getWeekDataFrom,
   hasEdits as hasEditsFn,
   loadEdits,
   parseScheduleFile,
+  pushSharedEdits,
+  replaceDiff,
   saveSlot,
   seedSchedule,
+  sharedEnabled,
   storeEdits,
+  type EditsDiff,
   type LocalEdits,
   type ScheduleFile,
   type SlotInput,
@@ -35,7 +42,63 @@ function Schedule() {
   const [admin, setAdmin] = useState(false);
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [sync, setSync] = useState<SyncStatus>({ state: "idle" });
   const fileInput = useRef<HTMLInputElement>(null);
+  const pending = useRef<EditsDiff[]>([]); // changes not yet written to the shared store
+  const busy = useRef(false);
+
+  // Pull the latest shared edits (skipped while local changes are waiting to be saved).
+  const refresh = useCallback(async () => {
+    if (!sharedEnabled() || busy.current || pending.current.length > 0) return;
+    try {
+      const remote = await fetchSharedEdits();
+      if (busy.current || pending.current.length > 0) return;
+      setEdits(remote);
+      storeEdits(remote);
+      setSync((s) => (s.state === "error" || s.state === "loadError" ? { state: "idle" } : s));
+    } catch {
+      setSync((s) => (s.state === "saving" || s.state === "error" ? s : { state: "loadError" }));
+    }
+  }, []);
+
+  // Write pending changes: re-read the latest shared data, replay our changes on it, save it for everyone.
+  const flush = useCallback(async () => {
+    if (!sharedEnabled() || busy.current || pending.current.length === 0) return;
+    busy.current = true;
+    setSync({ state: "saving" });
+    try {
+      while (pending.current.length > 0) {
+        const batch = pending.current.slice();
+        const remote = await fetchSharedEdits();
+        const merged = batch.reduce(applyDiff, remote);
+        await pushSharedEdits(merged);
+        pending.current.splice(0, batch.length);
+        if (pending.current.length === 0) {
+          setEdits(merged);
+          storeEdits(merged);
+        }
+      }
+      setSync({ state: "saved" });
+    } catch {
+      setSync({ state: "error" });
+    } finally {
+      busy.current = false;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!sharedEnabled()) return;
+    void refresh();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    const timer = window.setInterval(onVisible, 60_000);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.clearInterval(timer);
+    };
+  }, [refresh]);
 
   useEffect(() => {
     setEdits(loadEdits());
@@ -53,13 +116,22 @@ function Schedule() {
     };
   }, []);
 
+  const editsRef = useRef<LocalEdits>(edits);
+  editsRef.current = edits;
+
   const current = useMemo(() => (base ? applyEdits(base, edits) : null), [base, edits]);
   const data = useMemo(() => (current ? getWeekDataFrom(current, week) : null), [current, week]);
 
-  const commit = useCallback((next: LocalEdits) => {
-    setEdits(next);
-    storeEdits(next);
-  }, []);
+  const commit = useCallback(
+    (next: LocalEdits, diff?: EditsDiff) => {
+      setEdits(next);
+      storeEdits(next);
+      pending.current.push(diff ?? diffEdits(editsRef.current, next));
+      editsRef.current = next;
+      void flush();
+    },
+    [flush],
+  );
 
   function setAdminMode(on: boolean) {
     setAdmin(on);
@@ -82,13 +154,13 @@ function Schedule() {
     if ("error" in result) return result.error;
     commit(result.edits);
     setDialog(null);
-    setMessage("נשמר");
+    setMessage(sharedEnabled() ? null : "נשמר");
     return null;
   }
 
   function handleDelete(id: number) {
     commit(deleteSlot(edits, id));
-    setMessage("האימון נמחק");
+    setMessage(sharedEnabled() ? null : "האימון נמחק");
   }
 
   function handleCopy() {
@@ -98,7 +170,7 @@ function Schedule() {
       return;
     }
     commit(result.edits);
-    setMessage("השבוע הקודם הועתק");
+    setMessage(sharedEnabled() ? null : "השבוע הקודם הועתק");
   }
 
   function handleExport() {
@@ -128,12 +200,13 @@ function Schedule() {
     try {
       const parsed = parseScheduleFile(JSON.parse(await file.text()));
       if (!parsed) throw new Error("bad");
-      // Imported file becomes the edit layer on top of the current base.
+      // Imported file becomes the edit layer on top of the current base (and replaces the shared data).
       const importedIds = new Set(parsed.slots.map((s) => s.id));
-      commit({
+      const next = {
         upserts: parsed.slots,
         deletedIds: base!.slots.filter((s) => !importedIds.has(s.id)).map((s) => s.id),
-      });
+      };
+      commit(next, replaceDiff(next));
       setMessage("הקובץ יובא");
     } catch {
       setMessage("הקובץ לא תקין");
@@ -142,8 +215,8 @@ function Schedule() {
   }
 
   function handleReset() {
-    if (!window.confirm("לאפס את כל השינויים המקומיים ולחזור לנתוני ברירת המחדל?")) return;
-    commit(emptyEdits());
+    if (!window.confirm("לאפס את כל השינויים ולחזור לנתוני ברירת המחדל? הפעולה משפיעה על כל המשתמשים.")) return;
+    commit(emptyEdits(), replaceDiff(emptyEdits()));
     setMessage("השינויים אופסו");
   }
 
@@ -178,6 +251,8 @@ function Schedule() {
         admin={admin}
         hasEdits={hasEditsFn(edits)}
         message={message}
+        sync={sync}
+        onRetry={() => void flush()}
         onCellClick={(teamId, date, slotId) => {
           setMessage(null);
           setDialog({ teamId, date, slotId });

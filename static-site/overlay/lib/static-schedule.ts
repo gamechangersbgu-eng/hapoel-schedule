@@ -6,8 +6,9 @@ import { addDaysISO, currentWeekStart, resolveWeekStart, weekDates, weekNumber }
 // Static replacement for lib/schedule.ts + app/actions.ts.
 //
 // Data = a "base" schedule (the demo data from db/seed.ts, or the committed
-// schedule-data.json when it exists) with the visitor's own edits layered on top.
-// Edits live in localStorage as { upserts, deletedIds } so they survive reloads.
+// schedule-data.json when it exists) with the shared edits { upserts, deletedIds } layered on top.
+// The shared edits live in a public, unauthenticated JSON store (textdb.dev, see SHARED_URL) so every
+// visitor sees the same schedule. localStorage is only a cache / offline fallback.
 
 export type ScheduleFile = {
   version: 1;
@@ -29,9 +30,17 @@ export type SlotInput = {
   note?: string | null;
 };
 
-export const EDITS_KEY = "hapoel-schedule-edits-v1";
+// Browser cache of the shared edits (the source of truth is the shared store below).
+export const EDITS_KEY = "hapoel-schedule-shared-cache-v1";
 export const ADMIN_KEY = "hapoel-schedule-admin-v1";
 export const DATA_FILE = "schedule-data.json";
+
+/**
+ * Public, unauthenticated shared store (https://textdb.dev). Anyone who knows this URL can read AND
+ * overwrite the data. Override at build time with NEXT_PUBLIC_SHARED_URL (empty string = local-only mode).
+ */
+export const SHARED_URL: string =
+  process.env.NEXT_PUBLIC_SHARED_URL ?? "https://textdb.dev/api/data/hapoel-schedule-430dcbc299034db99703ca83b8a27e89";
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 const VALID_TYPES: Set<string> = new Set(SLOT_TYPES.map((item) => item.id));
@@ -58,24 +67,16 @@ export function seedSchedule(): ScheduleFile {
   };
 }
 
-/** Validates a parsed schedule-data.json / imported file. Missing parts fall back to the demo data. */
-export function parseScheduleFile(raw: unknown): ScheduleFile | null {
-  if (!raw || typeof raw !== "object") return null;
-  const obj = raw as Record<string, unknown>;
-  if (!Array.isArray(obj.slots)) return null;
-  const seed = seedSchedule();
-  const teams =
-    Array.isArray(obj.teams) && obj.teams.length > 0
-      ? (obj.teams as TeamDTO[]).filter((t) => t && typeof t.id === "number" && typeof t.name === "string")
-      : seed.teams;
-  const teamIds = new Set(teams.map((t) => t.id));
+/** Keeps only well-formed slots (optionally only for known teams). */
+function cleanSlots(raw: unknown, teamIds?: Set<number>): SlotDTO[] {
   const slots: SlotDTO[] = [];
-  for (const s of obj.slots as Record<string, unknown>[]) {
+  if (!Array.isArray(raw)) return slots;
+  for (const s of raw as Record<string, unknown>[]) {
     if (
       !s ||
       typeof s.id !== "number" ||
       typeof s.teamId !== "number" ||
-      !teamIds.has(s.teamId) ||
+      (teamIds && !teamIds.has(s.teamId)) ||
       typeof s.date !== "string" ||
       !ISO.test(s.date) ||
       typeof s.type !== "string"
@@ -92,6 +93,20 @@ export function parseScheduleFile(raw: unknown): ScheduleFile | null {
       note: typeof s.note === "string" && s.note ? s.note : null,
     });
   }
+  return slots;
+}
+
+/** Validates a parsed schedule-data.json / imported file. Missing parts fall back to the demo data. */
+export function parseScheduleFile(raw: unknown): ScheduleFile | null {
+  if (!raw || typeof raw !== "object") return null;
+  const obj = raw as Record<string, unknown>;
+  if (!Array.isArray(obj.slots)) return null;
+  const seed = seedSchedule();
+  const teams =
+    Array.isArray(obj.teams) && obj.teams.length > 0
+      ? (obj.teams as TeamDTO[]).filter((t) => t && typeof t.id === "number" && typeof t.name === "string")
+      : seed.teams;
+  const slots = cleanSlots(obj.slots, new Set(teams.map((t) => t.id)));
   return {
     version: 1,
     clubName: typeof obj.clubName === "string" && obj.clubName ? obj.clubName : seed.clubName,
@@ -116,23 +131,28 @@ export async function fetchPublishedSchedule(): Promise<ScheduleFile | null> {
   }
 }
 
+/** Validates edits read from the shared store / cache. */
+export function parseEdits(raw: unknown): LocalEdits | null {
+  if (!raw || typeof raw !== "object") return null;
+  const obj = raw as Record<string, unknown>;
+  if (!Array.isArray(obj.upserts) || !Array.isArray(obj.deletedIds)) return null;
+  return {
+    upserts: cleanSlots(obj.upserts),
+    deletedIds: obj.deletedIds.filter((id): id is number => typeof id === "number"),
+  };
+}
+
 export function loadEdits(): LocalEdits {
   try {
-    const raw = JSON.parse(window.localStorage.getItem(EDITS_KEY) ?? "null");
-    if (raw && Array.isArray(raw.upserts) && Array.isArray(raw.deletedIds)) return raw as LocalEdits;
+    return parseEdits(JSON.parse(window.localStorage.getItem(EDITS_KEY) ?? "null")) ?? emptyEdits();
   } catch {
-    /* ignore */
+    return emptyEdits();
   }
-  return emptyEdits();
 }
 
 export function storeEdits(edits: LocalEdits) {
   try {
-    if (edits.upserts.length === 0 && edits.deletedIds.length === 0) {
-      window.localStorage.removeItem(EDITS_KEY);
-    } else {
-      window.localStorage.setItem(EDITS_KEY, JSON.stringify(edits));
-    }
+    window.localStorage.setItem(EDITS_KEY, JSON.stringify(edits));
   } catch {
     /* storage unavailable (private mode / quota) - edits stay in memory only */
   }
@@ -274,4 +294,73 @@ export function copyPreviousWeek(current: ScheduleFile, edits: LocalEdits, weekS
 export function exportJson(file: ScheduleFile): string {
   const slots = [...file.slots].sort((a, b) => a.date.localeCompare(b.date) || bySlotOrder(a, b));
   return JSON.stringify({ ...file, slots }, null, 2) + "\n";
+}
+
+// ---------------------------------------------------------------------------------------------
+// Shared store (textdb.dev): plain text body, "simple" CORS requests (no preflight, no headers).
+// ---------------------------------------------------------------------------------------------
+
+export const sharedEnabled = () => SHARED_URL.length > 0;
+
+/** Reads the shared edits. Resolves to emptyEdits() when the store has no data yet; throws on network errors. */
+export async function fetchSharedEdits(): Promise<LocalEdits> {
+  const res = await fetch(SHARED_URL, { cache: "no-store" });
+  if (!res.ok) throw new Error(`shared read failed: ${res.status}`);
+  const text = (await res.text()).trim();
+  if (!text) return emptyEdits();
+  const parsed = parseEdits(JSON.parse(text));
+  if (!parsed) throw new Error("shared data is malformed");
+  return parsed;
+}
+
+export async function pushSharedEdits(edits: LocalEdits): Promise<void> {
+  const res = await fetch(SHARED_URL, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain" },
+    body: JSON.stringify({ version: 1, updatedAt: new Date().toISOString(), ...edits }),
+  });
+  if (!res.ok) throw new Error(`shared write failed: ${res.status}`);
+}
+
+/** What changed between two edit sets, so it can be replayed on top of the freshest shared data. */
+export type EditsDiff = {
+  replaceAll?: boolean; // reset: the shared data becomes exactly `next`
+  next?: LocalEdits;
+  upserts: SlotDTO[];
+  removedUpsertIds: number[];
+  addedDeletedIds: number[];
+  removedDeletedIds: number[];
+};
+
+export function diffEdits(prev: LocalEdits, next: LocalEdits): EditsDiff {
+  const prevUp = new Map(prev.upserts.map((s) => [s.id, JSON.stringify(s)]));
+  const nextIds = new Set(next.upserts.map((s) => s.id));
+  const prevDel = new Set(prev.deletedIds);
+  const nextDel = new Set(next.deletedIds);
+  return {
+    upserts: next.upserts.filter((s) => prevUp.get(s.id) !== JSON.stringify(s)),
+    removedUpsertIds: prev.upserts.filter((s) => !nextIds.has(s.id)).map((s) => s.id),
+    addedDeletedIds: next.deletedIds.filter((id) => !prevDel.has(id)),
+    removedDeletedIds: prev.deletedIds.filter((id) => !nextDel.has(id)),
+  };
+}
+
+export function replaceDiff(next: LocalEdits): EditsDiff {
+  return { replaceAll: true, next, upserts: [], removedUpsertIds: [], addedDeletedIds: [], removedDeletedIds: [] };
+}
+
+export function applyDiff(remote: LocalEdits, diff: EditsDiff): LocalEdits {
+  if (diff.replaceAll && diff.next) return diff.next;
+  const upsertIds = new Set(diff.upserts.map((s) => s.id));
+  const removedUp = new Set(diff.removedUpsertIds);
+  const addedDel = new Set(diff.addedDeletedIds);
+  const removedDel = new Set(diff.removedDeletedIds);
+  const upserts = [
+    ...remote.upserts.filter((s) => !upsertIds.has(s.id) && !removedUp.has(s.id) && !addedDel.has(s.id)),
+    ...diff.upserts,
+  ];
+  const deletedIds = [
+    ...new Set([...remote.deletedIds.filter((id) => !removedDel.has(id) && !upsertIds.has(id)), ...addedDel]),
+  ];
+  return { upserts, deletedIds };
 }
