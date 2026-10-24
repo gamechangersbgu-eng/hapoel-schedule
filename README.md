@@ -101,3 +101,10 @@ The public schedule is at:
 ## Important
 
 Do not commit real credentials or production environment variables. Local environment files such as `.env.local` are ignored by Git.
+
+## Static demo on GitHub Pages (read-only)
+
+`npm run build:pages` builds a static, read-only copy of the public schedule into `out/`
+using the demo data from `db/seed.ts` (no database, no admin, no server actions). It is
+deployed by `.github/workflows/pages.yml` to `https://<user>.github.io/hapoel-schedule/`.
+The normal app / Netlify setup (`npm run build`) is not affected. See `static-site/build.mjs`.
