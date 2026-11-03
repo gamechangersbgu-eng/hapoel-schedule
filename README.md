@@ -10,6 +10,17 @@ A Hebrew youth-football schedule management app for Hapoel Be'er Sheva.
 - Netlify Database
 - Netlify for the hosted version
 
+## Team and responsibilities
+
+| Who | Area | Branch | Folder |
+|---|---|---|---|
+| Idan Keren ([@idankeren15-art](https://github.com/idankeren15-art)) | Scraping the match schedule from the Israel Football Association website | `feature/scraper` | `services/scraper/` |
+| Raz Weisblech ([@razweis](https://github.com/razweis)) | Automations and notifications to players and parents | `feature/notifications` | `services/notifications/` |
+| Omer Ben ([@gamechangersbgu-eng](https://github.com/gamechangersbgu-eng)) | Fields and training management | `feature/fields` | `app/`, `components/`, `lib/` |
+| Yoni Mark | Display: mobile view and club TV screen | `feature/display` | `app/`, `components/` |
+
+The shared data structure (match, training, field, team) lives in `shared/`; changes there need Omer's approval. See [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow.
+
 ## Open locally on a new computer
 
 The repository is intentionally set up so an AI coding assistant can take over the local setup with minimal instructions.
