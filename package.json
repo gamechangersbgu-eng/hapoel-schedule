@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "npm run db:migrate:apply && next build",
+    "db:migrate:apply": "tsx db/apply-migrations.ts",
     "start": "next start",
     "lint": "eslint",
     "db:seed": "tsx db/seed.ts",

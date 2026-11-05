@@ -23,39 +23,46 @@ All schedule, team, pitch, and game data lives in **one Postgres database** (Net
 
 There is **no** SQLite, textdb, or in-browser store for the Netlify app. The GitHub Pages static build (below) is a separate legacy demo without Postgres.
 
-### Create Postgres and apply schema
+### Create Postgres (recommended — no local PC)
 
-**On Netlify (production / preview)**
+You do **not** need Node on your laptop. Use **Netlify** for the database and **GitHub Actions** to migrate/seed.
 
-1. In the Netlify site dashboard, enable **Netlify DB** (or connect the Neon extension) for this site.
-2. Deploy from `main` (or merge PR with migrations). Netlify injects the connection automatically — no manual URL in the repo.
-3. After the first deploy with DB enabled, run migrations and seed from your machine (linked to the site):
+**1. Netlify — create Postgres**
+
+1. [Netlify](https://app.netlify.com) → your **hapoel-schedule** site (or create one from this repo).
+2. **Extensions** → add **Netlify DB** (Neon Postgres).
+3. Merge/deploy the branch with this schema (e.g. PR [#9](https://github.com/gamechangersbgu-eng/hapoel-schedule/pull/9)).  
+   Each Netlify **build** runs `npm run db:migrate:apply` before `next build` when the DB extension is enabled.
+
+**2. GitHub — one-time secret**
+
+1. Netlify → **Project configuration** → **Environment variables** (or Database panel) → copy the Postgres connection string (often named like `NETLIFY_DATABASE_URL`).
+2. GitHub repo → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**  
+   Name: `NETLIFY_DATABASE_URL`  
+   Value: paste the connection string.
+
+**3. GitHub Actions — load demo data (two weeks)**
+
+1. GitHub → **Actions** → **Database (Postgres)** → **Run workflow**.
+2. Choose **`migrate-and-seed`** (first time) or **`seed`** to refresh demo schedule only.
+
+This fills Postgres with synthetic **practices** and **games** for **14 days** from the current week’s Sunday (`db/seed.ts`).
+
+**Optional — local dev** (only if you want a dev machine later)
 
 ```bash
-npm ci
-npx netlify link          # if not linked
-npx netlify dev:exec -- npm run db:migrate
+npm ci && npm run dev:local
+npx netlify dev:exec -- npm run db:migrate:apply
 npx netlify dev:exec -- npm run db:seed
 ```
 
-**Locally**
+### Useful database commands (CI / Netlify / optional local)
 
 ```bash
-npm ci
-npm run dev:local         # starts netlify dev with local Postgres
-# In another terminal, with netlify env available:
-npx netlify dev:exec -- npm run db:migrate
-npx netlify dev:exec -- npm run db:seed
-```
-
-`npm run db:seed` clears schedule rows and loads synthetic **practices** (מגרשים) and **games** (בית/חוץ with `slot_game_details`) for **14 days** ahead of the current week’s Sunday, plus reference data (pitches, cities, demo medics/drivers, players).
-
-### Useful database commands
-
-```bash
-npm run db:migrate   # Apply Drizzle migrations to Postgres
-npm run db:seed      # Reset demo schedule + reference data (two weeks)
-npm run db:generate  # Generate SQL after schema changes (developers)
+npm run db:migrate:apply  # Apply SQL migrations (Netlify build + GitHub Action)
+npm run db:seed           # Two-week demo schedule + reference data
+npm run db:generate       # Generate SQL after schema changes (developers)
+npm run db:migrate        # drizzle-kit migrate (needs DATABASE_URL; prefer db:migrate:apply)
 ```
 
 ## Team and responsibilities
