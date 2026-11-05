@@ -3,6 +3,7 @@ import {
   footballSchoolScheduleRules,
   pitchSubdivisions,
   pitches,
+  players,
   rotationTemplates,
   rotationTemplateTimes,
   teamAgeBandSubdivisions,
@@ -85,6 +86,34 @@ async function seedPitchData(database: Db) {
 }
 
 // --- נתוני קבוצות (team) — רמות גיל ---
+
+/** Minimal demo roster rows (call after calendar `teams` exist). */
+export async function seedDemoPlayers(
+  database: Db,
+  teamIdByName: Record<string, number>,
+) {
+  const demos: Array<{ teamName: string; displayName: string; sortOrder: number }> = [
+    { teamName: "ילדים א", displayName: "דמו שחקן 1", sortOrder: 0 },
+    { teamName: "ילדים א", displayName: "דמו שחקן 2", sortOrder: 1 },
+    { teamName: "טרום א", displayName: "דמו שחקן 1", sortOrder: 0 },
+  ];
+
+  const rows = demos
+    .map((row) => {
+      const teamId = teamIdByName[row.teamName];
+      if (teamId == null) return null;
+      return {
+        teamId,
+        displayName: row.displayName,
+        sortOrder: row.sortOrder,
+      };
+    })
+    .filter((row): row is NonNullable<typeof row> => row != null);
+
+  if (rows.length > 0) {
+    await database.insert(players).values(rows);
+  }
+}
 
 async function seedTeamAgeBandData(database: Db) {
   await database.insert(teamAgeBands).values([

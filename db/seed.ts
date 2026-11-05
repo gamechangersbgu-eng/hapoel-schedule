@@ -1,6 +1,15 @@
 import { db } from "./index";
-import { seedReferenceData, TEAM_AGE_BAND_BY_NAME } from "./reference-seed";
-import { settings, slots as slotsTable, teams as teamsTable } from "./schema";
+import {
+  seedDemoPlayers,
+  seedReferenceData,
+  TEAM_AGE_BAND_BY_NAME,
+} from "./reference-seed";
+import {
+  players as playersTable,
+  settings,
+  slots as slotsTable,
+  teams as teamsTable,
+} from "./schema";
 
 const TEAM_NAMES = [
   "נוער",
@@ -49,6 +58,7 @@ async function main() {
   await seedReferenceData(db);
 
   await db.delete(slotsTable);
+  await db.delete(playersTable);
   await db.delete(teamsTable);
   await db.delete(settings);
 
@@ -81,6 +91,11 @@ async function main() {
     .returning();
 
   const byName = Object.fromEntries(teams.map((team) => [team.name, team]));
+  await seedDemoPlayers(
+    db,
+    Object.fromEntries(teams.map((team) => [team.name, team.id])),
+  );
+
   const weekStart = formatISODate(sundayOf(new Date()));
   const d = (offset: number) => addDaysISO(weekStart, offset);
 

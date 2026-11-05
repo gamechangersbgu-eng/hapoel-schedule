@@ -1,7 +1,7 @@
 import { boolean, index, integer, pgTable, serial, text } from "drizzle-orm/pg-core";
 
 import { pitches } from "./pitch";
-import { drivers, medics } from "./personnel";
+import { drivers, medics } from "./team";
 import { teams } from "./team";
 
 /** Away-game travel lookup (minutes from Beer Sheva). */

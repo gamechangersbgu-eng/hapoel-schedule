@@ -1,4 +1,5 @@
 /** Re-export Ref/DTO types by domain (`shared/<domain>.ts`). */
+export type { PlayerRef } from "./team";
 export type { PitchRef, PitchSubdivisionRef } from "./pitch";
 export type {
   RotationTemplateRef,
@@ -12,4 +13,4 @@ export type {
   StaffUnavailabilityRef,
   MedicRef,
   DriverRef,
-} from "./personnel";
+} from "./team";
