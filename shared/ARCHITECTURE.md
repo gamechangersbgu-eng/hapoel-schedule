@@ -1,26 +1,23 @@
-# Data architecture — Postgres + optional SQLite buffer
+# Data architecture — Postgres only
 
 ## System of record
 
-**Postgres (Netlify Database)** is the canonical store for the hosted app, scraper output (after sync), and admin edits.
+**Postgres (Netlify Database)** is the **only** database for the live app, scraper, admin, notifications, and display.
 
-- Readers: home page (`getWeekData`), admin, TV/display, notifications service.
-- Writers: admin server actions, IFA scraper (direct Postgres or via SQLite sync), one-way sync script.
+- All tables live in one Postgres instance (Drizzle schema under `db/schema/`).
+- Readers: home page (`getWeekData`), admin, TV/display, `services/notifications`, `services/scraper`.
+- Writers: admin server actions, IFA scraper (`upsertIfaGame`), seed script (`npm run db:seed`).
 
-## Optional SQLite buffer
-
-**`data/local.db`** (gitignored) is for offline or manual batch edits on a laptop. It is **not** read by the Next.js app in production.
-
-Flow: edit SQLite → run `npm run db:sync-local` → upserts into Postgres → `schedule_revision` bumps → web/TV see fresh data on refresh or poll.
-
-Do **not** use a flat SQLite file as the only database for Netlify/serverless without hosted libSQL/Turso and a single write path.
+There is no parallel SQLite or static JSON store for the Netlify deployment.
 
 ## Real-time freshness (v1)
 
 - Home page uses `dynamic = "force-dynamic"` (fresh DB read per navigation).
-- **`schedule_revision`** (single row) increments on every schedule write.
+- **`schedule_revision`** increments on every schedule write.
 - Clients poll **`GET /api/schedule/revision`** (e.g. every 45s on kiosk/TV) and call `router.refresh()` when `version` changes.
 
-WebSockets / SSE are out of scope until sub-second TV updates are required.
-
 See **`WRITE_CONTRACT.md`** for table-level write rules.
+
+## GitHub Pages static site
+
+The optional GitHub Pages build (`npm run build:pages`) is a **legacy demo** without Postgres. It is not the production data path for Hapoel management.

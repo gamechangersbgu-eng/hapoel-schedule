@@ -1,6 +1,8 @@
 import {
   cities,
+  drivers,
   footballSchoolScheduleRules,
+  medics,
   pitchSubdivisions,
   pitches,
   players,
@@ -20,6 +22,42 @@ export async function seedReferenceData(database: Db) {
   await seedPitchData(database);
   await seedTeamAgeBandData(database);
   await seedPracticeData(database);
+  await seedGameBanks(database);
+}
+
+async function seedGameBanks(database: Db) {
+  await database.insert(cities).values([
+    {
+      name: "תל אביב",
+      travelMinutesFromBeerSheva: 120,
+      northOfHaderaLine: false,
+    },
+    {
+      name: "חיפה",
+      travelMinutesFromBeerSheva: 150,
+      northOfHaderaLine: true,
+    },
+    {
+      name: "חדרה",
+      travelMinutesFromBeerSheva: 90,
+      northOfHaderaLine: true,
+    },
+    {
+      name: "דימונה",
+      travelMinutesFromBeerSheva: 35,
+      northOfHaderaLine: false,
+    },
+  ]);
+
+  await database.insert(medics).values([
+    { name: "דני כהן", phone: "050-0000001", isActive: true },
+    { name: "מיכל לוי", phone: "050-0000002", isActive: true },
+  ]);
+
+  await database.insert(drivers).values([
+    { name: "יוסי מזרחי", phone: "050-1000001", isActive: true },
+    { name: "אבי נהג", phone: "050-1000002", isActive: true },
+  ]);
 }
 
 /** Ensures schedule_revision row exists (migrations also insert id=1). */
@@ -38,6 +76,8 @@ export async function ensureScheduleRevision(database: Db) {
 }
 
 async function clearReferenceTables(database: Db) {
+  await database.delete(drivers);
+  await database.delete(medics);
   await database.delete(teamAgeBandSubdivisions);
   await database.delete(footballSchoolScheduleRules);
   await database.delete(rotationTemplateTimes);

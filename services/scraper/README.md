@@ -20,4 +20,4 @@
 
 אחרי ריצה מרובה: אפשר `{ bumpRevision: false }` לכל שורה ו-`bumpScheduleRevision()` פעם אחת בסוף.
 
-**אלטרנטיבה:** כתיבה ל-`data/local.db` (SQLite) ואז `npm run db:sync-local` מהמחשב המקומי.
+כל הנתונים נשמרים ישירות ב-**Postgres** (Netlify Database).

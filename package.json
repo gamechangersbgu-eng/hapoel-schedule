@@ -8,8 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "db:seed": "tsx db/seed.ts",
-    "db:sync-local": "tsx scripts/sync-local-sqlite.ts",
     "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
     "dev:local": "npx netlify dev",
     "setup:local": "npm ci",
     "build:pages": "node static-site/build.mjs"
