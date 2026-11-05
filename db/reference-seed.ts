@@ -14,6 +14,13 @@ import type { db as appDb } from "./index";
 type Db = typeof appDb;
 
 export async function seedReferenceData(database: Db) {
+  await clearReferenceTables(database);
+  await seedPitchData(database);
+  await seedTeamAgeBandData(database);
+  await seedPracticeData(database);
+}
+
+async function clearReferenceTables(database: Db) {
   await database.delete(teamAgeBandSubdivisions);
   await database.delete(footballSchoolScheduleRules);
   await database.delete(rotationTemplateTimes);
@@ -23,7 +30,11 @@ export async function seedReferenceData(database: Db) {
   await database.delete(trainingSessionDurations);
   await database.delete(teamAgeBands);
   await database.delete(cities);
+}
 
+// --- נתוני מגרשים (pitch) ---
+
+async function seedPitchData(database: Db) {
   await database.insert(pitchSubdivisions).values([
     { code: "whole", labelHe: "מגרש שלם", sortOrder: 0 },
     { code: "half_north", labelHe: "חצי מגרש (צפון)", sortOrder: 1 },
@@ -71,13 +82,11 @@ export async function seedReferenceData(database: Db) {
       allowsHomeGames: true,
     },
   ]);
+}
 
-  await database.insert(trainingSessionDurations).values([
-    { minutes: 60, labelHe: "שעה" },
-    { minutes: 105, labelHe: "שעה 45 דקות" },
-    { minutes: 120, labelHe: "שעתיים" },
-  ]);
+// --- נתוני קבוצות (team) — רמות גיל ---
 
+async function seedTeamAgeBandData(database: Db) {
   await database.insert(teamAgeBands).values([
     {
       code: "noar_through_yeladim_b",
@@ -94,6 +103,16 @@ export async function seedReferenceData(database: Db) {
       labelHe: "בית ספר לכדורגל",
       sortOrder: 2,
     },
+  ]);
+}
+
+// --- נתוני אימונים (practice) ---
+
+async function seedPracticeData(database: Db) {
+  await database.insert(trainingSessionDurations).values([
+    { minutes: 60, labelHe: "שעה" },
+    { minutes: 105, labelHe: "שעה 45 דקות" },
+    { minutes: 120, labelHe: "שעתיים" },
   ]);
 
   const halfAndWhole = ["whole", "half_north", "half_south"] as const;
@@ -180,6 +199,7 @@ export async function seedReferenceData(database: Db) {
   );
 }
 
+/** Maps calendar row Hebrew names → `team_age_bands.code` (team domain). */
 export const TEAM_AGE_BAND_BY_NAME: Record<string, string | null> = {
   נוער: "noar_through_yeladim_b",
   "נערים א": "noar_through_yeladim_b",
