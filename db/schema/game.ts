@@ -1,8 +1,23 @@
-import { boolean, index, integer, pgTable, serial, text } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  index,
+  integer,
+  pgTable,
+  serial,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
 
 import { pitches } from "./pitch";
 import { drivers, medics } from "./team";
 import { teams } from "./team";
+
+/** Monotonic version for schedule readers (web/TV poll). Single row id=1. */
+export const scheduleRevision = pgTable("schedule_revision", {
+  id: integer().primaryKey().default(1),
+  version: integer().notNull().default(1),
+  updatedAt: text("updated_at").notNull(),
+});
 
 /** Away-game travel lookup (minutes from Beer Sheva). */
 export const cities = pgTable("cities", {
@@ -52,7 +67,16 @@ export const slotGameDetails = pgTable(
     departureTime: text("departure_time"),
     travelMinutes: integer("travel_minutes"),
     coordinationNote: text("coordination_note"),
+    /** Writer idempotency: e.g. `ifa_scraper` + IFA fixture id. */
+    source: text(),
+    externalId: text("external_id"),
   },
+  (table) => [
+    uniqueIndex("slot_game_details_source_external_idx").on(
+      table.source,
+      table.externalId,
+    ),
+  ],
 );
 
 /** External driver/medic/activity blocks (logistics overlap with game banks). */

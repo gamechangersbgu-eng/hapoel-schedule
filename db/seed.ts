@@ -1,5 +1,6 @@
 import { db } from "./index";
 import {
+  ensureScheduleRevision,
   seedDemoPlayers,
   seedReferenceData,
   TEAM_AGE_BAND_BY_NAME,
@@ -178,6 +179,8 @@ async function main() {
     type: "other",
     note: "משחקי בית בשבת — להגיע שעה לפני. עדכון אחרון באתר.",
   });
+
+  await ensureScheduleRevision(db);
 }
 
 main()

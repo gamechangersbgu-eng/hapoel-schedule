@@ -6,6 +6,7 @@ import {
   players,
   rotationTemplates,
   rotationTemplateTimes,
+  scheduleRevision,
   teamAgeBandSubdivisions,
   teamAgeBands,
   trainingSessionDurations,
@@ -19,6 +20,21 @@ export async function seedReferenceData(database: Db) {
   await seedPitchData(database);
   await seedTeamAgeBandData(database);
   await seedPracticeData(database);
+}
+
+/** Ensures schedule_revision row exists (migrations also insert id=1). */
+export async function ensureScheduleRevision(database: Db) {
+  const updatedAt = new Date().toISOString();
+  const [existing] = await database
+    .select({ id: scheduleRevision.id })
+    .from(scheduleRevision)
+    .limit(1);
+
+  if (!existing) {
+    await database
+      .insert(scheduleRevision)
+      .values({ id: 1, version: 1, updatedAt });
+  }
 }
 
 async function clearReferenceTables(database: Db) {

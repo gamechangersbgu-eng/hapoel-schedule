@@ -26,6 +26,30 @@ export type CityRef = {
   northOfHaderaLine: boolean;
 };
 
+/** Values for `slot_game_details.source`. */
+export const GAME_DETAIL_SOURCES = {
+  IFA_SCRAPER: "ifa_scraper",
+  ADMIN: "admin",
+  MANUAL_SQLITE: "manual_sqlite",
+} as const;
+
+export type GameDetailSource =
+  (typeof GAME_DETAIL_SOURCES)[keyof typeof GAME_DETAIL_SOURCES];
+
+/** Payload the IFA scraper upserts (maps to `slots` + `slot_game_details`). */
+export type IfaGameUpsert = {
+  /** Postgres `teams.id` (map IFA team name via scraper config). */
+  teamId: number;
+  date: string;
+  startTime: string | null;
+  gameKind: Extract<SlotKind, "home_game" | "away_game">;
+  externalId: string;
+  opponent: string | null;
+  kickoffTime: string | null;
+  cityName: string | null;
+  note?: string | null;
+};
+
 export type SlotGameDetailsRef = {
   slotId: number;
   gameKind: Extract<SlotKind, "home_game" | "away_game">;
@@ -36,6 +60,8 @@ export type SlotGameDetailsRef = {
   cityId: number | null;
   kickoffTime: string | null;
   departureTime: string | null;
+  source: GameDetailSource | null;
+  externalId: string | null;
 };
 
 export type ExternalEventRef = {

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { and, eq, gte, lte, ne } from "drizzle-orm";
 import { db, slots, teams } from "@/lib/db";
+import { bumpScheduleRevision } from "@/lib/schedule-revision";
 import { getSlotsInWeek } from "@/lib/schedule";
 import { getSlotType, isPitchSlot, SLOT_TYPES } from "@/lib/slot-types";
 import { addDaysISO, weekDates } from "@/lib/week";
@@ -14,7 +15,8 @@ async function requireAdmin() {
   // Auth gate placeholder until admin login is wired.
 }
 
-function refreshSchedule() {
+async function refreshSchedule() {
+  await bumpScheduleRevision();
   revalidatePath("/");
   revalidatePath("/admin");
 }
@@ -87,14 +89,14 @@ export async function saveSlot(input: SlotInput) {
     await db.insert(slots).values(data);
   }
 
-  refreshSchedule();
+  await refreshSchedule();
   return { ok: true };
 }
 
 export async function deleteSlot(id: number) {
   await requireAdmin();
   await db.delete(slots).where(eq(slots.id, id));
-  refreshSchedule();
+  await refreshSchedule();
   return { ok: true };
 }
 
@@ -183,7 +185,7 @@ export async function copyPreviousWeek(weekStart: string) {
     })),
   );
 
-  refreshSchedule();
+  await refreshSchedule();
   return { ok: true, count: source.length };
 }
 

@@ -4,6 +4,11 @@
 
 שינוי כאן דורש PR ואישור של Omer (ראו `.github/CODEOWNERS`).
 
+## ארכיטקטורה וכתיבה
+
+- **`ARCHITECTURE.md`** — Postgres כמקור אמת, SQLite מקומי אופציונלי, רענון לפי `schedule_revision`.
+- **`WRITE_CONTRACT.md`** — מי כותב לאילו טבלאות, upsert לסקרייפר, invariants ל-`slots`.
+
 ## קבצים לפי תחום
 
 | תחום | קובץ | תוכן |
