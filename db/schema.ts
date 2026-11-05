@@ -149,21 +149,6 @@ export const staffUnavailability = pgTable(
   (table) => [index("staff_unavailability_staff_idx").on(table.staffId)],
 );
 
-export const teamConstraints = pgTable(
-  "team_constraints",
-  {
-    id: serial().primaryKey(),
-    teamId: integer("team_id")
-      .notNull()
-      .references(() => teams.id, { onDelete: "cascade" }),
-    constraintType: text("constraint_type").notNull(),
-    coachNames: text("coach_names"),
-    conflictingCoachNames: text("conflicting_coach_names"),
-    note: text(),
-  },
-  (table) => [index("team_constraints_team_idx").on(table.teamId)],
-);
-
 export const teamCoaches = pgTable(
   "team_coaches",
   {
@@ -196,13 +181,6 @@ export const cities = pgTable("cities", {
   name: text().notNull().unique(),
   travelMinutesFromBeerSheva: integer("travel_minutes_from_beer_sheva").notNull(),
   northOfHaderaLine: boolean("north_of_hadera_line").notNull().default(false),
-});
-
-export const schedulingRules = pgTable("scheduling_rules", {
-  ruleKey: text("rule_key").primaryKey(),
-  valueMinutes: integer("value_minutes"),
-  valueText: text("value_text"),
-  labelHe: text("label_he").notNull(),
 });
 
 export const slots = pgTable(
@@ -258,39 +236,6 @@ export const slotTrainingDetails = pgTable(
       () => rotationTemplates.id,
     ),
   },
-);
-
-export const pitchWeeklyStatus = pgTable(
-  "pitch_weekly_status",
-  {
-    id: serial().primaryKey(),
-    pitchId: integer("pitch_id")
-      .notNull()
-      .references(() => pitches.id, { onDelete: "cascade" }),
-    weekStartDate: text("week_start_date").notNull(),
-    status: text().notNull(),
-    note: text(),
-  },
-  (table) => [
-    uniqueIndex("pitch_weekly_status_pitch_week_idx").on(
-      table.pitchId,
-      table.weekStartDate,
-    ),
-  ],
-);
-
-export const pitchReservedLocks = pgTable(
-  "pitch_reserved_locks",
-  {
-    id: serial().primaryKey(),
-    pitchId: integer("pitch_id")
-      .notNull()
-      .references(() => pitches.id, { onDelete: "cascade" }),
-    startDate: text("start_date").notNull(),
-    endDate: text("end_date"),
-    note: text(),
-  },
-  (table) => [index("pitch_reserved_locks_pitch_idx").on(table.pitchId)],
 );
 
 export const externalEvents = pgTable(

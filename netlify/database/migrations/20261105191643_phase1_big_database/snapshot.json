@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "1b5e91cf-642f-4d9e-bbb6-6b27632e6c62",
+  "id": "4f316688-e3f7-4775-962c-00ab2f27d3c8",
   "prevIds": [
     "2b666ff6-f52d-43f8-8447-88b647688343"
   ],
@@ -38,19 +38,7 @@
     },
     {
       "isRlsEnabled": false,
-      "name": "pitch_reserved_locks",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
       "name": "pitch_subdivisions",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "pitch_weekly_status",
       "entityType": "tables",
       "schema": "public"
     },
@@ -69,12 +57,6 @@
     {
       "isRlsEnabled": false,
       "name": "rotation_templates",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "scheduling_rules",
       "entityType": "tables",
       "schema": "public"
     },
@@ -135,12 +117,6 @@
     {
       "isRlsEnabled": false,
       "name": "team_coaches",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "team_constraints",
       "entityType": "tables",
       "schema": "public"
     },
@@ -547,71 +523,6 @@
       "table": "medics"
     },
     {
-      "type": "serial",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "pitch_reserved_locks"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "pitch_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "pitch_reserved_locks"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "start_date",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "pitch_reserved_locks"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "end_date",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "pitch_reserved_locks"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "note",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "pitch_reserved_locks"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -649,71 +560,6 @@
       "entityType": "columns",
       "schema": "public",
       "table": "pitch_subdivisions"
-    },
-    {
-      "type": "serial",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "pitch_weekly_status"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "pitch_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "pitch_weekly_status"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "week_start_date",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "pitch_weekly_status"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "status",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "pitch_weekly_status"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "note",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "pitch_weekly_status"
     },
     {
       "type": "serial",
@@ -935,58 +781,6 @@
       "entityType": "columns",
       "schema": "public",
       "table": "rotation_templates"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "rule_key",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "scheduling_rules"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "value_minutes",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "scheduling_rules"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "value_text",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "scheduling_rules"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "label_he",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "scheduling_rules"
     },
     {
       "type": "integer",
@@ -1649,84 +1443,6 @@
       "name": "id",
       "entityType": "columns",
       "schema": "public",
-      "table": "team_constraints"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "team_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "team_constraints"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "constraint_type",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "team_constraints"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "coach_names",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "team_constraints"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "conflicting_coach_names",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "team_constraints"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "note",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "team_constraints"
-    },
-    {
-      "type": "serial",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
       "table": "teams"
     },
     {
@@ -1853,55 +1569,6 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "external_events"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "pitch_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "pitch_reserved_locks_pitch_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "pitch_reserved_locks"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "pitch_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "week_start_date",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "pitch_weekly_status_pitch_week_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "pitch_weekly_status"
     },
     {
       "nameExplicit": true,
@@ -2100,27 +1767,6 @@
       "table": "team_coaches"
     },
     {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "team_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "team_constraints_team_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "team_constraints"
-    },
-    {
       "nameExplicit": false,
       "columns": [
         "pitch_id"
@@ -2170,40 +1816,6 @@
       "entityType": "fks",
       "schema": "public",
       "table": "external_events"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
-        "pitch_id"
-      ],
-      "schemaTo": "public",
-      "tableTo": "pitches",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "pitch_reserved_locks_pitch_id_pitches_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "pitch_reserved_locks"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
-        "pitch_id"
-      ],
-      "schemaTo": "public",
-      "tableTo": "pitches",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "pitch_weekly_status_pitch_id_pitches_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "pitch_weekly_status"
     },
     {
       "nameExplicit": false,
@@ -2497,23 +2109,6 @@
     {
       "nameExplicit": false,
       "columns": [
-        "team_id"
-      ],
-      "schemaTo": "public",
-      "tableTo": "teams",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "team_constraints_team_id_teams_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "team_constraints"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
         "age_band_code"
       ],
       "schemaTo": "public",
@@ -2580,32 +2175,12 @@
     },
     {
       "columns": [
-        "id"
-      ],
-      "nameExplicit": false,
-      "name": "pitch_reserved_locks_pkey",
-      "schema": "public",
-      "table": "pitch_reserved_locks",
-      "entityType": "pks"
-    },
-    {
-      "columns": [
         "code"
       ],
       "nameExplicit": false,
       "name": "pitch_subdivisions_pkey",
       "schema": "public",
       "table": "pitch_subdivisions",
-      "entityType": "pks"
-    },
-    {
-      "columns": [
-        "id"
-      ],
-      "nameExplicit": false,
-      "name": "pitch_weekly_status_pkey",
-      "schema": "public",
-      "table": "pitch_weekly_status",
       "entityType": "pks"
     },
     {
@@ -2636,16 +2211,6 @@
       "name": "rotation_templates_pkey",
       "schema": "public",
       "table": "rotation_templates",
-      "entityType": "pks"
-    },
-    {
-      "columns": [
-        "rule_key"
-      ],
-      "nameExplicit": false,
-      "name": "scheduling_rules_pkey",
-      "schema": "public",
-      "table": "scheduling_rules",
       "entityType": "pks"
     },
     {
@@ -2736,16 +2301,6 @@
       "name": "team_coaches_pkey",
       "schema": "public",
       "table": "team_coaches",
-      "entityType": "pks"
-    },
-    {
-      "columns": [
-        "id"
-      ],
-      "nameExplicit": false,
-      "name": "team_constraints_pkey",
-      "schema": "public",
-      "table": "team_constraints",
       "entityType": "pks"
     },
     {

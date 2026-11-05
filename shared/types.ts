@@ -2,7 +2,6 @@ import type {
   ExternalEventType,
   PitchCode,
   PitchSubdivisionCode,
-  SchedulingRuleKey,
   SlotKind,
   StaffUnavailabilityType,
   TeamAgeBandCode,
@@ -58,13 +57,6 @@ export type StaffUnavailabilityRef = {
   note: string | null;
 };
 
-export type TeamConstraintRef = {
-  teamId: number;
-  constraintType: string;
-  coachNames: string | null;
-  conflictingCoachNames: string | null;
-};
-
 export type MedicRef = {
   id: number;
   name: string;
@@ -82,13 +74,6 @@ export type CityRef = {
   name: string;
   travelMinutesFromBeerSheva: number;
   northOfHaderaLine: boolean;
-};
-
-export type SchedulingRuleRef = {
-  ruleKey: SchedulingRuleKey;
-  valueMinutes: number | null;
-  valueText: string | null;
-  labelHe: string;
 };
 
 export type SlotGameDetailsRef = {

@@ -5,7 +5,6 @@ import {
   pitches,
   rotationTemplates,
   rotationTemplateTimes,
-  schedulingRules,
   teamAgeBandSubdivisions,
   teamAgeBands,
   trainingSessionDurations,
@@ -23,7 +22,6 @@ export async function seedReferenceData(database: Db) {
   await database.delete(pitchSubdivisions);
   await database.delete(trainingSessionDurations);
   await database.delete(teamAgeBands);
-  await database.delete(schedulingRules);
   await database.delete(cities);
 
   await database.insert(pitchSubdivisions).values([
@@ -180,49 +178,6 @@ export async function seedReferenceData(database: Db) {
       })),
     ),
   );
-
-  await database.insert(schedulingRules).values([
-    {
-      ruleKey: "home_games_min_gap_minutes",
-      valueMinutes: 120,
-      labelHe: "הפרש מינימלי בין משחקי בית",
-    },
-    {
-      ruleKey: "arrival_before_whistle_youth_minutes",
-      valueMinutes: 90,
-      labelHe: "הגעה לפני שריקה — נוער, נערים",
-    },
-    {
-      ruleKey: "arrival_before_whistle_juniors_minutes",
-      valueMinutes: 60,
-      labelHe: "הגעה לפני שריקה — ילדים, טרום, ילדות",
-    },
-    {
-      ruleKey: "north_of_hadera_extra_minutes",
-      valueMinutes: 30,
-      labelHe: "תוספת זמן — מקו חיפה וצפונה",
-    },
-    {
-      ruleKey: "weekday_traffic_buffer_minutes",
-      valueMinutes: 30,
-      labelHe: "מקדם פקקים — אמצע שבוע",
-    },
-    {
-      ruleKey: "reminder_match_forms_before_whistle_minutes",
-      valueMinutes: 120,
-      labelHe: "תזכורת טפסי משחק לפני שריקה",
-    },
-    {
-      ruleKey: "reminder_youth_ambulance_before_minutes",
-      valueMinutes: 45,
-      labelHe: "תזכורת אמבולנס וחובש — נוער",
-    },
-    {
-      ruleKey: "reminder_youth_security_before_minutes",
-      valueMinutes: 45,
-      labelHe: "תזכורת אבטחה — משחקי נוער",
-    },
-  ]);
 }
 
 export const TEAM_AGE_BAND_BY_NAME: Record<string, string | null> = {

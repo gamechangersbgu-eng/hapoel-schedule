@@ -57,19 +57,6 @@ export const STAFF_UNAVAILABILITY_TYPES = [
 
 export type StaffUnavailabilityType = (typeof STAFF_UNAVAILABILITY_TYPES)[number];
 
-export const SCHEDULING_RULE_KEYS = [
-  "home_games_min_gap_minutes",
-  "arrival_before_whistle_youth_minutes",
-  "arrival_before_whistle_juniors_minutes",
-  "north_of_hadera_extra_minutes",
-  "weekday_traffic_buffer_minutes",
-  "reminder_match_forms_before_whistle_minutes",
-  "reminder_youth_ambulance_before_minutes",
-  "reminder_youth_security_before_minutes",
-] as const;
-
-export type SchedulingRuleKey = (typeof SCHEDULING_RULE_KEYS)[number];
-
 export const EXTERNAL_EVENT_TYPES = [
   "external_activity",
   "driver_assignment",
