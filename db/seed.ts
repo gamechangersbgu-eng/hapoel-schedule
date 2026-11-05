@@ -1,4 +1,5 @@
 import { db } from "./index";
+import { seedReferenceData, TEAM_AGE_BAND_BY_NAME } from "./reference-seed";
 import { settings, slots as slotsTable, teams as teamsTable } from "./schema";
 
 const TEAM_NAMES = [
@@ -45,6 +46,8 @@ function addDaysISO(iso: string, days: number) {
 }
 
 async function main() {
+  await seedReferenceData(db);
+
   await db.delete(slotsTable);
   await db.delete(teamsTable);
   await db.delete(settings);
@@ -62,6 +65,7 @@ async function main() {
         name,
         sortOrder: index,
         isComments: false,
+        ageBandCode: TEAM_AGE_BAND_BY_NAME[name] ?? null,
       })),
     )
     .returning();
@@ -72,6 +76,7 @@ async function main() {
       name: "הערות",
       sortOrder: TEAM_NAMES.length,
       isComments: true,
+      ageBandCode: null,
     })
     .returning();
 

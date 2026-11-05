@@ -10,6 +10,10 @@ import { addDaysISO, weekDates } from "@/lib/week";
 
 const VALID_TYPES: Set<string> = new Set(SLOT_TYPES.map((item) => item.id));
 
+async function requireAdmin() {
+  // Auth gate placeholder until admin login is wired.
+}
+
 function refreshSchedule() {
   revalidatePath("/");
   revalidatePath("/admin");
@@ -181,4 +185,8 @@ export async function copyPreviousWeek(weekStart: string) {
 
   refreshSchedule();
   return { ok: true, count: source.length };
+}
+
+export async function logoutAction() {
+  redirect("/");
 }
