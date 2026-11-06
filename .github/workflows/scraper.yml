@@ -1,28 +1,25 @@
-name: Scrape match schedule
+name: Scraper tests
 
+# The association's site answers 403 to GitHub's servers, so the scraper itself runs on
+# a home computer (see services/scraper/README.md). Here only the tests run.
 on:
-  schedule:
-    # Twice a day, in UTC. The schedule only starts once this file is on main.
-    - cron: "17 3,15 * * *"
   push:
     branches: [feature/scraper]
     paths:
       - "services/scraper/**"
       - ".github/workflows/scraper.yml"
-  workflow_dispatch:
-    inputs:
-      write:
-        description: Write the games to the database (otherwise a dry run)
-        type: boolean
-        default: false
+  pull_request:
+    paths:
+      - "services/scraper/**"
+      - ".github/workflows/scraper.yml"
 
 permissions:
   contents: read
 
 jobs:
-  scrape:
+  test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -30,20 +27,4 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
-      - name: Test
-        run: npx tsx --test services/scraper/scrape.test.ts
-      - name: Scrape (dry run)
-        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.write)
-        run: npx tsx services/scraper/run.ts
-      - name: Scrape and write to the database
-        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.write)
-        env:
-          NETLIFY_DATABASE_URL: ${{ secrets.NETLIFY_DATABASE_URL }}
-        run: npx tsx services/scraper/run.ts --write
-      # Skipped when the run fails, so a failure never publishes partial data.
-      - uses: actions/upload-artifact@v4
-        with:
-          name: games
-          path: services/scraper/out/
-          if-no-files-found: error
-          retention-days: 90
+      - run: npx tsx --test services/scraper/scrape.test.ts

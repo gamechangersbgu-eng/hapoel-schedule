@@ -27,7 +27,7 @@
 
 ```bash
 npx tsx services/scraper/run.ts           # הרצה יבשה: קבצים ב-out/ ותוכנית ב-db-plan.json, בלי כתיבה למסד
-npx tsx services/scraper/run.ts --write   # כתיבה למסד (נדרש NETLIFY_DATABASE_URL)
+npx tsx services/scraper/run.ts --write   # כתיבה למסד (נדרש services/scraper/.env)
 npx tsx --test services/scraper/scrape.test.ts   # בדיקות, בלי אתר ובלי מסד
 ```
 
@@ -41,7 +41,16 @@ npx tsx --test services/scraper/scrape.test.ts   # בדיקות, בלי אתר �
 - משחק שירד מהאתר לא נמחק מהמסד.
 
 ## הרצה אוטומטית
-`.github/workflows/scraper.yml` כותב למסד פעמיים ביום, ודורש את הסוד `NETLIFY_DATABASE_URL` בריפו. לוח הזמנים מתחיל רק אחרי המיזוג ל-`main`. push ל-`feature/scraper` מריץ הרצה יבשה בלבד, והפעלה ידנית כותבת רק אם מסמנים `write`.
+אתר ההתאחדות חוסם את השרתים של GitHub (403), ולכן ההרצה הקבועה רצה ממחשב ביתי ב-Windows, באישור עומר:
+
+1. יוצרים את `services/scraper/.env` עם השורה `NETLIFY_DB_URL=<כתובת החיבור>`. הקובץ לא עולה ל-Git, ואסור לשתף אותו.
+2. מתזמנים פעמיים ביום (06:17 ו-18:17):
+   ```
+   schtasks /create /tn "Hapoel scraper" /tr "\"%CD%\services\scraper\run-scheduled.cmd\"" /sc hourly /mo 12 /st 06:17
+   ```
+3. כל הרצה נרשמת ב-`services/scraper/out/run.log`.
+
+ב-GitHub ה-workflow מריץ רק את הבדיקות, בכל push ו-PR.
 
 ## בכל עונה חדשה
 לעדכן את `SEASON_ID`, את טווח השבועות ואת רשימת הקבוצות ב-`teams.ts`, ואת המיפוי ב-`db-teams.ts`.
