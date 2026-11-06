@@ -35,11 +35,15 @@ symlinkSync(join(root, "node_modules"), join(work, "node_modules"), "dir");
 // 2. Strip everything that needs a server or a database.
 for (const item of [
   "app/admin",
+  "app/api",
   "app/actions.ts",
   "components/EditSlotForm.tsx",
   "components/TypeAndCampFields.tsx",
+  "components/ScheduleLiveRefresh.tsx",
   "lib/db.ts",
   "lib/schedule.ts",
+  "lib/schedule-revision.ts",
+  "lib/ifa-game-upsert.ts",
 ]) {
   rmSync(join(work, item), { recursive: true, force: true });
 }

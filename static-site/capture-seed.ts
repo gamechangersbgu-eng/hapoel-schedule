@@ -9,7 +9,9 @@ const out = process.argv[2];
 const seedPath = resolve(__dirname, "../db/seed.ts");
 const patched = readFileSync(seedPath, "utf8")
   .replace(/from "\.\/index"/, 'from "./capture-db"')
-  .replace(/from "\.\/schema"/, 'from "../db/schema"');
+  .replace(/from "\.\/schema"/, 'from "../db/schema"')
+  .replace(/from "\.\/reference-seed"/, 'from "../db/reference-seed"')
+  .replace(/from "\.\/seed-demo-schedule"/, 'from "../db/seed-demo-schedule"');
 const tmpSeed = resolve(__dirname, ".seed-capture.generated.ts");
 writeFileSync(tmpSeed, patched);
 
