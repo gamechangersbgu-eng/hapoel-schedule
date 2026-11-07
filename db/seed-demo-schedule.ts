@@ -5,8 +5,17 @@ import {
   cities,
   pitches,
   slotGameDetails,
+  slotTrainingDetails,
   slots as slotsTable,
 } from "./schema";
+import { TEAM_AGE_BAND_BY_NAME } from "./reference-seed";
+
+/** Demo pitch use per age band: older teams on whole/half pitches, younger ones on smaller parts. */
+const DEMO_TRAINING: Record<string, { subdivisions: string[]; minutes: number }> = {
+  noar_through_yeladim_b: { subdivisions: ["whole", "half_north", "half_south"], minutes: 105 },
+  yeladim_g_through_trum_g: { subdivisions: ["half_north", "third_center", "quarter_south_1", "quarter_south_2"], minutes: 60 },
+  football_school: { subdivisions: ["half_south"], minutes: 120 },
+};
 
 type Db = typeof appDb;
 
@@ -54,6 +63,17 @@ export async function insertDemoTwoWeekSchedule(
       .returning({ id: slotsTable.id });
 
     if (!inserted) continue;
+
+    const trainingPitchId = pitchIdByCode[spec.type];
+    if (trainingPitchId) {
+      const demo = DEMO_TRAINING[TEAM_AGE_BAND_BY_NAME[spec.teamName] ?? ""] ?? DEMO_TRAINING.noar_through_yeladim_b;
+      await database.insert(slotTrainingDetails).values({
+        slotId: inserted.id,
+        pitchId: trainingPitchId,
+        subdivisionCode: demo.subdivisions[inserted.id % demo.subdivisions.length],
+        durationMinutes: demo.minutes,
+      });
+    }
 
     if (spec.game && (spec.type === "home_game" || spec.type === "away_game")) {
       const pitchId = spec.game.pitchCode

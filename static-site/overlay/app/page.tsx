@@ -228,6 +228,7 @@ function Schedule() {
         weekStart={data.weekStart}
         basePath="/"
         compactOnMobile={!admin}
+        adminMode={admin}
       >
         {admin ? (
           <button

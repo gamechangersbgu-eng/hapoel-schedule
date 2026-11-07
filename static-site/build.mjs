@@ -44,6 +44,15 @@ for (const item of [
   "lib/schedule.ts",
   "lib/schedule-revision.ts",
   "lib/ifa-game-upsert.ts",
+  // Management login and pitch board (need the server).
+  "app/login",
+  "components/AdminUserMenu.tsx",
+  "components/AdminShell.tsx",
+  "components/PitchBoard.tsx",
+  "components/BookingForm.tsx",
+  "lib/auth.ts",
+  "lib/password.ts",
+  "lib/pitch-board.ts",
 ]) {
   rmSync(join(work, item), { recursive: true, force: true });
 }

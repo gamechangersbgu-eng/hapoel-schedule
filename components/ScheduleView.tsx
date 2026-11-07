@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { copyPreviousWeekForm, logoutAction } from "@/app/actions";
+import { copyPreviousWeekForm } from "@/app/actions";
 import { Legend } from "@/components/Legend";
 import { TeamWeek } from "@/components/TeamWeek";
 import { ScheduleGrid } from "@/components/ScheduleGrid";
@@ -74,14 +74,6 @@ export function ScheduleView({
               >
                 הדפסה
               </button>
-              <form action={logoutAction}>
-                <button
-                  type="submit"
-                  className="rounded-md px-3 py-1.5 text-sm font-bold text-zinc-600 hover:bg-white"
-                >
-                  יציאה
-                </button>
-              </form>
             </>
           ) : (
             <button

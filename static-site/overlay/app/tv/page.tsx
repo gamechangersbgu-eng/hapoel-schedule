@@ -43,6 +43,7 @@ function Board() {
     fetchPublishedSchedule().then((published) => {
       if (!cancelled) setBase(published ?? seedSchedule());
     });
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial fetch of shared edits
     void refresh();
     const timer = window.setInterval(() => void refresh(), 60_000);
     return () => {
@@ -75,6 +76,7 @@ function Board() {
 export default function TvPage() {
   // Client-only: the demo data and "today" depend on the screen's own clock.
   const [mounted, setMounted] = useState(false);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- render only after mounting
   useEffect(() => setMounted(true), []);
   return mounted ? <Board /> : null;
 }

@@ -8,12 +8,9 @@ import { bumpScheduleRevision } from "@/lib/schedule-revision";
 import { getSlotsInWeek } from "@/lib/schedule";
 import { getSlotType, isPitchSlot, SLOT_TYPES } from "@/lib/slot-types";
 import { addDaysISO, weekDates } from "@/lib/week";
+import { endSession, requireAdmin } from "@/lib/auth";
 
 const VALID_TYPES: Set<string> = new Set(SLOT_TYPES.map((item) => item.id));
-
-async function requireAdmin() {
-  // Auth gate placeholder until admin login is wired.
-}
 
 async function refreshSchedule() {
   await bumpScheduleRevision();
@@ -32,6 +29,7 @@ export type SlotInput = {
 };
 
 export async function saveSlot(input: SlotInput) {
+  await requireAdmin();
   if (!VALID_TYPES.has(input.type)) {
     return { error: "סוג אימון לא חוקי" };
   }
@@ -160,6 +158,7 @@ export async function copyPreviousWeekForm(formData: FormData) {
 }
 
 export async function copyPreviousWeek(weekStart: string) {
+  await requireAdmin();
   const previousStart = addDaysISO(weekStart, -7);
   const source = await getSlotsInWeek(previousStart);
 
@@ -190,5 +189,6 @@ export async function copyPreviousWeek(weekStart: string) {
 }
 
 export async function logoutAction() {
+  await endSession();
   redirect("/");
 }

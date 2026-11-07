@@ -316,6 +316,7 @@ export function TeamWeek({ data }: { data: WeekData }) {
 
   // localStorage and the clock only exist in the browser, so read them after mounting.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time read of browser-only state after mount
     setTeamId(readSavedTeam());
     setNow(new Date());
     const timer = window.setInterval(() => setNow(new Date()), 60_000);
