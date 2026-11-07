@@ -44,11 +44,15 @@ npx tsx --test services/scraper/scrape.test.ts   # בדיקות, בלי אתר �
 אתר ההתאחדות חוסם את השרתים של GitHub (403), ולכן ההרצה הקבועה רצה ממחשב ביתי ב-Windows, באישור עומר:
 
 1. יוצרים את `services/scraper/.env` עם השורה `NETLIFY_DB_URL=<כתובת החיבור>`. הקובץ לא עולה ל-Git, ואסור לשתף אותו.
-2. מתזמנים פעמיים ביום (06:17 ו-18:17):
+2. מתזמנים פעם ביום ב-16:00:
    ```
-   schtasks /create /tn "Hapoel scraper" /tr "\"%CD%\services\scraper\run-scheduled.cmd\"" /sc hourly /mo 12 /st 06:17
+   schtasks /create /tn "Hapoel scraper" /tr "\"%CD%\services\scraper\run-scheduled.cmd\"" /sc daily /st 16:00
    ```
-3. כל הרצה נרשמת ב-`services/scraper/out/run.log`.
+3. מגדירים שהמשימה תרוץ גם על סוללה, ושאם המחשב היה כבוי בשעה הקבועה היא תרוץ כשהוא נדלק:
+   ```
+   powershell -NoProfile -Command "Set-ScheduledTask -TaskName 'Hapoel scraper' -Settings (New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries)"
+   ```
+4. כל הרצה נרשמת ב-`services/scraper/out/run.log`. הרצה שהסתיימה בהצלחה נגמרת בשורה `... games written to the database, ... skipped`.
 
 ב-GitHub ה-workflow מריץ רק את הבדיקות, בכל push ו-PR.
 
