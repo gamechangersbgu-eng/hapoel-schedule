@@ -8,6 +8,8 @@ type AppHeaderProps = {
   weekStart: string;
   basePath: string;
   children?: ReactNode;
+  /** Phone: show only the club bar (the phone view has its own week bar). */
+  compactOnMobile?: boolean;
 };
 
 export function AppHeader({
@@ -16,10 +18,15 @@ export function AppHeader({
   weekStart,
   basePath,
   children,
+  compactOnMobile = false,
 }: AppHeaderProps) {
   return (
     <header className="bg-[linear-gradient(180deg,#c8102e_0%,#8e0b20_100%)] text-white shadow-md">
-      <div className="mx-auto flex max-w-[1400px] flex-col gap-3 px-3 py-4 sm:px-5">
+      <div
+        className={`mx-auto flex max-w-[1400px] flex-col gap-3 px-3 sm:px-5 ${
+          compactOnMobile ? "py-2.5 md:py-4" : "py-4"
+        }`}
+      >
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div>
@@ -33,7 +40,11 @@ export function AppHeader({
           </div>
           <div className="no-print">{children}</div>
         </div>
-        <div className="flex flex-col items-center gap-2 border-t border-white/20 pt-3 text-center">
+        <div
+          className={`flex-col items-center gap-2 border-t border-white/20 pt-3 text-center ${
+            compactOnMobile ? "hidden md:flex print:flex" : "flex"
+          }`}
+        >
           <h2 className="text-lg font-extrabold sm:text-xl">
             תכנית אימונים מחלקתית — שבוע {weekNumber}
           </h2>

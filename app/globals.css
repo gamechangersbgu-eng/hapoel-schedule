@@ -82,3 +82,59 @@ body {
 .schedule-table thead .team-col {
   z-index: 4;
 }
+
+/* ---------- TV screen (/tv) ---------- */
+
+.tv-root {
+  background:
+    radial-gradient(120% 80% at 100% 0%, rgba(200, 16, 46, 0.45) 0%, transparent 60%),
+    linear-gradient(180deg, #2a0409 0%, #12090b 100%);
+}
+
+.tv-grid {
+  border-radius: 0.8vh;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.12);
+  gap: 1px;
+}
+
+.tv-head {
+  background: #8e0b20;
+}
+
+.tv-head-today {
+  background: #fff;
+  color: var(--club-red);
+}
+
+.tv-team {
+  background: #3a0710;
+  min-height: 0;
+}
+
+.tv-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25vh;
+  min-height: 0;
+  padding: 0.3vh 0.25vw;
+  background: #1c0d10;
+}
+
+.tv-cell.tv-today {
+  background: #3d1218;
+  box-shadow:
+    inset 2px 0 0 #ffd54f,
+    inset -2px 0 0 #ffd54f;
+}
+
+/* Phone view follows the phone's dark mode (only where the phone view is shown). */
+@media (prefers-color-scheme: dark) and (max-width: 767px) {
+  html:has(.team-week) {
+    color-scheme: dark;
+  }
+  html:has(.team-week) body {
+    background: #09090b;
+    color: #f4f4f5;
+  }
+}

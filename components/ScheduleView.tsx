@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { copyPreviousWeekForm, logoutAction } from "@/app/actions";
 import { Legend } from "@/components/Legend";
+import { TeamWeek } from "@/components/TeamWeek";
 import { ScheduleGrid } from "@/components/ScheduleGrid";
 import type { WeekData } from "@/lib/types";
 
@@ -30,8 +32,12 @@ export function ScheduleView({
 
   return (
     <div className="mx-auto flex max-w-[1400px] flex-col gap-3 px-3 py-4 sm:px-5">
-      <div className="no-print flex flex-wrap items-center justify-between gap-3">
-        <label className="flex items-center gap-2 text-sm font-bold">
+      <div
+        className={`no-print flex-wrap items-center justify-between gap-3 ${editable ? "flex" : "hidden md:flex"}`}
+      >
+        <label
+          className={`items-center gap-2 text-sm font-bold ${editable ? "flex" : "hidden md:flex"}`}
+        >
           קבוצה
           <select
             value={teamFilter}
@@ -97,7 +103,7 @@ export function ScheduleView({
       ) : null}
 
       {isEmpty ? (
-        <p className="rounded-md border border-dashed border-[#c8102e] bg-white px-3 py-3 text-center text-sm font-medium text-zinc-600">
+        <p className={`rounded-md ${editable ? "" : "hidden md:block"} border border-dashed border-[#c8102e] bg-white px-3 py-3 text-center text-sm font-medium text-zinc-600`}>
           אין אימונים בשבוע זה.
           {editable ? " לחצו על תא או העתיקו את השבוע הקודם." : ""}
         </p>
@@ -109,7 +115,17 @@ export function ScheduleView({
         </p>
       ) : null}
 
-      <div className="flex flex-col items-stretch gap-3 lg:flex-row lg:items-start">
+      {editable ? null : (
+        <div className="md:hidden print:hidden">
+          <TeamWeek data={data} />
+        </div>
+      )}
+
+      <div
+        className={`flex-col items-stretch gap-3 lg:flex-row lg:items-start ${
+          editable ? "flex" : "hidden md:flex print:flex"
+        }`}
+      >
         <div className="min-w-0 flex-1">
           <ScheduleGrid
             dates={data.dates}
@@ -123,6 +139,12 @@ export function ScheduleView({
       </div>
       <p className="no-print pb-6 text-center text-xs text-zinc-500">
         הלוח מתעדכן אונליין. אין צורך לשלוח PDF אחרי כל שינוי.
+        <span className="hidden md:inline">
+          {" · "}
+          <Link href="/tv" className="font-bold text-[#8e0b20] underline">
+            מסך טלוויזיה למועדון
+          </Link>
+        </span>
       </p>
     </div>
   );
