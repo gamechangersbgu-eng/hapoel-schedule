@@ -52,5 +52,13 @@ npx tsx --test services/scraper/scrape.test.ts   # בדיקות, בלי אתר �
 
 ב-GitHub ה-workflow מריץ רק את הבדיקות, בכל push ו-PR.
 
+## מחיקת משחקי הדמו (פעם אחת, באישור עומר)
+`npm run db:seed` יוצר משחקים סינתטיים עם `external_id` שמתחיל ב-`demo-`. הכלי מוחק רק אותם, ומשאיר אימונים ומשחקים אמיתיים:
+
+```bash
+npx tsx services/scraper/remove-demo-games.ts            # רק מציג מה יימחק
+npx tsx services/scraper/remove-demo-games.ts --confirm  # מוחק
+```
+
 ## בכל עונה חדשה
 לעדכן את `SEASON_ID`, את טווח השבועות ואת רשימת הקבוצות ב-`teams.ts`, ואת המיפוי ב-`db-teams.ts`.
