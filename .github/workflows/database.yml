@@ -1,0 +1,43 @@
+# Run Postgres migrations / demo seed in the cloud (no local PC required).
+# Add repository secret NETLIFY_DATABASE_URL from Netlify → Project → Database → connection string.
+
+name: Database (Postgres)
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: What to run against production/staging Postgres
+        required: true
+        type: choice
+        options:
+          - migrate
+          - seed
+          - migrate-and-seed
+
+jobs:
+  postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply SQL migrations
+        if: inputs.task == 'migrate' || inputs.task == 'migrate-and-seed'
+        env:
+          NETLIFY_DATABASE_URL: ${{ secrets.NETLIFY_DATABASE_URL }}
+        run: npm run db:migrate:apply
+
+      - name: Load two-week demo schedule
+        if: inputs.task == 'seed' || inputs.task == 'migrate-and-seed'
+        env:
+          NETLIFY_DATABASE_URL: ${{ secrets.NETLIFY_DATABASE_URL }}
+        run: npm run db:seed

@@ -1,0 +1,2 @@
+key = postgresql://netlifydb_owner:npg_tlr10xgeiCDE@ep-young-shadow-b52k5g3i.c-7.us-east-2.db.netlify.com/netlifydb?sslmode=require
+

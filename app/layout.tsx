@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import { Heebo } from "next/font/google";
 import "./globals.css";
 
@@ -13,7 +14,7 @@ export const metadata: Metadata = {
   description: "לוח אימונים מקוון למחלקת הנוער",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="he" dir="rtl" className={`${heebo.variable} h-full`}>
       <body className={`${heebo.className} min-h-full`}>{children}</body>

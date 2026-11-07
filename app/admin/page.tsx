@@ -2,7 +2,9 @@ import Link from "next/link";
 import { AppHeader } from "@/components/AppHeader";
 import { EditSlotForm } from "@/components/EditSlotForm";
 import { ScheduleView } from "@/components/ScheduleView";
+import { ScheduleLiveRefresh } from "@/components/ScheduleLiveRefresh";
 import { getWeekData } from "@/lib/schedule";
+import { getScheduleRevision } from "@/lib/schedule-revision";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +21,10 @@ type AdminProps = {
 
 export default async function AdminPage({ searchParams }: AdminProps) {
   const params = await searchParams;
-  const data = await getWeekData(params.week);
+  const [data, revision] = await Promise.all([
+    getWeekData(params.week),
+    getScheduleRevision(),
+  ]);
   const selectedTeam = data.teams.find(
     (team) => String(team.id) === params.team,
   );
@@ -33,6 +38,7 @@ export default async function AdminPage({ searchParams }: AdminProps) {
 
   return (
     <div className="min-h-full">
+      <ScheduleLiveRefresh initialVersion={revision.version} />
       <AppHeader
         clubName={data.clubName}
         weekNumber={data.weekNumber}
