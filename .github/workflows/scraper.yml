@@ -1,0 +1,30 @@
+name: Scraper tests
+
+# The association's site answers 403 to GitHub's servers, so the scraper itself runs on
+# a home computer (see services/scraper/README.md). Here only the tests run.
+on:
+  push:
+    branches: [feature/scraper]
+    paths:
+      - "services/scraper/**"
+      - ".github/workflows/scraper.yml"
+  pull_request:
+    paths:
+      - "services/scraper/**"
+      - ".github/workflows/scraper.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npx tsx --test services/scraper/scrape.test.ts

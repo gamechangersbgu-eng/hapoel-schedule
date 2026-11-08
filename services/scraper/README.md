@@ -13,7 +13,7 @@
 **Upsert idempotent:** קרא ל-`upsertIfaGame()` מ-[`lib/ifa-game-upsert.ts`](../../lib/ifa-game-upsert.ts):
 
 - `source`: `ifa_scraper` (`GAME_DETAIL_SOURCES.IFA_SCRAPER`)
-- `external_id`: מזהה קבוע מההתאחדות לכל משחק
+- `external_id`: המפתח הקבוע שלנו (`key`), כי למשחקים עתידיים עדיין אין מזהה מההתאחדות
 - `teamId`: מיפוי שם קבוצה → `teams.id`
 - `type` / `gameKind`: `home_game` | `away_game`
 - `date`, `startTime`, `opponent`, `kickoffTime`, `cityName` (אופציונלי — מחפש ב-`cities`)
@@ -21,3 +21,51 @@
 אחרי ריצה מרובה: אפשר `{ bumpRevision: false }` לכל שורה ו-`bumpScheduleRevision()` פעם אחת בסוף.
 
 כל הנתונים נשמרים ישירות ב-**Postgres** (Netlify Database).
+
+## הרצה
+מתיקיית השורש, אחרי `npm ci`:
+
+```bash
+npx tsx services/scraper/run.ts           # הרצה יבשה: קבצים ב-out/ ותוכנית ב-db-plan.json, בלי כתיבה למסד
+npx tsx services/scraper/run.ts --write   # כתיבה למסד (נדרש services/scraper/.env)
+npx tsx --test services/scraper/scrape.test.ts   # בדיקות, בלי אתר ובלי מסד
+```
+
+## איך זה עובד
+- משחקי הליגה מגיעים מעמוד כל המשחקים של כל קבוצה, ומשחקי הגביע מרשימת המועדון השבועית (`GetClubGames`).
+- הבקשות נשלחות דרך `curl` עם User-Agent של דפדפן (באישור עומר), אחת אחרי השנייה, עם הפסקה של שנייה.
+- נשמרים רק נתוני משחקים, בלי נתונים על שחקנים.
+- כל כתיבה, לקבצים ולמסד, מתבצעת רק אחרי הרצה שהצליחה במלואה.
+- `db-teams.ts` ממפה קבוצה באתר לשורה בלוח. קבוצה בלי שורה (`null`) מדולגת ומדווחת.
+- הלוח הציבורי מציג רק שעה והערה, ולכן היריבה והמגרש נכתבים גם ל-`slots.note`.
+- משחק שירד מהאתר לא נמחק מהמסד.
+
+## הרצה אוטומטית
+אתר ההתאחדות חוסם את השרתים של GitHub (403), ולכן ההרצה הקבועה רצה ממחשב ביתי ב-Windows, באישור עומר:
+
+1. יוצרים את `services/scraper/.env` עם השורה `NETLIFY_DB_URL=<כתובת החיבור>`. הקובץ לא עולה ל-Git, ואסור לשתף אותו.
+2. מתזמנים פעם ביום ב-16:00:
+   ```
+   schtasks /create /tn "Hapoel scraper" /tr "\"%CD%\services\scraper\run-scheduled.cmd\"" /sc daily /st 16:00
+   ```
+3. מגדירים שהמשימה תרוץ גם על סוללה, ושאם המחשב היה כבוי בשעה הקבועה היא תרוץ כשהוא נדלק:
+   ```
+   powershell -NoProfile -Command "Set-ScheduledTask -TaskName 'Hapoel scraper' -Settings (New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries)"
+   ```
+4. כל הרצה נרשמת ב-`services/scraper/out/run.log`. הרצה שהסתיימה בהצלחה נגמרת בשורה `... games written to the database, ... skipped`.
+
+ב-GitHub ה-workflow מריץ רק את הבדיקות, בכל push ו-PR.
+
+## העלאת המסד ל-Phase 1 (פעם אחת, באישור עומר)
+`apply-phase1.ts` מריץ רק את שלושת ה-migrations של Phase 1, בטרנזקציה אחת, על מסד שיש בו רק את המבנה הראשון. בלי `--confirm` הוא רק מציג מה יקרה.
+
+## מחיקת משחקי הדמו (פעם אחת, באישור עומר)
+`npm run db:seed` יוצר משחקים סינתטיים עם `external_id` שמתחיל ב-`demo-`. הכלי מוחק רק אותם, ומשאיר אימונים ומשחקים אמיתיים:
+
+```bash
+npx tsx services/scraper/remove-demo-games.ts            # רק מציג מה יימחק
+npx tsx services/scraper/remove-demo-games.ts --confirm  # מוחק
+```
+
+## בכל עונה חדשה
+לעדכן את `SEASON_ID`, את טווח השבועות ואת רשימת הקבוצות ב-`teams.ts`, ואת המיפוי ב-`db-teams.ts`.
