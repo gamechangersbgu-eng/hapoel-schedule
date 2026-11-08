@@ -1,3 +1,4 @@
+/** Local-dev inserts. Not imported by the live site or the GitHub Pages snapshot. */
 import { GAME_DETAIL_SOURCES } from "../shared/game";
 import type { db as appDb } from "./index";
 import { DEMO_TWO_WEEK_SLOTS } from "./demo-two-week-schedule";
