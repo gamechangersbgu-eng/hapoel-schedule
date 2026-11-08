@@ -73,14 +73,14 @@ export const DEMO_TWO_WEEK_SLOTS: DemoSlotSpec[] = [
   { teamName: "נערים ג", dayOffset: 3, startTime: "17:00", type: "vasermil_4" },
   { teamName: "נערים ג", dayOffset: 5, type: "off", note: "חופש" },
 
-  { teamName: "ילדים א", dayOffset: 0, startTime: "17:00", type: "vasermil_1" },
-  { teamName: "ילדים א", dayOffset: 2, startTime: "17:00", type: "vasermil_1" },
-  { teamName: "ילדים א", dayOffset: 4, startTime: "17:00", type: "vasermil_2" },
+  { teamName: "ילדים א אדום", dayOffset: 0, startTime: "17:00", type: "vasermil_1" },
+  { teamName: "ילדים א אדום", dayOffset: 2, startTime: "17:00", type: "vasermil_1" },
+  { teamName: "ילדים א אדום", dayOffset: 4, startTime: "17:00", type: "vasermil_2" },
 
-  { teamName: "ילדים ב", dayOffset: 1, startTime: "16:00", type: "vasermil_2" },
-  { teamName: "ילדים ב", dayOffset: 3, startTime: "16:00", type: "vasermil_2" },
+  { teamName: "ילדים ב אדום", dayOffset: 1, startTime: "16:00", type: "vasermil_2" },
+  { teamName: "ילדים ב אדום", dayOffset: 3, startTime: "16:00", type: "vasermil_2" },
   {
-    teamName: "ילדים ב",
+    teamName: "ילדים ב אדום",
     dayOffset: 6,
     startTime: "09:30",
     type: "away_game",
@@ -92,31 +92,30 @@ export const DEMO_TWO_WEEK_SLOTS: DemoSlotSpec[] = [
     },
   },
 
-  { teamName: "ילדים ב ל", dayOffset: 1, startTime: "16:00", type: "vasermil_3" },
-  { teamName: "ילדים ב ל", dayOffset: 4, startTime: "16:00", type: "vasermil_3" },
+  { teamName: "ילדים ב לבן", dayOffset: 1, startTime: "16:00", type: "vasermil_3" },
+  { teamName: "ילדים ב לבן", dayOffset: 4, startTime: "16:00", type: "vasermil_3" },
 
-  { teamName: "ילדים ג", dayOffset: 0, startTime: "17:30", type: "vasermil_4" },
-  { teamName: "ילדים ג", dayOffset: 3, startTime: "17:30", type: "vasermil_4" },
+  { teamName: "ילדים ג אדום", dayOffset: 0, startTime: "17:30", type: "vasermil_4" },
+  { teamName: "ילדים ג אדום", dayOffset: 3, startTime: "17:30", type: "vasermil_4" },
 
-  { teamName: "ילדים ג ל", dayOffset: 2, startTime: "15:30", type: "vasermil_1" },
-  { teamName: "ילדים ג ל", dayOffset: 4, startTime: "15:30", type: "vasermil_1" },
+  { teamName: "ילדים ג לבן", dayOffset: 2, startTime: "15:30", type: "vasermil_1" },
+  { teamName: "ילדים ג לבן", dayOffset: 4, startTime: "15:30", type: "vasermil_1" },
 
-  { teamName: "טרום א", dayOffset: 0, startTime: "17:00", type: "vasermil_3", note: "התרשמות" },
-  { teamName: "טרום א", dayOffset: 2, startTime: "17:00", type: "vasermil_3" },
+  { teamName: "טרום א אדום", dayOffset: 0, startTime: "17:00", type: "vasermil_3", note: "התרשמות" },
+  { teamName: "טרום א אדום", dayOffset: 2, startTime: "17:00", type: "vasermil_3" },
 
-  { teamName: "טרום א ל", dayOffset: 1, startTime: "16:30", type: "vasermil_4" },
-  { teamName: "טרום א ל", dayOffset: 4, startTime: "16:30", type: "vasermil_4" },
+  { teamName: "טרום א לבן", dayOffset: 1, startTime: "16:30", type: "vasermil_4" },
+  { teamName: "טרום א לבן", dayOffset: 4, startTime: "16:30", type: "vasermil_4" },
 
-  { teamName: "טרום ב", dayOffset: 0, startTime: "16:00", type: "vasermil_1" },
-  { teamName: "טרום ב", dayOffset: 3, startTime: "16:00", type: "vasermil_1" },
+  { teamName: "טרום ב אדום", dayOffset: 0, startTime: "16:00", type: "vasermil_1" },
+  { teamName: "טרום ב אדום", dayOffset: 3, startTime: "16:00", type: "vasermil_1" },
 
-  { teamName: "טרום ב ל", dayOffset: 2, startTime: "15:00", type: "vasermil_2" },
-  { teamName: "טרום ב ל", dayOffset: 4, startTime: "15:00", type: "vasermil_2" },
+  { teamName: "טרום ב לבן", dayOffset: 2, startTime: "15:00", type: "vasermil_2" },
+  { teamName: "טרום ב לבן", dayOffset: 4, startTime: "15:00", type: "vasermil_2" },
 
-  { teamName: "טרום ג", dayOffset: 1, endDayOffset: 3, type: "camp", note: "מחנה אימון" },
+  { teamName: "טרום ג אדום", dayOffset: 1, endDayOffset: 3, type: "camp", note: "מחנה אימון" },
 
-  { teamName: "בית ספר", dayOffset: 5, startTime: "09:00", type: "other", note: "אימון בית ספר" },
-  { teamName: "מ.קייץ", dayOffset: 0, type: "off", note: "סיום מחנה" },
+  { teamName: "בית ספר לכדורגל", dayOffset: 5, startTime: "09:00", type: "other", note: "אימון בית ספר" },
 
   // --- Week 2 (days 7–13) ---
   { teamName: "נוער", dayOffset: 7, startTime: "19:30", type: "vasermil_1" },
@@ -155,10 +154,10 @@ export const DEMO_TWO_WEEK_SLOTS: DemoSlotSpec[] = [
   { teamName: "נערים ג", dayOffset: 7, startTime: "17:00", type: "vasermil_4" },
   { teamName: "נערים ג", dayOffset: 9, startTime: "17:00", type: "vasermil_4" },
 
-  { teamName: "ילדים א", dayOffset: 8, startTime: "17:00", type: "vasermil_1" },
-  { teamName: "ילדים א", dayOffset: 10, startTime: "17:00", type: "vasermil_2" },
+  { teamName: "ילדים א אדום", dayOffset: 8, startTime: "17:00", type: "vasermil_1" },
+  { teamName: "ילדים א אדום", dayOffset: 10, startTime: "17:00", type: "vasermil_2" },
   {
-    teamName: "ילדים א",
+    teamName: "ילדים א אדום",
     dayOffset: 13,
     startTime: "10:00",
     type: "home_game",
@@ -170,15 +169,15 @@ export const DEMO_TWO_WEEK_SLOTS: DemoSlotSpec[] = [
     },
   },
 
-  { teamName: "ילדים ב", dayOffset: 7, startTime: "16:00", type: "vasermil_2" },
-  { teamName: "ילדים ב", dayOffset: 9, startTime: "16:00", type: "vasermil_2" },
+  { teamName: "ילדים ב אדום", dayOffset: 7, startTime: "16:00", type: "vasermil_2" },
+  { teamName: "ילדים ב אדום", dayOffset: 9, startTime: "16:00", type: "vasermil_2" },
 
-  { teamName: "ילדים ג", dayOffset: 8, startTime: "17:30", type: "vasermil_4" },
-  { teamName: "ילדים ג ל", dayOffset: 11, startTime: "15:30", type: "vasermil_1" },
+  { teamName: "ילדים ג אדום", dayOffset: 8, startTime: "17:30", type: "vasermil_4" },
+  { teamName: "ילדים ג לבן", dayOffset: 11, startTime: "15:30", type: "vasermil_1" },
 
-  { teamName: "טרום א", dayOffset: 7, startTime: "17:00", type: "vasermil_3" },
-  { teamName: "טרום ב", dayOffset: 10, startTime: "16:00", type: "vasermil_1" },
+  { teamName: "טרום א אדום", dayOffset: 7, startTime: "17:00", type: "vasermil_3" },
+  { teamName: "טרום ב אדום", dayOffset: 10, startTime: "16:00", type: "vasermil_1" },
 
-  { teamName: "בית ספר", dayOffset: 8, startTime: "16:30", type: "vasermil_2", note: "ימי א–ד בית ספר" },
-  { teamName: "בית ספר", dayOffset: 12, startTime: "17:00", type: "other", note: "ליגה פנימית" },
+  { teamName: "בית ספר לכדורגל", dayOffset: 8, startTime: "16:30", type: "vasermil_2", note: "ימי א–ד בית ספר" },
+  { teamName: "בית ספר לכדורגל", dayOffset: 12, startTime: "17:00", type: "other", note: "ליגה פנימית" },
 ];

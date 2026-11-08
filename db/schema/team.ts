@@ -90,7 +90,7 @@ export const staffUnavailability = pgTable(
   (table) => [index("staff_unavailability_staff_idx").on(table.staffId)],
 );
 
-/** Placeholder team ↔ coach links (constraints deferred). */
+/** Team ↔ coach links (coaches are rows in `staff`). */
 export const teamCoaches = pgTable(
   "team_coaches",
   {
@@ -100,6 +100,8 @@ export const teamCoaches = pgTable(
       .references(() => teams.id, { onDelete: "cascade" }),
     coachName: text("coach_name").notNull(),
     isPrimary: boolean("is_primary").notNull().default(true),
+    /** The coach in the staff list (coachName keeps a copy of the name). */
+    staffId: integer("staff_id").references(() => staff.id, { onDelete: "cascade" }),
   },
   (table) => [index("team_coaches_team_idx").on(table.teamId)],
 );

@@ -149,9 +149,9 @@ export async function seedDemoPlayers(
   teamIdByName: Record<string, number>,
 ) {
   const demos: Array<{ teamName: string; displayName: string; sortOrder: number }> = [
-    { teamName: "ילדים א", displayName: "דמו שחקן 1", sortOrder: 0 },
-    { teamName: "ילדים א", displayName: "דמו שחקן 2", sortOrder: 1 },
-    { teamName: "טרום א", displayName: "דמו שחקן 1", sortOrder: 0 },
+    { teamName: "ילדים א אדום", displayName: "דמו שחקן 1", sortOrder: 0 },
+    { teamName: "ילדים א אדום", displayName: "דמו שחקן 2", sortOrder: 1 },
+    { teamName: "טרום א אדום", displayName: "דמו שחקן 1", sortOrder: 0 },
   ];
 
   const rows = demos
@@ -284,23 +284,27 @@ async function seedPracticeData(database: Db) {
   );
 }
 
-/** Maps calendar row Hebrew names → `team_age_bands.code` (team domain). */
+/** Maps calendar row Hebrew names → `team_age_bands.code` (team domain). Team list per the club spec (Nov 2026). */
+/* ילדות א/ב: the spec does not say which pitch rules apply; assumed like נוער–ילדים ב (whole/half). */
 export const TEAM_AGE_BAND_BY_NAME: Record<string, string | null> = {
-  נוער: "noar_through_yeladim_b",
+  "נוער": "noar_through_yeladim_b",
   "נערים א": "noar_through_yeladim_b",
   "נערים ב": "noar_through_yeladim_b",
   "נערים ג": "noar_through_yeladim_b",
-  "ילדים א": "noar_through_yeladim_b",
-  "ילדים ב": "noar_through_yeladim_b",
-  "ילדים ב ל": "noar_through_yeladim_b",
-  "ילדים ג": "yeladim_g_through_trum_g",
-  "ילדים ג ל": "yeladim_g_through_trum_g",
-  "טרום א": "yeladim_g_through_trum_g",
-  "טרום א ל": "yeladim_g_through_trum_g",
-  "טרום ב": "yeladim_g_through_trum_g",
-  "טרום ב ל": "yeladim_g_through_trum_g",
-  "טרום ג": "yeladim_g_through_trum_g",
-  "בית ספר": "football_school",
-  "מ.קייץ": null,
+  "ילדים א אדום": "noar_through_yeladim_b",
+  "ילדים א לבן": "noar_through_yeladim_b",
+  "ילדים ב אדום": "noar_through_yeladim_b",
+  "ילדים ב לבן": "noar_through_yeladim_b",
+  "ילדים ג אדום": "yeladim_g_through_trum_g",
+  "ילדים ג לבן": "yeladim_g_through_trum_g",
+  "טרום א אדום": "yeladim_g_through_trum_g",
+  "טרום א לבן": "yeladim_g_through_trum_g",
+  "טרום ב אדום": "yeladim_g_through_trum_g",
+  "טרום ב לבן": "yeladim_g_through_trum_g",
+  "טרום ג אדום": "yeladim_g_through_trum_g",
+  "טרום ג לבן": "yeladim_g_through_trum_g",
+  "ילדות א": "noar_through_yeladim_b",
+  "ילדות ב": "noar_through_yeladim_b",
+  "בית ספר לכדורגל": "football_school",
   הערות: null,
 };

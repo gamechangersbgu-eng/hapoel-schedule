@@ -26,6 +26,7 @@ export default async function HomePage({ searchParams }: HomeProps) {
         weekNumber={data.weekNumber}
         weekStart={data.weekStart}
         basePath="/"
+        compactOnMobile
       >
         <Link
           href="/admin"

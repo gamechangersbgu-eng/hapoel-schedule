@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { getSlotType, isCampSlot } from "@/lib/slot-types";
+import { getSlotType, isCampSlot, isPitchSlot } from "@/lib/slot-types";
 import type { SlotDTO, TeamDTO } from "@/lib/types";
 import { HEBREW_DAY_LETTERS, formatDayMonth } from "@/lib/week";
 
@@ -19,26 +19,42 @@ function campCovers(slot: SlotDTO, date: string) {
   return slot.date <= date && end >= date;
 }
 
+/** What the slot is, shown under the time: "אימון · וסרמיל 1", "משחק בית", "חופש"... */
+function kindLabel(type: string) {
+  if (type === "other") return null;
+  const style = getSlotType(type);
+  return isPitchSlot(type) ? `אימון · ${style.label}` : style.label;
+}
+
 function SlotChip({ slot, compact }: { slot: SlotDTO; compact?: boolean }) {
   const style = getSlotType(slot.type);
+  const cancelled = slot.status === "cancelled";
   return (
     <div
       className={`flex w-full flex-col items-center justify-center rounded-[3px] px-1 py-1 text-center leading-tight ${
         compact ? "min-h-[28px]" : "min-h-[52px]"
       }`}
-      style={{ background: style.bg, color: style.fg }}
+      style={
+        cancelled
+          ? { background: "repeating-linear-gradient(135deg,#e4e4e7,#e4e4e7 6px,#f4f4f5 6px,#f4f4f5 12px)", color: "#3f3f46" }
+          : { background: style.bg, color: style.fg }
+      }
     >
+      {cancelled ? <span className="text-[11px] font-black">בוטל</span> : null}
       {slot.startTime ? (
-        <span className="text-sm font-extrabold tabular-nums">{slot.startTime}</span>
+        <span className={`text-sm font-extrabold tabular-nums ${cancelled ? "line-through" : ""}`}>{slot.startTime}</span>
+      ) : null}
+      {slot.substituteName && !cancelled ? (
+        <span className="text-[10px] font-black">מחליף: {slot.substituteName}</span>
+      ) : null}
+      {cancelled && slot.statusNote ? <span className="text-[10px] font-bold">{slot.statusNote}</span> : null}
+      {kindLabel(slot.type) ? (
+        <span className="text-[11px] font-bold leading-tight">{kindLabel(slot.type)}</span>
       ) : null}
       {slot.note ? (
-        <span className="max-w-full break-words text-[10px] font-semibold opacity-95">
+        <span className="max-w-full break-words text-[10px] font-semibold leading-tight opacity-90">
           {slot.note}
         </span>
-      ) : slot.type === "off" ||
-        slot.type === "home_game" ||
-        slot.type === "away_game" ? (
-        <span className="text-[10px] font-semibold">{style.label}</span>
       ) : null}
     </div>
   );

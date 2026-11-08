@@ -1,6 +1,7 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { Heebo } from "next/font/google";
+import { PwaSetup } from "@/components/PwaSetup";
 import "./globals.css";
 
 const heebo = Heebo({
@@ -12,12 +13,28 @@ const heebo = Heebo({
 export const metadata: Metadata = {
   title: "תכנית אימונים מחלקתית",
   description: "לוח אימונים מקוון למחלקת הנוער",
+  applicationName: "לוח אימונים",
+  appleWebApp: { capable: true, title: "לוח אימונים", statusBarStyle: "default" },
+  icons: {
+    icon: [{ url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }],
+    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180" }],
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#c8102e",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="he" dir="rtl" className={`${heebo.variable} h-full`}>
-      <body className={`${heebo.className} min-h-full`}>{children}</body>
+      <body className={`${heebo.className} min-h-full`}>
+        {children}
+        <PwaSetup />
+      </body>
     </html>
   );
 }

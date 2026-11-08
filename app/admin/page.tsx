@@ -5,8 +5,13 @@ import { ScheduleView } from "@/components/ScheduleView";
 import { ScheduleLiveRefresh } from "@/components/ScheduleLiveRefresh";
 import { getWeekData } from "@/lib/schedule";
 import { getScheduleRevision } from "@/lib/schedule-revision";
+import { AdminNav } from "@/components/AdminNav";
+import { AdminUserMenu } from "@/components/AdminUserMenu";
+import { requireAdmin } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
+
+export const metadata = { title: "מצב מנהל · תכנית אימונים" };
 
 type AdminProps = {
   searchParams: Promise<{
@@ -20,6 +25,7 @@ type AdminProps = {
 };
 
 export default async function AdminPage({ searchParams }: AdminProps) {
+  const user = await requireAdmin();
   const params = await searchParams;
   const [data, revision] = await Promise.all([
     getWeekData(params.week),
@@ -44,6 +50,7 @@ export default async function AdminPage({ searchParams }: AdminProps) {
         weekNumber={data.weekNumber}
         weekStart={data.weekStart}
         basePath="/admin"
+        adminMode
       >
         <Link
           href={`/?week=${data.weekStart}`}
@@ -51,7 +58,9 @@ export default async function AdminPage({ searchParams }: AdminProps) {
         >
           תצוגה ציבורית
         </Link>
+        <AdminUserMenu user={user} />
       </AppHeader>
+      <AdminNav current="/admin" />
       <ScheduleView data={data} editable message={message} />
       {selectedTeam && selectedDate ? (
         <EditSlotForm

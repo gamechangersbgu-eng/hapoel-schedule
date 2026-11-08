@@ -3,3 +3,5 @@ export * from "./team";
 export * from "./pitch";
 export * from "./game";
 export * from "./practice";
+export * from "./auth";
+export * from "./history";
