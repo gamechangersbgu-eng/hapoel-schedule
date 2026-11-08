@@ -1,4 +1,3 @@
-import { db } from "./index";
 import {
   ensureScheduleRevision,
   seedDemoPlayers,
@@ -56,7 +55,36 @@ function sundayOf(date: Date) {
   return copy;
 }
 
+function databaseHost(url: string) {
+  try {
+    return new URL(url.replace(/^postgres(ql)?:\/\//, "http://")).hostname;
+  } catch {
+    return "";
+  }
+}
+
+function isLocalDatabaseUrl(url: string | undefined) {
+  const host = url ? databaseHost(url) : "";
+  return host === "localhost" || host === "127.0.0.1" || host === "::1";
+}
+
+/** Demo rows are for a local database only. The public schedule reads Postgres as it is. */
+function assertLocalDemoDatabase() {
+  const target =
+    process.env.LOCAL_DATABASE_URL?.trim() ||
+    process.env.NETLIFY_DB_URL?.trim() ||
+    process.env.NETLIFY_DATABASE_URL?.trim() ||
+    process.env.DATABASE_URL?.trim();
+  if (isLocalDatabaseUrl(target)) return;
+  console.error(
+    "db/seed.ts only loads demo practices and games into a local Postgres. It does not run against the database the live site and GitHub Pages display. Use: node scripts/seed-local.mjs",
+  );
+  process.exit(1);
+}
+
 async function main() {
+  assertLocalDemoDatabase();
+  const { db } = await import("./index");
   await seedReferenceData(db);
 
   await db.delete(slotGameDetails);

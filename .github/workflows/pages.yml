@@ -1,7 +1,9 @@
 name: Deploy static schedule to GitHub Pages
 
-# Static copy of the schedule: demo data (or the committed schedule-data.json), with a browser-only
-# admin mode (edits in localStorage, exported as JSON). No database, no server. See README.
+# Read-only snapshot of Postgres, then a static export. No demo seed, no textdb, no browser edits.
+# Requires repository secret NETLIFY_DATABASE_URL (same name as the Database workflow).
+# NETLIFY_DB_URL is also accepted if that is the name configured on the repo.
+# If neither secret is set the build fails instead of publishing demo data.
 # One-time setup: repo Settings -> Pages -> Build and deployment -> Source: "GitHub Actions".
 on:
   push:
@@ -32,6 +34,8 @@ jobs:
       - run: npm run build:pages
         env:
           PAGES_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+          NETLIFY_DATABASE_URL: ${{ secrets.NETLIFY_DATABASE_URL }}
+          NETLIFY_DB_URL: ${{ secrets.NETLIFY_DB_URL }}
       - run: touch out/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         with:
