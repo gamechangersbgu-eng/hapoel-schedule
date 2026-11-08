@@ -49,3 +49,8 @@ next-env.d.ts
 
 # Local Netlify folder
 .netlify
+
+# secrets
+Postgres_key
+*.key
+.env
