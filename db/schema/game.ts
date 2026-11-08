@@ -9,7 +9,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { pitches } from "./pitch";
-import { drivers, medics } from "./team";
+import { drivers, medics, staff } from "./team";
 import { teams } from "./team";
 
 /** Monotonic version for schedule readers (web/TV poll). Single row id=1. */
@@ -43,6 +43,12 @@ export const slots = pgTable(
     startTime: text("start_time"),
     type: text().notNull(),
     note: text(),
+    /** "active" or "cancelled". Cancelled items stay visible to parents, marked as cancelled. */
+    status: text().notNull().default("active"),
+    /** Reason shown to parents, e.g. "המאמן חולה". */
+    statusNote: text("status_note"),
+    /** Substitute coach for this one session (staff row). */
+    substituteStaffId: integer("substitute_staff_id").references(() => staff.id, { onDelete: "set null" }),
   },
   (table) => [
     index("slots_date_idx").on(table.date),

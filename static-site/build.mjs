@@ -53,6 +53,11 @@ for (const item of [
   "lib/auth.ts",
   "lib/password.ts",
   "lib/pitch-board.ts",
+  "components/GameForm.tsx",
+  "components/AdminNav.tsx",
+  "lib/games.ts",
+  "lib/coaches-db.ts",
+  "lib/history.ts",
 ]) {
   rmSync(join(work, item), { recursive: true, force: true });
 }

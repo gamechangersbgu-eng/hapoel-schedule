@@ -28,16 +28,26 @@ function kindLabel(type: string) {
 
 function SlotChip({ slot, compact }: { slot: SlotDTO; compact?: boolean }) {
   const style = getSlotType(slot.type);
+  const cancelled = slot.status === "cancelled";
   return (
     <div
       className={`flex w-full flex-col items-center justify-center rounded-[3px] px-1 py-1 text-center leading-tight ${
         compact ? "min-h-[28px]" : "min-h-[52px]"
       }`}
-      style={{ background: style.bg, color: style.fg }}
+      style={
+        cancelled
+          ? { background: "repeating-linear-gradient(135deg,#e4e4e7,#e4e4e7 6px,#f4f4f5 6px,#f4f4f5 12px)", color: "#3f3f46" }
+          : { background: style.bg, color: style.fg }
+      }
     >
+      {cancelled ? <span className="text-[11px] font-black">בוטל</span> : null}
       {slot.startTime ? (
-        <span className="text-sm font-extrabold tabular-nums">{slot.startTime}</span>
+        <span className={`text-sm font-extrabold tabular-nums ${cancelled ? "line-through" : ""}`}>{slot.startTime}</span>
       ) : null}
+      {slot.substituteName && !cancelled ? (
+        <span className="text-[10px] font-black">מחליף: {slot.substituteName}</span>
+      ) : null}
+      {cancelled && slot.statusNote ? <span className="text-[10px] font-bold">{slot.statusNote}</span> : null}
       {kindLabel(slot.type) ? (
         <span className="text-[11px] font-bold leading-tight">{kindLabel(slot.type)}</span>
       ) : null}

@@ -2,8 +2,9 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { and, eq, gte, lte, ne } from "drizzle-orm";
-import { db, slots, teams } from "@/lib/db";
+import { and, eq, gte, lte, ne, notInArray } from "drizzle-orm";
+import { db, slotTrainingDetails, slots, teams } from "@/lib/db";
+import { formatDateHe, logChange } from "@/lib/history";
 import { bumpScheduleRevision } from "@/lib/schedule-revision";
 import { getSlotsInWeek } from "@/lib/schedule";
 import { getSlotType, isPitchSlot, SLOT_TYPES } from "@/lib/slot-types";
@@ -11,6 +12,7 @@ import { addDaysISO, weekDates } from "@/lib/week";
 import { endSession, requireAdmin } from "@/lib/auth";
 
 const VALID_TYPES: Set<string> = new Set(SLOT_TYPES.map((item) => item.id));
+const GAME_TYPES = ["home_game", "away_game"];
 
 async function refreshSchedule() {
   await bumpScheduleRevision();
@@ -81,11 +83,21 @@ export async function saveSlot(input: SlotInput) {
     note: input.note?.trim() || null,
   };
 
+  let slotId = input.id ?? null;
   if (input.id) {
     await db.update(slots).set(data).where(eq(slots.id, input.id));
   } else {
-    await db.insert(slots).values(data);
+    const [created] = await db.insert(slots).values(data).returning({ id: slots.id });
+    slotId = created.id;
   }
+  const [team] = await db.select({ name: teams.name }).from(teams).where(eq(teams.id, input.teamId)).limit(1);
+  await logChange({
+    action: input.id ? "update" : "create",
+    summary: `${input.id ? "עודכן" : "נוסף"}: ${team?.name ?? ""}, ${getSlotType(input.type).label}, ${formatDateHe(input.date)}${startTime ? ` ${startTime}` : ""}`,
+    teamId: input.teamId,
+    slotId,
+    date: input.date,
+  });
 
   await refreshSchedule();
   return { ok: true };
@@ -93,7 +105,15 @@ export async function saveSlot(input: SlotInput) {
 
 export async function deleteSlot(id: number) {
   await requireAdmin();
-  await db.delete(slots).where(eq(slots.id, id));
+  const [removed] = await db.delete(slots).where(eq(slots.id, id)).returning();
+  if (removed) {
+    await logChange({
+      action: "delete",
+      summary: `נמחק: ${getSlotType(removed.type).label}, ${formatDateHe(removed.date)}${removed.startTime ? ` ${removed.startTime}` : ""}`,
+      teamId: removed.teamId,
+      date: removed.date,
+    });
+  }
   await refreshSchedule();
   return { ok: true };
 }
@@ -160,7 +180,8 @@ export async function copyPreviousWeekForm(formData: FormData) {
 export async function copyPreviousWeek(weekStart: string) {
   await requireAdmin();
   const previousStart = addDaysISO(weekStart, -7);
-  const source = await getSlotsInWeek(previousStart);
+  // Games are not copied or removed: they come from the IFA fixtures (or are entered one by one).
+  const source = (await getSlotsInWeek(previousStart)).filter((slot) => !GAME_TYPES.includes(slot.type));
 
   if (source.length === 0) {
     return { error: "אין נתונים בשבוע הקודם שאפשר להעתיק" };
@@ -170,19 +191,44 @@ export async function copyPreviousWeek(weekStart: string) {
   await db
     .delete(slots)
     .where(
-      and(gte(slots.date, currentDates[0]), lte(slots.date, currentDates[6])),
+      and(
+        gte(slots.date, currentDates[0]),
+        lte(slots.date, currentDates[6]),
+        notInArray(slots.type, GAME_TYPES),
+      ),
     );
 
-  await db.insert(slots).values(
-    source.map((slot) => ({
-      teamId: slot.teamId,
-      date: addDaysISO(slot.date, 7),
-      endDate: slot.endDate ? addDaysISO(slot.endDate, 7) : null,
-      startTime: slot.startTime,
-      type: slot.type,
-      note: slot.note,
-    })),
-  );
+  // Copy each item with its pitch part / duration; cancellations and substitutes are not copied.
+  const details = await db.select().from(slotTrainingDetails);
+  const detailBySlot = new Map(details.map((row) => [row.slotId, row]));
+  for (const slot of source) {
+    const [created] = await db
+      .insert(slots)
+      .values({
+        teamId: slot.teamId,
+        date: addDaysISO(slot.date, 7),
+        endDate: slot.endDate ? addDaysISO(slot.endDate, 7) : null,
+        startTime: slot.startTime,
+        type: slot.type,
+        note: slot.note,
+      })
+      .returning({ id: slots.id });
+    const detail = detailBySlot.get(slot.id);
+    if (detail) {
+      await db.insert(slotTrainingDetails).values({
+        slotId: created.id,
+        pitchId: detail.pitchId,
+        subdivisionCode: detail.subdivisionCode,
+        durationMinutes: detail.durationMinutes,
+        rotationTemplateId: detail.rotationTemplateId,
+      });
+    }
+  }
+  await logChange({
+    action: "copy_week",
+    summary: `הועתק השבוע של ${formatDateHe(previousStart)} לשבוע של ${formatDateHe(weekStart)} (${source.length} פריטים)`,
+    date: weekStart,
+  });
 
   await refreshSchedule();
   return { ok: true, count: source.length };

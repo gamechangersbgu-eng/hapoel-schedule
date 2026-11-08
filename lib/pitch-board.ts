@@ -27,9 +27,10 @@ import {
 } from "@/lib/pitch-rules";
 
 export * from "@/lib/pitch-rules";
+import { getCoaches } from "@/lib/coaches-db";
 
 export async function getPitchDay(date: string): Promise<PitchDay> {
-  const [pitchRows, subdivisionRows, durationRows, rotationRows, timeRows, teamRows, bandRows, ruleRows] =
+  const [pitchRows, subdivisionRows, durationRows, rotationRows, timeRows, teamRows, bandRows, ruleRows, coaches] =
     await Promise.all([
       db.select().from(pitchesTable).orderBy(asc(pitchesTable.sortOrder)),
       db.select().from(subdivisionsTable).orderBy(asc(subdivisionsTable.sortOrder)),
@@ -39,6 +40,7 @@ export async function getPitchDay(date: string): Promise<PitchDay> {
       db.select().from(teamsTable).orderBy(asc(teamsTable.sortOrder)),
       db.select().from(teamAgeBandSubdivisions),
       db.select().from(footballSchoolScheduleRules),
+      getCoaches(),
     ]);
 
   const pitchCodes = pitchRows.map((pitch) => pitch.code);
@@ -76,6 +78,9 @@ export async function getPitchDay(date: string): Promise<PitchDay> {
         rotationTemplateId: null,
         note: slot.note,
         opponent: game.opponent,
+        status: slot.status,
+        statusNote: slot.statusNote,
+        substituteStaffId: slot.substituteStaffId,
       });
       continue;
     }
@@ -96,6 +101,9 @@ export async function getPitchDay(date: string): Promise<PitchDay> {
       rotationTemplateId: training?.rotationTemplateId ?? null,
       note: slot.note,
       opponent: null,
+      status: slot.status,
+      statusNote: slot.statusNote,
+      substituteStaffId: slot.substituteStaffId,
     });
   }
 
@@ -134,6 +142,7 @@ export async function getPitchDay(date: string): Promise<PitchDay> {
       noteHe: rule.noteHe,
     })),
     bookings,
+    coaches,
   };
 }
 

@@ -3,7 +3,8 @@ import Link from "next/link";
 import { BookingForm } from "@/components/BookingForm";
 import { PitchBoard } from "@/components/PitchBoard";
 import { HEBREW_DAY_NAMES } from "@/components/display-utils";
-import { dayWarnings, getPitchDay, toTime } from "@/lib/pitch-board";
+import { coachWarnings, dayWarnings, getPitchDay, toTime } from "@/lib/pitch-board";
+import { AdminNav } from "@/components/AdminNav";
 import { AdminUserMenu } from "@/components/AdminUserMenu";
 import { requireAdmin } from "@/lib/auth";
 import { addDaysISO, formatDayMonth, formatISODate, weekDates } from "@/lib/week";
@@ -41,7 +42,7 @@ export default async function PitchBoardPage({ searchParams }: Props) {
   const day = await getPitchDay(date);
   const week = weekDates(sundayOf(date));
   const baseHref = `/admin/pitches?date=${date}`;
-  const warnings = dayWarnings(day);
+  const warnings = [...dayWarnings(day), ...coachWarnings(day).map((item) => item.message)];
   const dayIndex = week.indexOf(date);
   const dateLabel = `יום ${HEBREW_DAY_NAMES[dayIndex]}, ${formatDayMonth(date)}`;
 
@@ -49,8 +50,9 @@ export default async function PitchBoardPage({ searchParams }: Props) {
   const showForm = Boolean(params.new) || Boolean(editing);
   const num = (value?: string) => (value && Number(value) ? Number(value) : undefined);
 
-  const trainings = day.bookings.filter((item) => item.kind === "training").length;
-  const games = day.bookings.length - trainings;
+  const trainings = day.bookings.filter((item) => item.kind === "training" && item.status !== "cancelled").length;
+  const cancelledCount = day.bookings.filter((item) => item.status === "cancelled").length;
+  const games = day.bookings.filter((item) => item.kind === "home_game" && item.status !== "cancelled").length;
 
   return (
     <div className="min-h-full bg-[#fff8f6]">
@@ -64,9 +66,6 @@ export default async function PitchBoardPage({ searchParams }: Props) {
             <h1 className="text-2xl font-black">לוח שיבוץ מגרשים</h1>
           </div>
           <nav className="flex gap-2 text-sm font-bold">
-            <Link href="/admin" className="rounded-md border border-white/30 px-3 py-1.5 hover:bg-white/10">
-              ניהול תכנית אימונים
-            </Link>
             <Link href="/" className="rounded-md border border-white/30 px-3 py-1.5 hover:bg-white/10">
               תצוגה ציבורית
             </Link>
@@ -74,6 +73,7 @@ export default async function PitchBoardPage({ searchParams }: Props) {
           </nav>
         </div>
       </header>
+      <AdminNav current="/admin/pitches" />
 
       <main className="mx-auto flex max-w-[1400px] flex-col gap-3 px-4 py-4">
         <nav aria-label="בחירת יום" className="flex items-center gap-2 overflow-x-auto pb-1">
@@ -112,6 +112,7 @@ export default async function PitchBoardPage({ searchParams }: Props) {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-base font-bold text-zinc-700">
             {dateLabel} · {trainings} אימונים{games ? ` · ${games} משחקי בית` : ""}
+            {cancelledCount ? ` · ${cancelledCount} בוטלו` : ""}
           </p>
           <Link
             href={`${baseHref}&new=1`}
@@ -157,6 +158,9 @@ export default async function PitchBoardPage({ searchParams }: Props) {
                   durationMinutes: editing.durationMinutes ?? undefined,
                   rotationTemplateId: editing.rotationTemplateId,
                   note: editing.note,
+                  status: editing.status,
+                  statusNote: editing.statusNote,
+                  substituteStaffId: editing.substituteStaffId,
                 }
               : {
                   teamId: num(params.team),

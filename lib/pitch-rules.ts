@@ -1,4 +1,5 @@
 // Pure pitch-board rules (no database access), shared by the server and the booking form.
+import { absenceLabel, absenceOn, type CoachInfo } from "@/lib/coaches";
 
 /** Section of the pitch along its length, in twelfths (north = 0, south = 12). */
 export const SUBDIVISION_RANGE: Record<string, [number, number]> = {
@@ -12,6 +13,20 @@ export const SUBDIVISION_RANGE: Record<string, [number, number]> = {
   quarter_north_2: [3, 6],
   quarter_south_1: [6, 9],
   quarter_south_2: [9, 12],
+};
+
+/** Short labels for boards and screens. Whole pitch has none (nothing to add). */
+export const SUBDIVISION_SHORT: Record<string, string> = {
+  whole: "מלא",
+  half_north: "½ צפון",
+  half_south: "½ דרום",
+  third_north: "⅓ צפון",
+  third_center: "⅓ מרכז",
+  third_south: "⅓ דרום",
+  quarter_north_1: "¼ צפון 1",
+  quarter_north_2: "¼ צפון 2",
+  quarter_south_1: "¼ דרום 1",
+  quarter_south_2: "¼ דרום 2",
 };
 
 /** Used when an older booking has no duration saved. */
@@ -57,6 +72,10 @@ export type BoardBooking = {
   rotationTemplateId: number | null;
   note: string | null;
   opponent: string | null;
+  /** "active" or "cancelled". Cancelled bookings stay on the board but free the pitch. */
+  status: string;
+  statusNote: string | null;
+  substituteStaffId: number | null;
 };
 
 export type BoardTeam = {
@@ -96,6 +115,7 @@ export type PitchDay = {
   teams: BoardTeam[];
   footballSchoolRules: FootballSchoolRule[];
   bookings: BoardBooking[];
+  coaches: CoachInfo[];
 };
 
 function overlaps(a: [number, number], b: [number, number]) {
@@ -158,7 +178,7 @@ export function checkBooking(day: PitchDay, booking: ProposedBooking): string[] 
   }
 
   for (const other of day.bookings) {
-    if (other.slotId === booking.slotId) continue;
+    if (other.slotId === booking.slotId || other.status === "cancelled") continue;
     if (!overlaps([booking.start, end], [other.start, other.end])) continue;
     const when = `${toTime(other.start)}–${toTime(other.end)}`;
     if (other.teamId === booking.teamId) {
@@ -180,7 +200,9 @@ export function checkBooking(day: PitchDay, booking: ProposedBooking): string[] 
 
 /** Club-wide warnings for the day (shown on the board, not blocking). */
 export function dayWarnings(day: PitchDay): string[] {
-  const games = day.bookings.filter((item) => item.kind === "home_game").sort((a, b) => a.start - b.start);
+  const games = day.bookings
+    .filter((item) => item.kind === "home_game" && item.status !== "cancelled")
+    .sort((a, b) => a.start - b.start);
   const warnings: string[] = [];
   for (let i = 1; i < games.length; i += 1) {
     const gap = games[i].start - games[i - 1].start;
@@ -188,6 +210,44 @@ export function dayWarnings(day: PitchDay): string[] {
       warnings.push(
         `פחות משעתיים בין משחקי הבית של ${games[i - 1].teamName} (${toTime(games[i - 1].start)}) ו${games[i].teamName} (${toTime(games[i].start)}).`,
       );
+    }
+  }
+  return warnings;
+}
+
+/** The coaches responsible for a booking: the substitute if one was set, otherwise the team's coaches. */
+export function coachesFor(day: PitchDay, booking: { teamId: number; substituteStaffId: number | null }) {
+  if (booking.substituteStaffId) return day.coaches.filter((coach) => coach.id === booking.substituteStaffId);
+  return day.coaches.filter((coach) => coach.teamIds.includes(booking.teamId));
+}
+
+/** Coach problems on this day: absence, not a work day, or two teams at the same time. Not blocking. */
+export function coachWarnings(day: PitchDay): { slotId: number; message: string }[] {
+  const weekday = weekdayOf(day.date);
+  const active = day.bookings.filter((item) => item.kind === "training" && item.status !== "cancelled");
+  const warnings: { slotId: number; message: string }[] = [];
+  for (const booking of active) {
+    const when = `${booking.teamName} ${toTime(booking.start)}`;
+    for (const coach of coachesFor(day, booking)) {
+      const absence = absenceOn(coach, day.date);
+      if (absence) {
+        warnings.push({
+          slotId: booking.slotId,
+          message: `${coach.name} ב${absenceLabel(absence.type)}${absence.note ? ` (${absence.note})` : ""}, ויש לו אימון: ${when}. אפשר לסמן מאמן מחליף או ביטול.`,
+        });
+      } else if (coach.workDays.length && !coach.workDays.includes(weekday)) {
+        warnings.push({ slotId: booking.slotId, message: `${coach.name} לא עובד ביום ${WEEKDAY_HE[weekday]}, ויש לו אימון: ${when}.` });
+      }
+      for (const other of active) {
+        if (other.slotId <= booking.slotId || other.teamId === booking.teamId) continue;
+        if (!overlaps([booking.start, booking.end], [other.start, other.end])) continue;
+        if (coachesFor(day, other).some((item) => item.id === coach.id)) {
+          warnings.push({
+            slotId: booking.slotId,
+            message: `${coach.name} משובץ בו זמנית ל${booking.teamName} (${toTime(booking.start)}) ול${other.teamName} (${toTime(other.start)}).`,
+          });
+        }
+      }
     }
   }
   return warnings;

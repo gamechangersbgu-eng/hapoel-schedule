@@ -58,31 +58,87 @@ function useWakeLock() {
   }, []);
 }
 
-function Chip({ slot, size }: { slot: SlotDTO; size: "lg" | "sm" }) {
+const SHORT_PITCH: Record<string, string> = {
+  vasermil_1: "וסרמיל 1",
+  vasermil_2: "וסרמיל 2",
+  vasermil_3: "וסרמיל 3",
+  vasermil_4: "וסרמיל 4",
+};
+
+/** Second line of a chip: where / what, in as few words as possible. */
+function chipLine(slot: SlotDTO) {
+  if (SHORT_PITCH[slot.type]) return `${SHORT_PITCH[slot.type]}${slot.place ? ` · ${slot.place}` : ""}`;
+  if (slot.type === "home_game") return slot.opponent ? `בית · ${slot.opponent}` : "משחק בית";
+  if (slot.type === "away_game") return slot.opponent ? `חוץ · ${slot.opponent}` : "משחק חוץ";
+  if (slot.type === "off") return "חופש";
+  return null;
+}
+
+function Chip({ slot, count }: { slot: SlotDTO; count: number }) {
   const style = getSlotType(slot.type);
+  const cancelled = slot.status === "cancelled";
   const time = timeLabel(slot);
-  const showLabel = slot.type === "home_game" || slot.type === "away_game" || slot.type === "off";
-  const sub = slot.note || (showLabel ? style.label : null);
+  const line = chipLine(slot);
+  const extra = cancelled
+    ? `בוטל${slot.statusNote ? ` · ${slot.statusNote}` : ""}`
+    : slot.substituteName
+      ? `מחליף: ${slot.substituteName}`
+      : slot.type === "away_game" && slot.departureTime
+        ? `יציאה ${slot.departureTime}`
+        : slot.note;
+  const background = cancelled
+    ? { background: "repeating-linear-gradient(135deg,#52525b,#52525b 8px,#3f3f46 8px,#3f3f46 16px)", color: "#f4f4f5" }
+    : { background: style.bg, color: style.fg };
+  const strong = cancelled || Boolean(slot.substituteName);
+
+  // One item: time on the right, details beside it (uses the row height best).
+  if (count === 1) {
+    return (
+      <div
+        className="flex min-h-0 min-w-0 flex-1 items-center justify-center gap-[0.5vw] overflow-hidden rounded-[0.5vh] px-[0.4vw] leading-[1.1] ring-1 ring-white/15"
+        style={background}
+      >
+        {time ? (
+          <span
+            dir="ltr"
+            className={`shrink-0 font-black tabular-nums ${cancelled ? "line-through opacity-80" : ""}`}
+            style={{ fontSize: "min(2.6vh, 1.45vw)" }}
+          >
+            {time}
+          </span>
+        ) : null}
+        {line || extra ? (
+          <span className="flex min-w-0 flex-col text-right">
+            {line ? (
+              <span className="truncate font-bold" style={{ fontSize: "min(1.5vh, 0.85vw)" }}>
+                {line}
+              </span>
+            ) : null}
+            {extra ? (
+              <span className={`truncate ${strong ? "font-black" : "font-semibold opacity-90"}`} style={{ fontSize: "min(1.4vh, 0.8vw)" }}>
+                {extra}
+              </span>
+            ) : null}
+          </span>
+        ) : null}
+      </div>
+    );
+  }
+
+  // Two or three items share the cell side by side: time, and one short line.
   return (
     <div
-      className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden rounded-[0.4vh] px-[0.3vw] text-center leading-[1.1] ring-1 ring-white/15"
-      style={{ background: style.bg, color: style.fg }}
+      className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center overflow-hidden rounded-[0.5vh] px-[0.2vw] text-center leading-[1.05] ring-1 ring-white/15"
+      style={background}
     >
       {time ? (
-        <span
-          dir="ltr"
-          className="font-black tabular-nums"
-          style={{ fontSize: size === "lg" ? "min(2.3vh, 1.25vw)" : "min(1.7vh, 1vw)" }}
-        >
+        <span dir="ltr" className={`font-black tabular-nums ${cancelled ? "line-through opacity-80" : ""}`} style={{ fontSize: "min(2.1vh, 1.1vw)" }}>
           {time}
         </span>
       ) : null}
-      {sub ? (
-        <span
-          className="line-clamp-2 max-w-full font-bold opacity-95"
-          style={{ fontSize: size === "lg" ? "min(1.45vh, 0.85vw)" : "min(1.2vh, 0.75vw)" }}
-        >
-          {sub}
+      {strong || line ? (
+        <span className={`max-w-full truncate ${strong ? "font-black" : "font-bold"}`} style={{ fontSize: "min(1.3vh, 0.72vw)" }}>
+          {strong ? extra : line}
         </span>
       ) : null}
     </div>
@@ -92,7 +148,7 @@ function Chip({ slot, size }: { slot: SlotDTO; size: "lg" | "sm" }) {
 function dayTone(date: string, today: string | null) {
   if (today == null) return "";
   if (date === today) return "tv-today";
-  if (date < today) return "opacity-40";
+  if (date < today) return "opacity-50";
   return "";
 }
 
@@ -120,7 +176,7 @@ function TeamCells({
       const covered = dates.slice(index, index + span);
       const style = getSlotType("camp");
       const tone =
-        today && covered.includes(today) ? "tv-today" : today && covered[span - 1] < today ? "opacity-40" : "";
+        today && covered.includes(today) ? "tv-today" : today && covered[span - 1] < today ? "opacity-50" : "";
       cells.push(
         <div key={`${team.id}-${date}`} className={`tv-cell ${tone}`} style={{ gridColumn: `span ${span}` }}>
           <div
@@ -141,9 +197,9 @@ function TeamCells({
     }
     const day = slotsForDay(slots, team.id, date).filter((slot) => !isCampSlot(slot.type));
     cells.push(
-      <div key={`${team.id}-${date}`} className={`tv-cell ${dayTone(date, today)}`}>
+      <div key={`${team.id}-${date}`} className={`tv-cell ${day.length > 1 ? "tv-row" : ""} ${dayTone(date, today)}`}>
         {day.slice(0, 3).map((slot) => (
-          <Chip key={slot.id} slot={slot} size={day.length > 1 ? "sm" : "lg"} />
+          <Chip key={slot.id} slot={slot} count={Math.min(day.length, 3)} />
         ))}
       </div>,
     );
@@ -221,7 +277,7 @@ export function TvBoard({ data, notice }: TvBoardProps) {
               className={`tv-team flex items-center truncate px-[0.6vw] font-extrabold ${
                 team.isComments ? "text-white/70" : ""
               }`}
-              style={{ fontSize: "min(2.2vh, 1.2vw)" }}
+              style={{ fontSize: "min(2.5vh, 1.35vw)" }}
             >
               {team.name}
             </div>
@@ -232,14 +288,14 @@ export function TvBoard({ data, notice }: TvBoardProps) {
 
       <footer
         className="flex shrink-0 flex-wrap items-center justify-between gap-x-[1.2vw] gap-y-[0.4vh] pt-[1vh] text-white/80"
-        style={{ fontSize: "min(1.5vh, 0.85vw)" }}
+        style={{ fontSize: "min(1.8vh, 1vw)" }}
       >
         <div className="flex flex-wrap items-center gap-x-[1.2vw] gap-y-[0.4vh]">
           {SLOT_TYPES.filter((item) => item.id !== "other").map((item) => (
             <span key={item.id} className="flex items-center gap-[0.35vw]">
               <span
                 className="inline-block rounded-[0.3vh]"
-                style={{ background: item.bg, width: "1.6vh", height: "1.6vh" }}
+                style={{ background: item.bg, width: "1.9vh", height: "1.9vh" }}
               />
               {item.label}
             </span>

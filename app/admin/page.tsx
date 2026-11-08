@@ -5,6 +5,7 @@ import { ScheduleView } from "@/components/ScheduleView";
 import { ScheduleLiveRefresh } from "@/components/ScheduleLiveRefresh";
 import { getWeekData } from "@/lib/schedule";
 import { getScheduleRevision } from "@/lib/schedule-revision";
+import { AdminNav } from "@/components/AdminNav";
 import { AdminUserMenu } from "@/components/AdminUserMenu";
 import { requireAdmin } from "@/lib/auth";
 
@@ -52,12 +53,6 @@ export default async function AdminPage({ searchParams }: AdminProps) {
         adminMode
       >
         <Link
-          href="/admin/pitches"
-          className="rounded-md bg-white px-3 py-1.5 text-sm font-black text-[#8e0b20] hover:bg-white/90"
-        >
-          לוח שיבוץ מגרשים
-        </Link>
-        <Link
           href={`/?week=${data.weekStart}`}
           className="rounded-md border border-white/30 px-3 py-1.5 text-sm font-bold text-white/90 hover:bg-white/10"
         >
@@ -65,6 +60,7 @@ export default async function AdminPage({ searchParams }: AdminProps) {
         </Link>
         <AdminUserMenu user={user} />
       </AppHeader>
+      <AdminNav current="/admin" />
       <ScheduleView data={data} editable message={message} />
       {selectedTeam && selectedDate ? (
         <EditSlotForm

@@ -18,7 +18,7 @@ export function timeLabel(slot: SlotDTO): string | null {
 /** What the slot is, in words: pitch name for trainings, otherwise the type label. */
 export function kindLabel(slot: SlotDTO): string {
   const style = getSlotType(slot.type);
-  if (isPitchSlot(slot.type)) return `אימון · ${style.label}`;
+  if (isPitchSlot(slot.type)) return `אימון · ${style.label}${slot.place ? ` · ${slot.place}` : ""}`;
   return style.label;
 }
 

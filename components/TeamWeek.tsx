@@ -88,27 +88,57 @@ function SlotCard({ slot }: { slot: SlotDTO }) {
   const style = getSlotType(slot.type);
   const time = timeLabel(slot);
   const isGame = slot.type === "home_game" || slot.type === "away_game";
+  const cancelled = slot.status === "cancelled";
   return (
     <li
-      aria-label={spoken(slot)}
-      className="flex items-stretch overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-black/5 dark:bg-zinc-900 dark:ring-white/10"
+      aria-label={`${cancelled ? "בוטל: " : ""}${spoken(slot)}${slot.statusNote ? `, ${slot.statusNote}` : ""}${
+        slot.substituteName ? `, מאמן מחליף ${slot.substituteName}` : ""
+      }`}
+      className={`flex items-stretch overflow-hidden rounded-xl shadow-sm ring-1 ${
+        cancelled ? "bg-zinc-100 ring-zinc-300 dark:bg-zinc-800 dark:ring-white/10" : "bg-white ring-black/5 dark:bg-zinc-900 dark:ring-white/10"
+      }`}
     >
-      <span aria-hidden className="w-1.5 shrink-0" style={{ background: style.bg }} />
+      <span aria-hidden className="w-1.5 shrink-0" style={{ background: cancelled ? "#a1a1aa" : style.bg }} />
       <div aria-hidden className="flex min-w-0 flex-1 items-center gap-3 px-3 py-3">
         <span
           dir="ltr"
-          className="w-[4.5rem] shrink-0 text-right text-lg font-black tabular-nums text-[#1a1214] dark:text-white"
+          className={`w-[4.5rem] shrink-0 text-right text-lg font-black tabular-nums text-[#1a1214] dark:text-white ${
+            cancelled ? "text-zinc-500 line-through" : ""
+          }`}
         >
           {time ?? "—"}
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
+            {cancelled ? (
+              <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-xs font-black text-white">בוטל</span>
+            ) : null}
             {isGame ? (
               <GameBadge type={slot.type} />
             ) : (
               <span className="text-base font-bold leading-snug dark:text-white">{kindLabel(slot)}</span>
             )}
           </div>
+          {isGame && (slot.opponent || slot.departureTime) ? (
+            <p className="mt-0.5 text-[15px] font-semibold leading-snug text-zinc-700 dark:text-zinc-200">
+              {slot.opponent ? `נגד ${slot.opponent}` : ""}
+              {slot.opponent && slot.departureTime ? " · " : ""}
+              {slot.departureTime ? (
+                <>
+                  יציאה מבאר שבע <span dir="ltr" className="tabular-nums">{slot.departureTime}</span>
+                </>
+              ) : null}
+            </p>
+          ) : null}
+          {cancelled && slot.statusNote ? (
+            <p className="mt-0.5 text-[15px] font-bold leading-snug text-zinc-800 dark:text-zinc-100">{slot.statusNote}</p>
+          ) : null}
+          {slot.substituteName && !cancelled ? (
+            <p className="mt-0.5 text-[15px] font-bold leading-snug text-[#8e0b20] dark:text-[#ff8a9a]">
+              מאמן מחליף: {slot.substituteName}
+              {slot.statusNote ? ` · ${slot.statusNote}` : ""}
+            </p>
+          ) : null}
           {slot.note ? (
             <p className="mt-0.5 text-[15px] leading-snug text-zinc-600 dark:text-zinc-300">{slot.note}</p>
           ) : null}

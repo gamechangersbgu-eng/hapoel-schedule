@@ -24,7 +24,7 @@ export default async function UsersPage({ searchParams }: Props) {
   const users = await db.select().from(adminUsers).orderBy(asc(adminUsers.displayName));
 
   return (
-    <AdminShell user={me} title="משתמשים">
+    <AdminShell user={me} title="משתמשים" current="/admin/users">
       {error ? (
         <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm font-bold text-red-800 ring-1 ring-red-200">
           {error}

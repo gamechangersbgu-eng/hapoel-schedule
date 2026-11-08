@@ -5,6 +5,7 @@ import { toggleReservedLock } from "@/app/admin/pitches/actions";
 import {
   BOARD_END_MINUTES,
   SUBDIVISION_RANGE,
+  SUBDIVISION_SHORT,
   boardStartFor,
   toTime,
   type BoardBooking,
@@ -20,18 +21,7 @@ export const PITCH_COLORS: Record<string, { bg: string; fg: string; soft: string
 
 const PX_PER_MINUTE = 1.15;
 const SURFACE_HE: Record<string, string> = { synthetic: "סינטטי", natural: "דשא טבעי" };
-const SHORT_SUB: Record<string, string> = {
-  whole: "מלא",
-  half_north: "½ צפון",
-  half_south: "½ דרום",
-  third_north: "⅓ צפון",
-  third_center: "⅓ מרכז",
-  third_south: "⅓ דרום",
-  quarter_north_1: "¼ צפון 1",
-  quarter_north_2: "¼ צפון 2",
-  quarter_south_1: "¼ דרום 1",
-  quarter_south_2: "¼ דרום 2",
-};
+const SHORT_SUB = SUBDIVISION_SHORT;
 
 function yAt(boardStart: number, minutes: number) {
   return (minutes - boardStart) * PX_PER_MINUTE;
@@ -50,18 +40,27 @@ function Block({
 }) {
   const [from, to] = SUBDIVISION_RANGE[booking.subdivisionCode] ?? [0, 12];
   const isGame = booking.kind === "home_game";
+  const cancelled = booking.status === "cancelled";
   const height = (booking.end - booking.start) * PX_PER_MINUTE;
   const style = {
     top: yAt(boardStart, booking.start) + 1,
     height: height - 2,
     insetInlineStart: `calc(${(from / 12) * 100}% + 2px)`,
     width: `calc(${((to - from) / 12) * 100}% - 4px)`,
-    background: isGame ? "#C8102E" : color.bg,
-    color: "#fff",
+    background: cancelled
+      ? "repeating-linear-gradient(135deg,#e4e4e7,#e4e4e7 6px,#f4f4f5 6px,#f4f4f5 12px)"
+      : isGame
+        ? "#C8102E"
+        : color.bg,
+    color: cancelled ? "#3f3f46" : "#fff",
   };
   const body = (
     <>
-      <span className="block truncate text-[13px] font-black leading-tight">{booking.teamName}</span>
+      <span className={`block truncate text-[13px] font-black leading-tight ${cancelled ? "line-through" : ""}`}>
+        {booking.teamName}
+      </span>
+      {cancelled ? <span className="block text-[11px] font-black">בוטל{booking.statusNote ? ` · ${booking.statusNote}` : ""}</span> : null}
+      {booking.substituteStaffId && !cancelled ? <span className="block truncate text-[11px] font-black">↺ מאמן מחליף</span> : null}
       <span dir="ltr" className="block text-right text-[11px] font-bold tabular-nums opacity-90">
         {toTime(booking.start)}–{toTime(booking.end)}
       </span>
@@ -73,7 +72,7 @@ function Block({
   );
   const className =
     "absolute overflow-hidden rounded-md px-1.5 py-1 text-right shadow-sm ring-1 ring-black/10 transition hover:z-10 hover:shadow-lg focus-visible:z-10 focus-visible:outline-3 focus-visible:outline-offset-1 focus-visible:outline-[#ffd54f]";
-  const label = `${booking.teamName}, ${toTime(booking.start)} עד ${toTime(booking.end)}, ${
+  const label = `${cancelled ? "בוטל: " : ""}${booking.teamName}, ${toTime(booking.start)} עד ${toTime(booking.end)}, ${
     isGame ? "משחק בית" : SHORT_SUB[booking.subdivisionCode]
   }`;
   return isGame ? (

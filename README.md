@@ -89,6 +89,15 @@ npm run dev:local
 
 Open the URL printed by Netlify CLI (usually `http://localhost:8888`). Run migrations and seed as above before the first use.
 
+First run on a new computer (with `npm run dev:local` running in another terminal):
+
+```bash
+npx netlify database migrations apply   # create / update the local tables
+node scripts/seed-local.mjs             # reference data + two weeks of demo data (local database only)
+```
+
+Management login needs a `.env` file (not committed) with `AUTH_SECRET=<long random string>` and `ADMIN_SETUP_CODE=<code>`. With no users yet, `/login` asks for the setup code and creates the first owner. Run only **one** `npm run dev:local` at a time: two at once can corrupt the local database.
+
 Do **not** start with `npm start` until you have run `npm run build`.
 
 ## Useful commands
@@ -114,8 +123,20 @@ npm run db:seed     # Two weeks of synthetic schedule data
 
 ## Admin and public schedule
 
-- Public week grid: `/`
-- Admin editor: `/admin`
+- Public schedule: `/` (phone: one team's week, remembered on the device; computer: the full grid). Installable as an app (PWA).
+- Club TV screen: `/tv` (whole week, refreshes every minute, no login)
+- Management (login required; `/login`):
+  - `/admin` — weekly grid by team
+  - `/admin/pitches` — pitch board: pitch parts, rotations, durations, conflict and age-band rules, reserved pitches
+  - `/admin/games` — home games (pitch, medic) and away games (city, driver, departure time worked out from the club rules)
+  - `/admin/coaches` — coaches, their teams, work days and absences (warnings on the pitch board)
+  - `/admin/banks` — medics, drivers and cities (travel minutes from Beer Sheva)
+  - `/admin/history` — who changed what
+  - `/admin/users` (owners) and `/admin/account`
+
+Trainings and games can be marked cancelled or given a substitute coach; parents see this instead of the item disappearing.
+
+Production needs two environment variables in Netlify: `AUTH_SECRET` (long random string) and `ADMIN_SETUP_CODE` (one-time code for creating the first owner).
 
 The home page reads `settings`, `teams`, and `slots` for the selected week (`getWeekData`). It refreshes when `schedule_revision` changes (navigation or ~45s poll).
 

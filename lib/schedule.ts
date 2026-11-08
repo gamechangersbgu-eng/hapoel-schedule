@@ -1,5 +1,14 @@
-import { and, asc, eq, gte, lte, or } from "drizzle-orm";
-import { db, settings as settingsTable, slots as slotsTable, teams as teamsTable } from "@/lib/db";
+import { and, asc, eq, gte, inArray, lte, or } from "drizzle-orm";
+import {
+  db,
+  settings as settingsTable,
+  slotGameDetails,
+  slotTrainingDetails,
+  slots as slotsTable,
+  staff,
+  teams as teamsTable,
+} from "@/lib/db";
+import { SUBDIVISION_SHORT } from "@/lib/pitch-rules";
 import type { SlotDTO, WeekData } from "@/lib/types";
 import { resolveWeekStart, weekDates, weekNumber } from "@/lib/week";
 
@@ -11,7 +20,10 @@ function toSlotDTO(slot: {
   startTime: string | null;
   type: string;
   note: string | null;
-}): SlotDTO {
+  status: string;
+  statusNote: string | null;
+  substituteStaffId: number | null;
+}, substituteNames: Map<number, string>): SlotDTO {
   return {
     id: slot.id,
     teamId: slot.teamId,
@@ -20,6 +32,9 @@ function toSlotDTO(slot: {
     startTime: slot.startTime,
     type: slot.type,
     note: slot.note,
+    status: slot.status,
+    statusNote: slot.statusNote,
+    substituteName: slot.substituteStaffId ? (substituteNames.get(slot.substituteStaffId) ?? null) : null,
   };
 }
 
@@ -27,7 +42,7 @@ export async function getWeekData(weekParam?: string | null): Promise<WeekData> 
   const weekStart = resolveWeekStart(weekParam);
   const dates = weekDates(weekStart);
 
-  const [[settings], teams, slots] = await Promise.all([
+  const [[settings], teams, slots, people] = await Promise.all([
     db.select().from(settingsTable).where(eq(settingsTable.id, 1)).limit(1),
     db.select().from(teamsTable).orderBy(asc(teamsTable.sortOrder)),
     db
@@ -44,7 +59,22 @@ export async function getWeekData(weekParam?: string | null): Promise<WeekData> 
         ),
       )
       .orderBy(asc(slotsTable.startTime), asc(slotsTable.id)),
+    db.select({ id: staff.id, name: staff.displayName }).from(staff),
   ]);
+  const substituteNames = new Map(people.map((person) => [person.id, person.name]));
+  const ids = slots.map((slot) => slot.id);
+  const [trainingRows, gameRows] = ids.length
+    ? await Promise.all([
+        db.select().from(slotTrainingDetails).where(inArray(slotTrainingDetails.slotId, ids)),
+        db.select().from(slotGameDetails).where(inArray(slotGameDetails.slotId, ids)),
+      ])
+    : [[], []];
+  const placeBySlot = new Map(
+    trainingRows
+      .filter((row) => row.subdivisionCode && row.subdivisionCode !== "whole")
+      .map((row) => [row.slotId, SUBDIVISION_SHORT[row.subdivisionCode!] ?? null]),
+  );
+  const gameBySlot = new Map(gameRows.map((row) => [row.slotId, row]));
 
   if (!settings) {
     throw new Error("Settings are missing. Check that database migrations have been applied.");
@@ -57,7 +87,12 @@ export async function getWeekData(weekParam?: string | null): Promise<WeekData> 
     weekNumber: weekNumber(weekStart, settings.seasonStartDate),
     dates,
     teams,
-    slots: slots.map(toSlotDTO),
+    slots: slots.map((slot) => ({
+      ...toSlotDTO(slot, substituteNames),
+      place: placeBySlot.get(slot.id) ?? null,
+      opponent: gameBySlot.get(slot.id)?.opponent ?? null,
+      departureTime: gameBySlot.get(slot.id)?.departureTime ?? null,
+    })),
   };
 }
 

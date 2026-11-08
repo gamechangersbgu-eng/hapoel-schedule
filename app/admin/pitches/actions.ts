@@ -7,6 +7,7 @@ import { db, pitches, slotTrainingDetails, slots } from "@/lib/db";
 import { checkBooking, getPitchDay, toMinutes, toTime } from "@/lib/pitch-board";
 import { bumpScheduleRevision } from "@/lib/schedule-revision";
 import { requireAdmin } from "@/lib/auth";
+import { formatDateHe, logChange } from "@/lib/history";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^\d{2}:\d{2}$/;
@@ -39,6 +40,10 @@ export async function saveBoardBooking(formData: FormData) {
   const durationMinutes = Number(formData.get("durationMinutes"));
   const rotationRaw = String(formData.get("rotationTemplateId") ?? "");
   const note = String(formData.get("note") ?? "").trim() || null;
+  const statusChoice = String(formData.get("status") ?? "active");
+  const cancelled = statusChoice === "cancelled";
+  const substituteStaffId = statusChoice === "substitute" ? Number(formData.get("substituteStaffId") || 0) || null : null;
+  const statusNote = cancelled || substituteStaffId ? String(formData.get("statusNote") ?? "").trim() || null : null;
 
   const back = (error: string) =>
     redirect(
@@ -67,7 +72,9 @@ export async function saveBoardBooking(formData: FormData) {
     start: toMinutes(startTime),
     durationMinutes,
   });
-  if (problems.length) back(problems.join(" | "));
+  // A cancelled session no longer takes the pitch, so it never conflicts.
+  if (problems.length && !cancelled) back(problems.join(" | "));
+  if (statusChoice === "substitute" && !substituteStaffId) back("יש לבחור מאמן מחליף");
 
   const pitch = day.pitches.find((item) => item.id === pitchId)!;
   const slotValues = {
@@ -77,6 +84,9 @@ export async function saveBoardBooking(formData: FormData) {
     startTime: toTime(toMinutes(startTime)),
     type: pitch.code,
     note,
+    status: cancelled ? "cancelled" : "active",
+    statusNote,
+    substituteStaffId,
   };
   const details = {
     pitchId,
@@ -84,6 +94,12 @@ export async function saveBoardBooking(formData: FormData) {
     durationMinutes,
     rotationTemplateId: rotationRaw ? Number(rotationRaw) : null,
   };
+
+  const team = day.teams.find((item) => item.id === teamId)!;
+  const subdivision = day.subdivisions.find((item) => item.code === subdivisionCode)?.labelHe ?? "";
+  const what = `${team.name}, ${pitch.nameHe} ${subdivision}, ${formatDateHe(date)} ${startTime}`;
+  const substitute = substituteStaffId ? day.coaches.find((coach) => coach.id === substituteStaffId)?.name : null;
+  const before = idRaw ? day.bookings.find((item) => item.slotId === Number(idRaw)) : undefined;
 
   if (idRaw) {
     const slotId = Number(idRaw);
@@ -97,6 +113,21 @@ export async function saveBoardBooking(formData: FormData) {
     await db.insert(slotTrainingDetails).values({ slotId: created.id, ...details });
   }
 
+  const reason = statusNote ? ` (${statusNote})` : "";
+  await logChange({
+    action: cancelled ? "cancel" : idRaw ? "update" : "create",
+    summary: cancelled
+      ? `בוטל אימון: ${what}${reason}`
+      : substitute
+        ? `מאמן מחליף ${substitute}: ${what}${reason}`
+        : idRaw
+          ? `עודכן אימון: ${what}${before ? ` (היה ${toTime(before.start)})` : ""}`
+          : `נוסף אימון: ${what}`,
+    teamId,
+    slotId: idRaw ? Number(idRaw) : null,
+    date,
+  });
+
   await refresh();
   redirect(boardPath(date, { saved: "1" }));
 }
@@ -105,7 +136,17 @@ export async function deleteBoardBooking(formData: FormData) {
   await requireAdmin();
   const date = String(formData.get("date") ?? "");
   const id = Number(formData.get("id"));
-  if (id) await db.delete(slots).where(eq(slots.id, id));
+  if (id) {
+    const [removed] = await db.delete(slots).where(eq(slots.id, id)).returning();
+    if (removed) {
+      await logChange({
+        action: "delete",
+        summary: `נמחק אימון ב-${formatDateHe(removed.date)} ${removed.startTime ?? ""}`,
+        teamId: removed.teamId,
+        date: removed.date,
+      });
+    }
+  }
   await refresh();
   redirect(boardPath(date));
 }
@@ -118,6 +159,7 @@ export async function toggleReservedLock(formData: FormData) {
   const [pitch] = await db.select().from(pitches).where(eq(pitches.id, pitchId)).limit(1);
   if (pitch) {
     await db.update(pitches).set({ isReservedLock: !pitch.isReservedLock }).where(eq(pitches.id, pitchId));
+    await logChange({ action: "lock", summary: `${pitch.nameHe} ${pitch.isReservedLock ? "שוחרר" : "שוריין"}`, date });
     await refresh();
   }
   redirect(boardPath(date));

@@ -16,6 +16,9 @@ type Initial = {
   durationMinutes?: number;
   rotationTemplateId?: number | null;
   note?: string | null;
+  status?: string;
+  statusNote?: string | null;
+  substituteStaffId?: number | null;
 };
 
 export function BookingForm({
@@ -37,6 +40,9 @@ export function BookingForm({
   const [startTime, setStartTime] = useState(initial.startTime ?? "");
   const [duration, setDuration] = useState<number>(initial.durationMinutes ?? 0);
   const [rotationId, setRotationId] = useState<number | null>(initial.rotationTemplateId ?? null);
+  const [status, setStatus] = useState<"active" | "cancelled" | "substitute">(
+    initial.status === "cancelled" ? "cancelled" : initial.substituteStaffId ? "substitute" : "active",
+  );
 
   const team = day.teams.find((item) => item.id === teamId);
   const allowed = team?.allowedSubdivisions ?? [];
@@ -55,6 +61,7 @@ export function BookingForm({
   }, [day, initial.slotId, teamId, pitchId, subdivisionCode, startTime, duration]);
 
   const ready = teamId && pitchId && subdivisionCode && startTime && duration;
+  const teamCoaches = day.coaches.filter((coach) => coach.teamIds.includes(teamId));
   const end = startTime && duration ? toTime(toMinutes(startTime) + duration) : null;
 
   const field = "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-base";
@@ -239,6 +246,50 @@ export function BookingForm({
             <input name="note" className={field} defaultValue={initial.note ?? ""} placeholder="למשל: מאמן מחליף" />
           </label>
 
+          <fieldset className="flex flex-col gap-2 rounded-lg bg-zinc-50 p-3">
+            <legend className="sr-only">סטטוס האימון</legend>
+            <p className="text-sm font-bold">
+              סטטוס
+              {teamCoaches.length ? (
+                <span className="ms-2 font-semibold text-zinc-500">מאמן הקבוצה: {teamCoaches.map((coach) => coach.name).join(", ")}</span>
+              ) : null}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {(
+                [
+                  ["active", "מתקיים כרגיל"],
+                  ["substitute", "מאמן מחליף"],
+                  ["cancelled", "בוטל"],
+                ] as const
+              ).map(([value, text]) => (
+                <button key={value} type="button" onClick={() => setStatus(value)} aria-pressed={status === value} className={chip(status === value)}>
+                  {text}
+                </button>
+              ))}
+            </div>
+            <input type="hidden" name="status" value={status} />
+            {status === "substitute" ? (
+              <select name="substituteStaffId" className={field} defaultValue={initial.substituteStaffId ?? ""} required>
+                <option value="">בחרו מאמן מחליף</option>
+                {day.coaches
+                  .filter((coach) => !coach.teamIds.includes(teamId))
+                  .map((coach) => (
+                    <option key={coach.id} value={coach.id}>
+                      {coach.name}
+                    </option>
+                  ))}
+              </select>
+            ) : null}
+            {status !== "active" ? (
+              <input
+                name="statusNote"
+                className={field}
+                defaultValue={initial.statusNote ?? ""}
+                placeholder={status === "cancelled" ? "סיבה, תוצג להורים (למשל: המאמן חולה)" : "הערה להורים (לא חובה)"}
+              />
+            ) : null}
+          </fieldset>
+
           {serverError ? (
             <div role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-800 ring-1 ring-red-200">
               {serverError.split(" | ").map((line) => (
@@ -247,7 +298,7 @@ export function BookingForm({
             </div>
           ) : null}
 
-          {ready ? (
+          {ready && status !== "cancelled" ? (
             problems.length ? (
               <div role="status" className="rounded-lg bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900 ring-1 ring-amber-200">
                 <p className="mb-1 font-black">אי אפשר לשבץ כך:</p>
@@ -265,7 +316,7 @@ export function BookingForm({
           <div className="flex items-center gap-2">
             <button
               type="submit"
-              disabled={!ready || problems.length > 0}
+              disabled={!ready || (problems.length > 0 && status !== "cancelled")}
               className="min-h-11 flex-1 rounded-lg bg-[#c8102e] px-4 text-base font-black text-white disabled:cursor-not-allowed disabled:bg-zinc-300"
             >
               שמירה

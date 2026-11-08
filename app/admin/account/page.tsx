@@ -15,7 +15,7 @@ export default async function AccountPage({ searchParams }: Props) {
   const forced = user.mustChangePassword || first === "1";
 
   return (
-    <AdminShell user={user} title="החשבון שלי">
+    <AdminShell user={user} title="החשבון שלי" current="/admin/account">
       <section className="max-w-md rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
         <p className="text-sm text-zinc-600">
           {user.displayName} · <span dir="ltr">{user.email}</span> · {user.role === "owner" ? "מנהל ראשי" : "מנהל"}
