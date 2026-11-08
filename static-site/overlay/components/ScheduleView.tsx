@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Legend } from "@/components/Legend";
+import { TeamFilter } from "@/components/TeamFilter";
 import { TeamWeek } from "@/components/TeamWeek";
+import { readTeamSelection, saveTeamSelection } from "@/lib/team-selection";
 import { ScheduleGrid, type CellClick } from "@/components/ScheduleGrid";
 import type { WeekData } from "@/lib/types";
 
@@ -41,14 +43,22 @@ export function ScheduleView({
   onImport,
   onReset,
 }: ScheduleViewProps) {
-  const [teamFilter, setTeamFilter] = useState<string>("all");
+  const scope = admin ? "admin" : "public";
+  /** null = all teams. Remembered in this browser (shared with the phone view on the public page). */
+  const [selected, setSelected] = useState<number[] | null>(null);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time read of browser-only state after mount
+    setSelected(readTeamSelection(scope));
+  }, [scope]);
+  function changeSelection(ids: number[] | null) {
+    setSelected(ids);
+    saveTeamSelection(scope, ids);
+  }
 
   const teams = useMemo(() => {
-    if (teamFilter === "all") return data.teams;
-    return data.teams.filter(
-      (team) => String(team.id) === teamFilter || team.isComments,
-    );
-  }, [data.teams, teamFilter]);
+    if (!selected) return data.teams;
+    return data.teams.filter((team) => selected.includes(team.id) || team.isComments);
+  }, [data.teams, selected]);
 
   const isEmpty = data.slots.length === 0;
   const primary =
@@ -61,25 +71,13 @@ export function ScheduleView({
       <div
         className={`no-print flex-wrap items-center justify-between gap-3 ${admin ? "flex" : "hidden md:flex"}`}
       >
-        <label
-          className={`items-center gap-2 text-sm font-bold ${admin ? "flex" : "hidden md:flex"}`}
-        >
-          קבוצה
-          <select
-            value={teamFilter}
-            onChange={(event) => setTeamFilter(event.target.value)}
-            className="rounded-md border border-[#d7b4b8] bg-white px-2 py-1.5 font-medium"
-          >
-            <option value="all">כל הקבוצות</option>
-            {data.teams
-              .filter((team) => !team.isComments)
-              .map((team) => (
-                <option key={team.id} value={team.id}>
-                  {team.name}
-                </option>
-              ))}
-          </select>
-        </label>
+        <div className={`items-center gap-2 ${admin ? "flex" : "hidden md:flex"}`}>
+          <TeamFilter
+            teams={data.teams.filter((team) => !team.isComments)}
+            selected={selected}
+            onChange={changeSelection}
+          />
+        </div>
 
         <div className="flex flex-wrap items-center gap-2">
           {admin ? (

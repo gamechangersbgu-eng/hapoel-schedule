@@ -1,6 +1,8 @@
 "use client";
 
-// Phone view: pick your team once (remembered on this device) and see its week.
+// Phone view: pick your team(s) once (remembered on this device) and see their week together.
+// More than one team: coaches of several teams, players who also play in the team above,
+// parents with children in different age groups.
 // Layout: team + week, a big "today" block, the rest of the week (empty days on one line),
 // past days folded away, and week navigation at the bottom within thumb reach (swipe works too).
 import Link from "next/link";
@@ -15,6 +17,7 @@ import {
   todayISO,
 } from "@/components/display-utils";
 import { getSlotType, isCampSlot } from "@/lib/slot-types";
+import { readTeamSelection, saveTeamSelection } from "@/lib/team-selection";
 import type { SlotDTO, TeamDTO, WeekData } from "@/lib/types";
 import {
   addDaysISO,
@@ -23,24 +26,20 @@ import {
   formatWeekRange,
 } from "@/lib/week";
 
-const MY_TEAM_KEY = "hapoel-schedule-my-team-v1";
-
-function readSavedTeam(): number | null {
-  try {
-    const value = Number(window.localStorage.getItem(MY_TEAM_KEY));
-    return Number.isFinite(value) && value > 0 ? value : null;
-  } catch {
-    return null;
-  }
+/** All items of the chosen teams on a day, by time (camps first). */
+function slotsForTeams(slots: SlotDTO[], teamIds: number[], date: string) {
+  return teamIds
+    .flatMap((id) => slotsForDay(slots, id, date))
+    .sort(
+      (a, b) =>
+        Number(isCampSlot(b.type)) - Number(isCampSlot(a.type)) ||
+        (a.startTime ?? "").localeCompare(b.startTime ?? "") ||
+        a.id - b.id,
+    );
 }
 
-function saveTeam(id: number) {
-  try {
-    window.localStorage.setItem(MY_TEAM_KEY, String(id));
-  } catch {
-    /* storage unavailable: the choice lasts for this visit only */
-  }
-}
+/** Team names to show on cards; null when only one team is shown (no need to repeat it). */
+type TeamLabels = Record<number, string> | null;
 
 function weekHref(weekStart: string) {
   return `/?week=${weekStart}`;
@@ -84,14 +83,14 @@ function spoken(slot: SlotDTO) {
   return [kindLabel(slot), timeLabel(slot), slot.note].filter(Boolean).join(", ");
 }
 
-function SlotCard({ slot }: { slot: SlotDTO }) {
+function SlotCard({ slot, teamLabel }: { slot: SlotDTO; teamLabel?: string }) {
   const style = getSlotType(slot.type);
   const time = timeLabel(slot);
   const isGame = slot.type === "home_game" || slot.type === "away_game";
   const cancelled = slot.status === "cancelled";
   return (
     <li
-      aria-label={`${cancelled ? "בוטל: " : ""}${spoken(slot)}${slot.statusNote ? `, ${slot.statusNote}` : ""}${
+      aria-label={`${teamLabel ? `${teamLabel}: ` : ""}${cancelled ? "בוטל: " : ""}${spoken(slot)}${slot.statusNote ? `, ${slot.statusNote}` : ""}${
         slot.substituteName ? `, מאמן מחליף ${slot.substituteName}` : ""
       }`}
       className={`flex items-stretch overflow-hidden rounded-xl shadow-sm ring-1 ${
@@ -110,6 +109,11 @@ function SlotCard({ slot }: { slot: SlotDTO }) {
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
+            {teamLabel ? (
+              <span className="rounded-md bg-[#5c0814] px-2 py-0.5 text-sm font-black text-white dark:bg-[#f4e6e8] dark:text-[#5c0814]">
+                {teamLabel}
+              </span>
+            ) : null}
             {cancelled ? (
               <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-xs font-black text-white">בוטל</span>
             ) : null}
@@ -154,13 +158,14 @@ function SlotCard({ slot }: { slot: SlotDTO }) {
 }
 
 /** First upcoming activity from `fromDate` on (skips days off and things already over today). */
-function nextActivity(data: WeekData, teamId: number, today: string, now: Date) {
+function nextActivity(data: WeekData, teamIds: number[], today: string, now: Date) {
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
   for (const date of data.dates) {
     if (date < today) continue;
-    const upcoming = slotsForDay(data.slots, teamId, date).filter(
+    const upcoming = slotsForTeams(data.slots, teamIds, date).filter(
       (slot) =>
         slot.type !== "off" &&
+        slot.status !== "cancelled" &&
         (date > today || isCampSlot(slot.type) || !slot.startTime || minutesOf(slot.startTime) > nowMinutes),
     );
     if (upcoming.length) return { slot: upcoming[0], date };
@@ -190,17 +195,19 @@ type Day = { date: string; index: number; items: SlotDTO[]; notes: SlotDTO[] };
 function TodayBlock({
   day,
   data,
-  teamId,
+  teamIds,
+  labels,
   today,
   now,
 }: {
   day: Day;
   data: WeekData;
-  teamId: number;
+  teamIds: number[];
+  labels: TeamLabels;
   today: string;
   now: Date;
 }) {
-  const next = day.items.length ? null : nextActivity(data, teamId, today, now);
+  const next = day.items.length ? null : nextActivity(data, teamIds, today, now);
   return (
     <section
       id={`day-${day.date}`}
@@ -221,7 +228,7 @@ function TodayBlock({
               return (
                 <div key={slot.id} className="flex flex-col gap-1">
                   <ul>
-                    <SlotCard slot={slot} />
+                    <SlotCard slot={slot} teamLabel={labels?.[slot.teamId]} />
                   </ul>
                   {soon ? (
                     <p className="ps-2 text-sm font-bold text-[#c8102e] dark:text-[#ff8a9a]">{soon}</p>
@@ -247,6 +254,7 @@ function TodayBlock({
                 </>
               ) : null}
               {" · "}
+              {labels ? `${labels[next.slot.teamId]} · ` : ""}
               {kindLabel(next.slot)}
             </span>
           </p>
@@ -258,7 +266,7 @@ function TodayBlock({
 }
 
 /** One day in the list. Empty days are a single line with the day and "אין פעילות" side by side. */
-function DayRow({ day }: { day: Day }) {
+function DayRow({ day, labels }: { day: Day; labels: TeamLabels }) {
   const title = `יום ${HEBREW_DAY_NAMES[day.index]}`;
   if (day.items.length === 0 && day.notes.length === 0) {
     return (
@@ -276,7 +284,7 @@ function DayRow({ day }: { day: Day }) {
       {day.items.length ? (
         <ul className="flex flex-col gap-2">
           {day.items.map((slot) => (
-            <SlotCard key={slot.id} slot={slot} />
+            <SlotCard key={slot.id} slot={slot} teamLabel={labels?.[slot.teamId]} />
           ))}
         </ul>
       ) : null}
@@ -288,48 +296,79 @@ function DayRow({ day }: { day: Day }) {
 function TeamPicker({
   teams,
   current,
-  onChoose,
+  onSave,
   onCancel,
 }: {
   teams: TeamDTO[];
-  current: number | null;
-  onChoose: (id: number) => void;
+  current: number[];
+  onSave: (ids: number[]) => void;
   onCancel?: () => void;
 }) {
+  const [chosen, setChosen] = useState<number[]>(current);
+  const toggle = (id: number) =>
+    setChosen((list) => (list.includes(id) ? list.filter((item) => item !== id) : [...list, id]));
   return (
-    <section className="flex flex-col gap-3">
+    <section className="flex flex-col gap-3 pb-24">
       <div>
-        <h2 className="text-xl font-black text-[#5c0814] dark:text-white">באיזו קבוצה אתם?</h2>
+        <h2 className="text-xl font-black text-[#5c0814] dark:text-white">אילו קבוצות לראות?</h2>
         <p className="text-base text-zinc-600 dark:text-zinc-300">
-          נשמור את הבחירה בטלפון, ובפעם הבאה הלו״ז שלכם יופיע מיד.
+          אפשר לבחור כמה: למשל שני ילדים בגילאים שונים, או גם הקבוצה שמעל. הבחירה נשמרת בטלפון.
         </p>
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        {teams.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => onChoose(item.id)}
-            aria-pressed={item.id === current}
-            className={`min-h-14 rounded-xl px-3 py-2 text-lg font-bold shadow-sm ring-1 transition ${
-              item.id === current
-                ? "bg-[#c8102e] text-white ring-[#c8102e]"
-                : "bg-white text-[#5c0814] ring-[#d7b4b8] active:bg-[#f4e6e8] dark:bg-zinc-900 dark:text-white dark:ring-white/15"
-            }`}
-          >
-            {item.name}
-          </button>
-        ))}
+      <button
+        type="button"
+        onClick={() => setChosen(chosen.length === teams.length ? [] : teams.map((team) => team.id))}
+        aria-pressed={chosen.length === teams.length}
+        className={`min-h-12 rounded-xl px-3 text-base font-black ring-1 ${
+          chosen.length === teams.length
+            ? "bg-[#5c0814] text-white ring-[#5c0814]"
+            : "bg-white text-[#5c0814] ring-[#d7b4b8] dark:bg-zinc-900 dark:text-white dark:ring-white/15"
+        }`}
+      >
+        {chosen.length === teams.length ? "✓ כל הקבוצות" : "כל הקבוצות"}
+      </button>
+      <div className="grid grid-cols-2 gap-2" role="group" aria-label="קבוצות">
+        {teams.map((item) => {
+          const on = chosen.includes(item.id);
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => toggle(item.id)}
+              aria-pressed={on}
+              className={`flex min-h-14 items-center justify-center gap-2 rounded-xl px-3 py-2 text-lg font-bold shadow-sm ring-1 transition ${
+                on
+                  ? "bg-[#c8102e] text-white ring-[#c8102e]"
+                  : "bg-white text-[#5c0814] ring-[#d7b4b8] active:bg-[#f4e6e8] dark:bg-zinc-900 dark:text-white dark:ring-white/15"
+              }`}
+            >
+              {on ? <span aria-hidden>✓</span> : null}
+              {item.name}
+            </button>
+          );
+        })}
       </div>
-      {onCancel ? (
-        <button
-          type="button"
-          onClick={onCancel}
-          className="self-center px-4 py-3 text-base font-bold text-zinc-600 underline dark:text-zinc-300"
-        >
-          ביטול
-        </button>
-      ) : null}
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-black/10 bg-white/95 px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur dark:border-white/10 dark:bg-zinc-950/95">
+        <div className="mx-auto flex max-w-md gap-2">
+          <button
+            type="button"
+            disabled={chosen.length === 0}
+            onClick={() => onSave(teams.filter((team) => chosen.includes(team.id)).map((team) => team.id))}
+            className="min-h-12 flex-1 rounded-xl bg-[#c8102e] text-base font-black text-white disabled:bg-zinc-300"
+          >
+            {chosen.length === 0 ? "בחרו לפחות קבוצה אחת" : chosen.length === 1 ? "הצגת הקבוצה" : `הצגת ${chosen.length} הקבוצות`}
+          </button>
+          {onCancel ? (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="min-h-12 rounded-xl px-4 text-base font-bold text-zinc-600 ring-1 ring-zinc-300 dark:text-zinc-300 dark:ring-white/20"
+            >
+              ביטול
+            </button>
+          ) : null}
+        </div>
+      </div>
     </section>
   );
 }
@@ -338,7 +377,9 @@ export function TeamWeek({ data }: { data: WeekData }) {
   const router = useRouter();
   const teams = useMemo(() => regularTeams(data.teams), [data.teams]);
   const commentsTeam = data.teams.find((team) => team.isComments);
-  const [teamId, setTeamId] = useState<number | null>(null);
+  const [teamIds, setTeamIds] = useState<number[]>([]);
+  /** Optional: look at one of the chosen teams only (null = all of them). */
+  const [focus, setFocus] = useState<number | null>(null);
   const [picking, setPicking] = useState(false);
   const [showPast, setShowPast] = useState(false);
   const [now, setNow] = useState<Date | null>(null);
@@ -347,7 +388,7 @@ export function TeamWeek({ data }: { data: WeekData }) {
   // localStorage and the clock only exist in the browser, so read them after mounting.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time read of browser-only state after mount
-    setTeamId(readSavedTeam());
+    setTeamIds(readTeamSelection("public") ?? []);
     setNow(new Date());
     const timer = window.setInterval(() => setNow(new Date()), 60_000);
     return () => window.clearInterval(timer);
@@ -357,25 +398,31 @@ export function TeamWeek({ data }: { data: WeekData }) {
 
   const today = todayISO();
   const thisWeek = currentWeekStart();
-  const team = teams.find((item) => item.id === teamId) ?? null;
+  // Teams that still exist (a saved team may have been renamed or removed).
+  const mine = teams.filter((item) => teamIds.includes(item.id));
 
-  function choose(id: number) {
-    setTeamId(id);
-    saveTeam(id);
+  function save(ids: number[]) {
+    setTeamIds(ids);
+    saveTeamSelection("public", ids);
+    setFocus(null);
     setPicking(false);
     window.scrollTo({ top: 0 });
   }
 
-  if (!team || picking) {
+  if (mine.length === 0 || picking) {
     return (
       <TeamPicker
         teams={teams}
-        current={teamId}
-        onChoose={choose}
-        onCancel={team ? () => setPicking(false) : undefined}
+        current={mine.map((item) => item.id)}
+        onSave={save}
+        onCancel={mine.length ? () => setPicking(false) : undefined}
       />
     );
   }
+
+  const shown = focus && mine.some((item) => item.id === focus) ? mine.filter((item) => item.id === focus) : mine;
+  const shownIds = shown.map((item) => item.id);
+  const labels: TeamLabels = shown.length > 1 ? Object.fromEntries(shown.map((item) => [item.id, item.name])) : null;
 
   const prevWeek = addDaysISO(data.weekStart, -7);
   const nextWeek = addDaysISO(data.weekStart, 7);
@@ -400,7 +447,7 @@ export function TeamWeek({ data }: { data: WeekData }) {
   const days: Day[] = data.dates.map((date, index) => ({
     date,
     index,
-    items: slotsForDay(data.slots, team.id, date),
+    items: slotsForTeams(data.slots, shownIds, date),
     notes: commentsTeam ? slotsForDay(data.slots, commentsTeam.id, date) : [],
   }));
   const todayDay = isThisWeek ? days.find((day) => day.date === today) : undefined;
@@ -413,10 +460,10 @@ export function TeamWeek({ data }: { data: WeekData }) {
         <button
           type="button"
           onClick={() => setPicking(true)}
-          className="flex min-h-11 items-center gap-1.5 rounded-lg text-2xl font-black text-[#5c0814] dark:text-white"
-          aria-label={`הקבוצה שלי: ${team.name}. לחצו להחלפת קבוצה`}
+          className="flex min-h-11 min-w-0 items-center gap-1.5 rounded-lg text-start text-2xl font-black text-[#5c0814] dark:text-white"
+          aria-label={`הקבוצות שלי: ${mine.map((item) => item.name).join(", ")}. לחצו לשינוי`}
         >
-          {team.name}
+          <span className="truncate">{mine.length === 1 ? mine[0].name : "הקבוצות שלי"}</span>
           <span aria-hidden className="text-sm text-[#c8102e]">▼</span>
         </button>
         <p className="text-sm font-semibold text-zinc-600 dark:text-zinc-300">
@@ -424,8 +471,31 @@ export function TeamWeek({ data }: { data: WeekData }) {
         </p>
       </div>
 
+      {mine.length > 1 ? (
+        <div className="-mx-3 flex gap-2 overflow-x-auto px-3 pb-1 [scrollbar-width:none]" role="group" aria-label="הצגה לפי קבוצה">
+          {[{ id: null as number | null, name: "כולן" }, ...mine].map((item) => {
+            const on = item.id === null ? shown.length === mine.length : focus === item.id;
+            return (
+              <button
+                key={item.id ?? "all"}
+                type="button"
+                onClick={() => setFocus(item.id)}
+                aria-pressed={on}
+                className={`min-h-10 shrink-0 rounded-full px-4 text-sm font-bold whitespace-nowrap ring-1 ${
+                  on
+                    ? "bg-[#5c0814] text-white ring-[#5c0814] dark:bg-[#f4e6e8] dark:text-[#5c0814]"
+                    : "bg-white text-[#5c0814] ring-[#d7b4b8] dark:bg-zinc-900 dark:text-white dark:ring-white/15"
+                }`}
+              >
+                {item.name}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+
       {todayDay ? (
-        <TodayBlock day={todayDay} data={data} teamId={team.id} today={today} now={now} />
+        <TodayBlock day={todayDay} data={data} teamIds={shownIds} labels={labels} today={today} now={now} />
       ) : null}
 
       {upcoming.length ? (
@@ -437,7 +507,7 @@ export function TeamWeek({ data }: { data: WeekData }) {
           ) : null}
           <ol className="flex flex-col gap-3">
             {upcoming.map((day) => (
-              <DayRow key={day.date} day={day} />
+              <DayRow key={day.date} day={day} labels={labels} />
             ))}
           </ol>
         </section>
@@ -461,7 +531,7 @@ export function TeamWeek({ data }: { data: WeekData }) {
           {showPast ? (
             <ol className="flex flex-col gap-3 opacity-60">
               {past.map((day) => (
-                <DayRow key={day.date} day={day} />
+                <DayRow key={day.date} day={day} labels={labels} />
               ))}
             </ol>
           ) : null}
