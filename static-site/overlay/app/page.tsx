@@ -18,7 +18,14 @@ function Schedule() {
         weekStart={data.weekStart}
         basePath="/"
         compactOnMobile
-      />
+      >
+        <a
+          href="https://voluble-basbousa-0196c2.netlify.app/admin"
+          className="rounded-md border border-white/30 px-3 py-1.5 text-sm font-bold text-white/90 hover:bg-white/10"
+        >
+          כניסת מנהל
+        </a>
+      </AppHeader>
       <ScheduleView data={data} />
     </div>
   );
