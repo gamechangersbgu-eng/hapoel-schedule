@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { deleteSlotForm, previewWeeklySeries, saveSlotForm } from "@/app/actions";
+import { DurationPicker } from "@/components/DurationPicker";
 import { RecurrenceFields } from "@/components/RecurrenceFields";
 import { SeriesConflictReview } from "@/components/SeriesConflictReview";
 import { TypeAndCampFields } from "@/components/TypeAndCampFields";
@@ -48,6 +49,9 @@ export function EditSlotForm({
   const displayDate = date.split("-").reverse().join(".");
   const [startTime, setStartTime] = useState(roundToQuarterHour(editing?.startTime ?? ""));
   const [endTime, setEndTime] = useState(roundToQuarterHour(editing?.endTime ?? ""));
+  const [duration, setDuration] = useState(() =>
+    durationBetween(roundToQuarterHour(editing?.startTime ?? ""), roundToQuarterHour(editing?.endTime ?? "")),
+  );
   const [rotationId, setRotationId] = useState<number | null>(editing?.rotationTemplateId ?? null);
   const [slotType, setSlotType] = useState(editing?.type ?? (team.isComments ? "other" : "vasermil_1"));
   const [repeat, setRepeat] = useState(false);
@@ -62,7 +66,6 @@ export function EditSlotForm({
   const seriesFlag = useRef<HTMLInputElement>(null);
   const seriesDatesRef = useRef<HTMLInputElement>(null);
   const seriesChoicesRef = useRef<HTMLInputElement>(null);
-  const duration = durationBetween(startTime, endTime);
   const rotation = rotations.find((item) => item.id === rotationId);
   const chip = (active: boolean) =>
     `rounded-lg px-3 py-2 text-sm font-bold ring-1 ${
@@ -122,6 +125,37 @@ export function EditSlotForm({
     writeSeries(occurrence.dates, choices);
     allowSubmit.current = true;
     formRef.current?.requestSubmit();
+  }
+
+  function applyStart(value: string) {
+    const next = roundToQuarterHour(value);
+    setStartTime(next);
+    setRotationId(null);
+    if (!next) return;
+    if (duration > 0) {
+      setEndTime(roundToQuarterHour(toTime(toMinutes(next) + duration)));
+      return;
+    }
+    if (endTime) {
+      const minutes = durationBetween(next, endTime);
+      if (minutes > 0) setDuration(minutes);
+    }
+  }
+
+  function applyEnd(value: string) {
+    const next = roundToQuarterHour(value);
+    setEndTime(next);
+    setDuration(startTime ? durationBetween(startTime, next) : 0);
+  }
+
+  function applyDuration(minutes: number) {
+    if (!startTime) {
+      setDuration(minutes);
+      return;
+    }
+    const nextEnd = roundToQuarterHour(toTime(toMinutes(startTime) + minutes));
+    setEndTime(nextEnd);
+    setDuration(durationBetween(startTime, nextEnd) || minutes);
   }
 
   function pickRotationTime(id: number, time: string) {
@@ -244,17 +278,16 @@ export function EditSlotForm({
           <TypeAndCampFields
             defaultType={editing?.type ?? (team.isComments ? "other" : "vasermil_1")}
             startTime={startTime}
-            onStartTimeChange={(value) => {
-              setStartTime(value);
-              setRotationId(null);
-            }}
+            onStartTimeChange={applyStart}
             endTime={endTime}
-            onEndTimeChange={(value) => setEndTime(roundToQuarterHour(value))}
+            onEndTimeChange={applyEnd}
             date={date}
             defaultEndDate={editing?.endDate}
             weekOptions={weekOptions}
             onTypeChange={setSlotType}
           />
+
+          <DurationPicker value={duration} onChange={applyDuration} />
 
           {repeatable ? (
             <RecurrenceFields

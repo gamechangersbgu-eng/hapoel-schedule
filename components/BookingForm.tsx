@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { deleteBoardBooking, previewBoardSeries, saveBoardBooking } from "@/app/admin/pitches/actions";
 import { QuarterHourSelect } from "@/components/QuarterHourSelect";
+import { DurationPicker } from "@/components/DurationPicker";
 import { RecurrenceFields } from "@/components/RecurrenceFields";
 import { SeriesConflictReview } from "@/components/SeriesConflictReview";
 import {
@@ -95,14 +96,14 @@ export function BookingForm({
     const next = roundToQuarterHour(value);
     setStartTime(next);
     if (!next) return;
+    if (duration > 0) {
+      setEndTime(roundToQuarterHour(toTime(toMinutes(next) + duration)));
+      return;
+    }
     if (endTime) {
       const minutes = durationBetween(next, endTime);
-      if (minutes > 0) {
-        setDuration(minutes);
-        return;
-      }
+      if (minutes > 0) setDuration(minutes);
     }
-    if (duration > 0) setEndTime(toTime(toMinutes(next) + duration));
   }
 
   function applyEnd(value: string) {
@@ -373,22 +374,7 @@ export function BookingForm({
             <p className="text-sm font-bold text-red-700">שעת הסיום חייבת להיות אחרי שעת ההתחלה</p>
           ) : null}
 
-          <fieldset className="flex flex-col gap-1.5">
-            <legend className="mb-1 text-sm font-bold">משך אימון</legend>
-            <div className="flex flex-wrap gap-2">
-              {durations.map((item) => (
-                <button
-                  key={item.minutes}
-                  type="button"
-                  onClick={() => applyDuration(item.minutes)}
-                  aria-pressed={item.minutes === duration}
-                  className={chip(item.minutes === duration)}
-                >
-                  {item.labelHe}
-                </button>
-              ))}
-            </div>
-          </fieldset>
+          <DurationPicker value={duration} onChange={applyDuration} presets={durations} />
 
           {initial.slotId ? null : (
             <RecurrenceFields
