@@ -20,6 +20,7 @@ type Props = {
     slot?: string;
     error?: string;
     saved?: string;
+    skipped?: string;
     team?: string;
     pitch?: string;
     sub?: string;
@@ -124,7 +125,9 @@ export default async function PitchBoardPage({ searchParams }: Props) {
 
         {params.saved ? (
           <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800 ring-1 ring-emerald-200">
-            השיבוץ נשמר, והוא מופיע כבר אצל ההורים והשחקנים.
+            {params.skipped
+              ? `הסדרה נשמרה. ${params.skipped === "1" ? "מועד אחד דולג" : `${params.skipped} מועדים דולגו`} בגלל התנגשות או כלל מגרש.`
+              : "השיבוץ נשמר, והוא מופיע כבר אצל ההורים והשחקנים."}
           </p>
         ) : null}
         {warnings.map((warning) => (
@@ -161,6 +164,7 @@ export default async function PitchBoardPage({ searchParams }: Props) {
                   status: editing.status,
                   statusNote: editing.statusNote,
                   substituteStaffId: editing.substituteStaffId,
+                  seriesId: editing.seriesId,
                 }
               : {
                   teamId: num(params.team),

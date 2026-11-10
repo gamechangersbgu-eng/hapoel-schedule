@@ -3,19 +3,23 @@
 // Booking dialog for the pitch board. Shows conflicts live while the admin fills it in;
 // the server checks the same rules again on save.
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { deleteBoardBooking, saveBoardBooking } from "@/app/admin/pitches/actions";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { deleteBoardBooking, previewBoardSeries, saveBoardBooking } from "@/app/admin/pitches/actions";
+import { QuarterHourSelect } from "@/components/QuarterHourSelect";
+import { RecurrenceFields } from "@/components/RecurrenceFields";
+import { SeriesConflictReview } from "@/components/SeriesConflictReview";
 import {
   DURATION_PRESETS,
-  checkBooking,
+  classifyBooking,
   durationBetween,
   durationLabelHe,
   fallbackRotations,
-  normalizeClock,
+  roundToQuarterHour,
   toMinutes,
   toTime,
   type PitchDay,
 } from "@/lib/pitch-rules";
+import { buildOccurrenceDates, occurrenceDecision, type OccurrencePreview, type SeriesChoice } from "@/lib/recurrence";
 
 type Initial = {
   slotId?: number;
@@ -29,6 +33,7 @@ type Initial = {
   status?: string;
   statusNote?: string | null;
   substituteStaffId?: number | null;
+  seriesId?: number | null;
 };
 
 export function BookingForm({
@@ -47,17 +52,29 @@ export function BookingForm({
   const [teamId, setTeamId] = useState<number>(initial.teamId ?? 0);
   const [pitchId, setPitchId] = useState<number>(initial.pitchId ?? day.pitches[0]?.id ?? 0);
   const [subdivisionCode, setSubdivisionCode] = useState(initial.subdivisionCode ?? "whole");
-  const [startTime, setStartTime] = useState(normalizeClock(initial.startTime ?? ""));
+  const [startTime, setStartTime] = useState(roundToQuarterHour(initial.startTime ?? ""));
   const [duration, setDuration] = useState<number>(initial.durationMinutes ?? 0);
   const [endTime, setEndTime] = useState(
     initial.startTime && initial.durationMinutes
-      ? toTime(toMinutes(normalizeClock(initial.startTime)) + initial.durationMinutes)
+      ? roundToQuarterHour(toTime(toMinutes(roundToQuarterHour(initial.startTime)) + initial.durationMinutes))
       : "",
   );
   const [rotationId, setRotationId] = useState<number | null>(initial.rotationTemplateId ?? null);
   const [status, setStatus] = useState<"active" | "cancelled" | "substitute">(
     initial.status === "cancelled" ? "cancelled" : initial.substituteStaffId ? "substitute" : "active",
   );
+  const [repeat, setRepeat] = useState(false);
+  const [weekdays, setWeekdays] = useState<number[]>([]);
+  const [until, setUntil] = useState("");
+  const [extraDates, setExtraDates] = useState<string[]>([]);
+  const [review, setReview] = useState<OccurrencePreview[] | null>(null);
+  const [choices, setChoices] = useState<Record<string, SeriesChoice>>({});
+  const [checking, setChecking] = useState(false);
+  const allowSubmit = useRef(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const seriesFlag = useRef<HTMLInputElement>(null);
+  const seriesDatesRef = useRef<HTMLInputElement>(null);
+  const seriesChoicesRef = useRef<HTMLInputElement>(null);
 
   const team = day.teams.find((item) => item.id === teamId);
   const allowed = team?.allowedSubdivisions ?? [];
@@ -75,7 +92,7 @@ export function BookingForm({
   const rotation = rotations.find((item) => item.id === rotationId);
 
   function applyStart(value: string) {
-    const next = normalizeClock(value);
+    const next = roundToQuarterHour(value);
     setStartTime(next);
     if (!next) return;
     if (endTime) {
@@ -89,19 +106,33 @@ export function BookingForm({
   }
 
   function applyEnd(value: string) {
-    const next = normalizeClock(value);
+    const next = roundToQuarterHour(value);
     setEndTime(next);
     setDuration(startTime ? durationBetween(startTime, next) : 0);
   }
 
   function applyDuration(minutes: number) {
-    setDuration(minutes);
-    if (startTime) setEndTime(toTime(toMinutes(startTime) + minutes));
+    if (!startTime) {
+      setDuration(minutes);
+      return;
+    }
+    const nextEnd = roundToQuarterHour(toTime(toMinutes(startTime) + minutes));
+    setEndTime(nextEnd);
+    setDuration(durationBetween(startTime, nextEnd) || minutes);
   }
 
-  const problems = useMemo(() => {
-    if (!teamId || !pitchId || !subdivisionCode || !/^\d{2}:\d{2}$/.test(startTime) || !duration) return [];
-    return checkBooking(day, {
+  const occurrence = buildOccurrenceDates({
+    anchor: day.date,
+    weekdays: repeat ? weekdays : [],
+    until: repeat ? until : "",
+    extraDates: repeat ? extraDates : [],
+  });
+  const seriesOn = repeat && !initial.slotId && occurrence.dates.length > 1;
+  const classified = useMemo(() => {
+    if (!teamId || !pitchId || !subdivisionCode || !/^\d{2}:\d{2}$/.test(startTime) || !duration) {
+      return { hard: [] as string[], conflicts: [] };
+    }
+    return classifyBooking(day, {
       slotId: initial.slotId,
       teamId,
       pitchId,
@@ -110,6 +141,59 @@ export function BookingForm({
       durationMinutes: duration,
     });
   }, [day, initial.slotId, teamId, pitchId, subdivisionCode, startTime, duration]);
+  const problems = [...classified.hard, ...classified.conflicts.map((conflict) => conflict.summary)];
+  const blocked = classified.hard.length > 0 || (classified.conflicts.length > 0 && !seriesOn);
+
+  useEffect(() => {
+    setReview(null);
+    allowSubmit.current = false;
+  }, [teamId, pitchId, subdivisionCode, startTime, duration, repeat, weekdays, until, extraDates]);
+
+  function writeSeries(dates: string[], nextChoices: Record<string, SeriesChoice>) {
+    if (seriesFlag.current) seriesFlag.current.value = "1";
+    if (seriesDatesRef.current) seriesDatesRef.current.value = dates.join(",");
+    if (seriesChoicesRef.current) seriesChoicesRef.current.value = JSON.stringify(nextChoices);
+  }
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    if (!seriesOn || allowSubmit.current) return;
+    if (status === "cancelled") {
+      writeSeries(occurrence.dates, {});
+      return;
+    }
+    event.preventDefault();
+    setChecking(true);
+    try {
+      const preview = await previewBoardSeries({
+        dates: occurrence.dates,
+        teamId,
+        pitchId,
+        subdivisionCode,
+        startTime,
+        durationMinutes: duration,
+      });
+      if (!preview.some((item) => occurrenceDecision(item) !== "save")) {
+        writeSeries(occurrence.dates, {});
+        allowSubmit.current = true;
+        event.currentTarget.requestSubmit();
+        return;
+      }
+      const next: Record<string, SeriesChoice> = {};
+      for (const item of preview) {
+        if (occurrenceDecision(item) === "choose") next[item.date] = "skip";
+      }
+      setChoices(next);
+      setReview(preview);
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  function confirmSeries() {
+    writeSeries(occurrence.dates, choices);
+    allowSubmit.current = true;
+    formRef.current?.requestSubmit();
+  }
 
   const ready = teamId && pitchId && subdivisionCode && startTime && endTime && duration > 0;
   const teamCoaches = day.coaches.filter((coach) => coach.teamIds.includes(teamId));
@@ -139,14 +223,20 @@ export function BookingForm({
               {initial.slotId ? "עריכת שיבוץ" : "שיבוץ חדש"}
             </h2>
             <p className="text-sm text-zinc-600">{dateLabel}</p>
+            {initial.seriesId ? <p className="text-sm font-bold text-zinc-700">האימון הזה חלק מסדרה</p> : null}
           </div>
           <Link href={closeHref} className="rounded-md px-3 py-1.5 text-sm font-bold text-zinc-500 hover:bg-zinc-100">
             סגור
           </Link>
         </div>
 
-        <form action={saveBoardBooking} className="flex flex-col gap-4">
+        <form ref={formRef} action={saveBoardBooking} onSubmit={onSubmit} className="flex flex-col gap-4">
           <input type="hidden" name="date" value={day.date} />
+          <input type="hidden" name="series" ref={seriesFlag} defaultValue="" />
+          <input type="hidden" name="seriesDates" ref={seriesDatesRef} defaultValue="" />
+          <input type="hidden" name="seriesChoices" ref={seriesChoicesRef} defaultValue="" />
+          <input type="hidden" name="seriesWeekdays" value={weekdays.join(",")} />
+          <input type="hidden" name="seriesUntil" value={until} />
           {initial.slotId ? <input type="hidden" name="id" value={initial.slotId} /> : null}
           <input type="hidden" name="subdivisionCode" value={subdivisionCode} />
           <input type="hidden" name="durationMinutes" value={duration > 0 ? duration : ""} />
@@ -254,36 +344,31 @@ export function BookingForm({
             ) : null}
           </fieldset>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-1 text-sm font-bold">
               <label htmlFor="booking-start">שעת התחלה</label>
-              <input
+              <QuarterHourSelect
                 id="booking-start"
-                type="time"
                 name="startTime"
-                step={60}
-                dir="ltr"
-                className={`${field} tabular-nums`}
+                className={field}
                 value={startTime}
-                onChange={(event) => applyStart(event.target.value)}
+                onChange={applyStart}
                 required
               />
             </div>
             <div className="flex flex-col gap-1 text-sm font-bold">
               <label htmlFor="booking-end">שעת סיום</label>
-              <input
+              <QuarterHourSelect
                 id="booking-end"
-                type="time"
                 name="endTime"
-                step={60}
-                dir="ltr"
-                className={`${field} tabular-nums`}
+                className={field}
                 value={endTime}
-                onChange={(event) => applyEnd(event.target.value)}
+                onChange={applyEnd}
                 required
               />
             </div>
           </div>
+          <p className="text-xs font-semibold text-zinc-500">השעות בקפיצות של רבע שעה: 00, 15, 30, 45.</p>
           {endBeforeStart ? (
             <p className="text-sm font-bold text-red-700">שעת הסיום חייבת להיות אחרי שעת ההתחלה</p>
           ) : null}
@@ -304,6 +389,28 @@ export function BookingForm({
               ))}
             </div>
           </fieldset>
+
+          {initial.slotId ? null : (
+            <RecurrenceFields
+              anchor={day.date}
+              enabled={repeat}
+              onEnabled={setRepeat}
+              weekdays={weekdays}
+              onWeekdays={setWeekdays}
+              until={until}
+              onUntil={setUntil}
+              extraDates={extraDates}
+              onExtraDates={setExtraDates}
+            />
+          )}
+
+          {review ? (
+            <SeriesConflictReview
+              items={review}
+              choices={choices}
+              onChoice={(date, choice) => setChoices((current) => ({ ...current, [date]: choice }))}
+            />
+          ) : null}
 
           <label className="flex flex-col gap-1 text-sm font-bold">
             הערה (לא חובה)
@@ -362,10 +469,12 @@ export function BookingForm({
             </div>
           ) : null}
 
-          {ready && status !== "cancelled" ? (
+          {ready && status !== "cancelled" && !review ? (
             problems.length ? (
               <div role="status" className="rounded-lg bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900 ring-1 ring-amber-200">
-                <p className="mb-1 font-black">אי אפשר לשבץ כך:</p>
+                <p className="mb-1 font-black">
+                  {seriesOn && classified.hard.length === 0 ? "ביום הזה יש התנגשות:" : "אי אפשר לשבץ כך:"}
+                </p>
                 {problems.map((line) => (
                   <p key={line}>• {line}</p>
                 ))}
@@ -378,13 +487,23 @@ export function BookingForm({
           ) : null}
 
           <div className="flex items-center gap-2">
-            <button
-              type="submit"
-              disabled={!ready || (problems.length > 0 && status !== "cancelled")}
-              className="min-h-11 flex-1 rounded-lg bg-[#c8102e] px-4 text-base font-black text-white disabled:cursor-not-allowed disabled:bg-zinc-300"
-            >
-              שמירה
-            </button>
+            {review ? (
+              <button
+                type="button"
+                onClick={confirmSeries}
+                className="min-h-11 flex-1 rounded-lg bg-[#c8102e] px-4 text-base font-black text-white"
+              >
+                שמירה לפי הבחירה
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={!ready || checking || (blocked && status !== "cancelled")}
+                className="min-h-11 flex-1 rounded-lg bg-[#c8102e] px-4 text-base font-black text-white disabled:cursor-not-allowed disabled:bg-zinc-300"
+              >
+                {checking ? "בודק התנגשויות…" : seriesOn ? "בדיקה ושמירה" : "שמירה"}
+              </button>
+            )}
             <Link href={closeHref} className="min-h-11 rounded-lg px-4 py-2.5 text-base font-bold text-zinc-600 ring-1 ring-zinc-300">
               ביטול
             </Link>
@@ -392,12 +511,30 @@ export function BookingForm({
         </form>
 
         {initial.slotId ? (
-          <form action={deleteBoardBooking} className="mt-3 border-t border-zinc-200 pt-3">
+          <form
+            action={deleteBoardBooking}
+            className="mt-3 flex flex-col items-stretch gap-2 border-t border-zinc-200 pt-3"
+            onSubmit={(event) => {
+              const scope = (event.nativeEvent as SubmitEvent).submitter?.getAttribute("value");
+              if (scope === "series" && !window.confirm("למחוק את כל מועדי הסדרה?")) event.preventDefault();
+              if (scope === "future" && !window.confirm("למחוק את המועד הזה וכל המועדים שאחריו?")) event.preventDefault();
+            }}
+          >
             <input type="hidden" name="date" value={day.date} />
             <input type="hidden" name="id" value={initial.slotId} />
-            <button type="submit" className="text-sm font-bold text-red-700 underline">
-              מחיקת השיבוץ
+            <button type="submit" name="scope" value="one" className="min-h-11 text-sm font-bold text-red-700 underline">
+              מחיקת המועד הזה
             </button>
+            {initial.seriesId ? (
+              <>
+                <button type="submit" name="scope" value="future" className="min-h-11 rounded-lg text-sm font-bold text-red-800 ring-1 ring-red-200">
+                  מחיקת המועד הזה וכל הבאים
+                </button>
+                <button type="submit" name="scope" value="series" className="min-h-11 rounded-lg text-sm font-bold text-white bg-red-700">
+                  מחיקת כל הסדרה
+                </button>
+              </>
+            ) : null}
           </form>
         ) : null}
       </div>

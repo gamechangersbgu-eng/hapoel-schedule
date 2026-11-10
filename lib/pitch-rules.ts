@@ -76,6 +76,8 @@ export type BoardBooking = {
   status: string;
   statusNote: string | null;
   substituteStaffId: number | null;
+  /** Recurring training this booking belongs to, when it was saved as part of a series. */
+  seriesId: number | null;
 };
 
 export type BoardTeam = {
@@ -148,6 +150,28 @@ export function durationBetween(start: string, end: string) {
   return minutes > 0 ? minutes : 0;
 }
 
+export const QUARTER_MINUTES = 15;
+
+/** 06:00–23:45 in 15-minute steps. Forms use these instead of a free-typed clock. */
+export const QUARTER_HOUR_TIMES: readonly string[] = Array.from({ length: 72 }, (_, index) =>
+  toTime(6 * 60 + index * QUARTER_MINUTES),
+);
+
+export function isQuarterHour(time: string) {
+  const clock = normalizeClock(time);
+  if (!clock) return false;
+  return toMinutes(clock) % QUARTER_MINUTES === 0;
+}
+
+/** Nearest 15-minute clock, clamped to 00:00–23:45. Empty when `time` is not a clock. */
+export function roundToQuarterHour(time: string) {
+  const clock = normalizeClock(time);
+  if (!clock) return "";
+  const rounded = Math.round(toMinutes(clock) / QUARTER_MINUTES) * QUARTER_MINUTES;
+  const clamped = Math.min(23 * 60 + 45, Math.max(0, rounded));
+  return toTime(clamped);
+}
+
 export function durationLabelHe(minutes: number) {
   const preset = DURATION_PRESETS.find((item) => item.minutes === minutes);
   if (preset) return preset.labelHe;
@@ -200,28 +224,40 @@ export type ProposedBooking = {
   durationMinutes: number;
 };
 
-/** Everything that blocks a booking, in Hebrew, ready to show to the admin. Empty = OK. */
-export function checkBooking(day: PitchDay, booking: ProposedBooking): string[] {
-  const problems: string[] = [];
+export type BookingConflict = {
+  slotId: number;
+  kind: "training" | "home_game";
+  summary: string;
+  /** A home game is not replaced when a training series overlaps it. */
+  overridable: boolean;
+};
+
+/** Rule violations (`hard`) cannot be overridden. `conflicts` are overlapping bookings. */
+export function classifyBooking(
+  day: PitchDay,
+  booking: ProposedBooking,
+): { hard: string[]; conflicts: BookingConflict[] } {
+  const hard: string[] = [];
+  const conflicts: BookingConflict[] = [];
   const team = day.teams.find((item) => item.id === booking.teamId);
   const pitch = day.pitches.find((item) => item.id === booking.pitchId);
   const subdivision = day.subdivisions.find((item) => item.code === booking.subdivisionCode);
-  if (!team) return ["יש לבחור קבוצה"];
-  if (!pitch) return ["יש לבחור מגרש"];
-  if (!subdivision || !SUBDIVISION_RANGE[booking.subdivisionCode]) return ["יש לבחור חלק מגרש"];
+  if (!team) return { hard: ["יש לבחור קבוצה"], conflicts };
+  if (!pitch) return { hard: ["יש לבחור מגרש"], conflicts };
+  if (!subdivision || !SUBDIVISION_RANGE[booking.subdivisionCode]) return { hard: ["יש לבחור חלק מגרש"], conflicts };
 
   const end = booking.start + booking.durationMinutes;
   const range = SUBDIVISION_RANGE[booking.subdivisionCode];
 
   if (pitch.isReservedLock) {
-    problems.push(`${pitch.nameHe} משוריין ונעול לשיבוץ.`);
+    hard.push(`${pitch.nameHe} משוריין ונעול לשיבוץ.`);
   }
 
   if (!team.allowedSubdivisions.includes(booking.subdivisionCode)) {
     const labels = day.subdivisions
       .filter((item) => team.allowedSubdivisions.includes(item.code))
       .map((item) => item.labelHe);
-    problems.push(`${team.name} יכולה להתאמן רק ב: ${labels.join(", ")}.`);
+    hard.push(`${team.name} יכולה להתאמן רק ב: ${labels.join(", ")}.`);
   }
 
   if (team.ageBandCode === "football_school") {
@@ -229,7 +265,7 @@ export function checkBooking(day: PitchDay, booking: ProposedBooking): string[] 
     const windows = day.footballSchoolRules.filter((rule) => rule.weekdays.includes(weekday));
     const fits = windows.some((rule) => booking.start >= rule.start && end <= rule.end);
     if (!fits) {
-      problems.push(
+      hard.push(
         windows.length
           ? `בית ספר לכדורגל ביום ${WEEKDAY_HE[weekday]}: רק בין ${windows
               .map((rule) => `${toTime(rule.start)}–${toTime(rule.end)}`)
@@ -244,20 +280,35 @@ export function checkBooking(day: PitchDay, booking: ProposedBooking): string[] 
     if (!overlaps([booking.start, end], [other.start, other.end])) continue;
     const when = `${toTime(other.start)}–${toTime(other.end)}`;
     if (other.teamId === booking.teamId) {
-      problems.push(`${team.name} כבר משובצת באותו זמן (${when}).`);
+      conflicts.push({
+        slotId: other.slotId,
+        kind: other.kind,
+        summary: `${team.name} כבר משובצת באותו זמן (${when}).`,
+        overridable: other.kind === "training",
+      });
       continue;
     }
     if (other.pitchId !== booking.pitchId) continue;
     if (!overlaps(range, SUBDIVISION_RANGE[other.subdivisionCode] ?? [0, 12])) continue;
     const where = day.subdivisions.find((item) => item.code === other.subdivisionCode)?.labelHe ?? "";
-    problems.push(
-      other.kind === "home_game"
-        ? `משחק בית של ${other.teamName} ב${pitch.nameHe} (${when}).`
-        : `${other.teamName} כבר ב${pitch.nameHe}, ${where} (${when}).`,
-    );
+    conflicts.push({
+      slotId: other.slotId,
+      kind: other.kind,
+      summary:
+        other.kind === "home_game"
+          ? `משחק בית של ${other.teamName} ב${pitch.nameHe} (${when}).`
+          : `${other.teamName} כבר ב${pitch.nameHe}, ${where} (${when}).`,
+      overridable: other.kind === "training",
+    });
   }
 
-  return problems;
+  return { hard, conflicts };
+}
+
+/** Everything that blocks a booking, in Hebrew, ready to show to the admin. Empty = OK. */
+export function checkBooking(day: PitchDay, booking: ProposedBooking): string[] {
+  const { hard, conflicts } = classifyBooking(day, booking);
+  return [...hard, ...conflicts.map((conflict) => conflict.summary)];
 }
 
 /** Club-wide warnings for the day (shown on the board, not blocking). */

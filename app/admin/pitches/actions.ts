@@ -5,8 +5,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { ensureTrainingDuration, resolveRotationTemplateId } from "@/db/reference-seed";
 import { db, pitches, slotTrainingDetails, slots } from "@/lib/db";
-import { checkBooking, durationBetween, getPitchDay, normalizeClock, toMinutes, toTime } from "@/lib/pitch-board";
+import { checkBooking, durationBetween, getPitchDay, roundToQuarterHour, toMinutes, toTime } from "@/lib/pitch-board";
+import { parseSeriesChoices } from "@/lib/recurrence";
 import { bumpScheduleRevision } from "@/lib/schedule-revision";
+import { deleteTrainingScope, previewSeries, saveTrainingSeries } from "@/lib/training-series";
 import { requireAdmin } from "@/lib/auth";
 import { formatDateHe, logChange } from "@/lib/history";
 
@@ -37,8 +39,8 @@ export async function saveBoardBooking(formData: FormData) {
   const teamId = Number(formData.get("teamId"));
   const pitchId = Number(formData.get("pitchId"));
   const subdivisionCode = String(formData.get("subdivisionCode") ?? "");
-  const startTime = normalizeClock(String(formData.get("startTime") ?? ""));
-  const endTime = normalizeClock(String(formData.get("endTime") ?? ""));
+  const startTime = roundToQuarterHour(String(formData.get("startTime") ?? ""));
+  const endTime = roundToQuarterHour(String(formData.get("endTime") ?? ""));
   const durationFromClocks = durationBetween(startTime, endTime);
   const durationMinutes = durationFromClocks || Number(formData.get("durationMinutes")) || 0;
   const rotationRaw = String(formData.get("rotationTemplateId") ?? "");
@@ -66,6 +68,22 @@ export async function saveBoardBooking(formData: FormData) {
   if (!TIME_RE.test(startTime)) back("יש לבחור שעת התחלה");
   if (!TIME_RE.test(endTime) || durationMinutes <= 0) back("יש לבחור שעת סיום שאחרי שעת ההתחלה");
   if (durationMinutes > 12 * 60) back("משך האימון ארוך מדי");
+  if (!cancelled && String(formData.get("series") ?? "") === "1" && !idRaw) {
+    await saveBoardSeries(formData, {
+      date,
+      teamId,
+      pitchId,
+      subdivisionCode,
+      startTime,
+      durationMinutes,
+      note,
+      statusChoice,
+      cancelled,
+      substituteStaffId,
+      statusNote,
+      back,
+    });
+  }
 
   const day = await getPitchDay(date);
   const problems = checkBooking(day, {
@@ -138,18 +156,110 @@ export async function saveBoardBooking(formData: FormData) {
   redirect(boardPath(date, { saved: "1" }));
 }
 
+type SeriesContext = {
+  date: string;
+  teamId: number;
+  pitchId: number;
+  subdivisionCode: string;
+  startTime: string;
+  durationMinutes: number;
+  note: string | null;
+  statusChoice: string;
+  cancelled: boolean;
+  substituteStaffId: number | null;
+  statusNote: string | null;
+  back: (error: string) => never;
+};
+
+async function saveBoardSeries(formData: FormData, ctx: SeriesContext): Promise<never> {
+  const dates = String(formData.get("seriesDates") ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => DATE_RE.test(item));
+  const weekdays = String(formData.get("seriesWeekdays") ?? "")
+    .split(",")
+    .map((item) => Number(item))
+    .filter((item) => item >= 0 && item <= 6);
+  const until = String(formData.get("seriesUntil") ?? "");
+  if (ctx.statusChoice === "substitute" && !ctx.substituteStaffId) ctx.back("יש לבחור מאמן מחליף");
+
+  const day = await getPitchDay(ctx.date);
+  const pitch = day.pitches.find((item) => item.id === ctx.pitchId);
+  const team = day.teams.find((item) => item.id === ctx.teamId);
+  if (!pitch || !team) ctx.back("יש לבחור קבוצה ומגרש");
+
+  const result = await saveTrainingSeries({
+    anchor: ctx.date,
+    dates,
+    choices: parseSeriesChoices(String(formData.get("seriesChoices") ?? "")),
+    teamId: ctx.teamId,
+    type: pitch.code,
+    startTime: ctx.startTime,
+    durationMinutes: ctx.durationMinutes,
+    note: ctx.note,
+    rotationTemplateId: String(formData.get("rotationTemplateId") ?? "").trim()
+      ? Number(formData.get("rotationTemplateId"))
+      : null,
+    pitchId: ctx.pitchId,
+    subdivisionCode: ctx.subdivisionCode,
+    weekdays,
+    untilDate: DATE_RE.test(until) ? until : null,
+    status: ctx.cancelled ? "cancelled" : "active",
+    statusNote: ctx.statusNote,
+    substituteStaffId: ctx.substituteStaffId,
+  });
+  if (result.error || result.created === 0) ctx.back(result.error || "לא נשמר אף מועד");
+
+  const subdivision = day.subdivisions.find((item) => item.code === ctx.subdivisionCode)?.labelHe ?? "";
+  const skipped = result.skipped.length ? `, ${result.skipped.length} מועדים דולגו` : "";
+  await logChange({
+    action: "create",
+    summary: `נוספה סדרת אימונים (${result.created} מועדים${skipped}): ${team.name}, ${pitch.nameHe} ${subdivision}, ${ctx.startTime}`,
+    teamId: ctx.teamId,
+    date: ctx.date,
+  });
+  await refresh();
+  redirect(boardPath(ctx.date, { saved: "1", skipped: result.skipped.length ? String(result.skipped.length) : undefined }));
+}
+
+/** Conflicts for a recurring training, before the admin chooses override or skip. */
+export async function previewBoardSeries(input: {
+  dates: string[];
+  teamId: number;
+  pitchId: number;
+  subdivisionCode: string;
+  startTime: string;
+  durationMinutes: number;
+}) {
+  await requireAdmin();
+  const startTime = roundToQuarterHour(input.startTime);
+  return previewSeries({
+    dates: input.dates.filter((date) => DATE_RE.test(date)),
+    teamId: input.teamId,
+    pitchId: input.pitchId,
+    subdivisionCode: input.subdivisionCode,
+    startTime,
+    durationMinutes: input.durationMinutes,
+  });
+}
+
 export async function deleteBoardBooking(formData: FormData) {
   await requireAdmin();
   const date = String(formData.get("date") ?? "");
   const id = Number(formData.get("id"));
+  const scopeRaw = String(formData.get("scope") ?? "one");
+  const scope = scopeRaw === "future" || scopeRaw === "series" ? scopeRaw : "one";
   if (id) {
-    const [removed] = await db.delete(slots).where(eq(slots.id, id)).returning();
-    if (removed) {
+    const result = await deleteTrainingScope(id, scope);
+    if (result) {
+      const count = result.removed.length;
+      const what =
+        scope === "series" ? `נמחקה סדרת אימונים (${count} מועדים)` : scope === "future" ? `נמחקו ${count} מועדים מהסדרה, מהיום הזה והלאה` : `נמחק אימון ב-${formatDateHe(result.slot.date)} ${result.slot.startTime ?? ""}`;
       await logChange({
         action: "delete",
-        summary: `נמחק אימון ב-${formatDateHe(removed.date)} ${removed.startTime ?? ""}`,
-        teamId: removed.teamId,
-        date: removed.date,
+        summary: what,
+        teamId: result.slot.teamId,
+        date: result.slot.date,
       });
     }
   }

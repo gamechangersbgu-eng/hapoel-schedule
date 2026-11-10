@@ -5,11 +5,13 @@ import { revalidatePath } from "next/cache";
 import { and, eq, gte, lte, ne, notInArray } from "drizzle-orm";
 import { ensureTrainingDuration, resolveRotationTemplateId } from "@/db/reference-seed";
 import { db, slotTrainingDetails, slots, teams } from "@/lib/db";
-import { durationBetween, normalizeClock, toMinutes } from "@/lib/pitch-rules";
+import { durationBetween, roundToQuarterHour, toMinutes } from "@/lib/pitch-rules";
+import { parseSeriesChoices } from "@/lib/recurrence";
 import { formatDateHe, logChange } from "@/lib/history";
 import { bumpScheduleRevision } from "@/lib/schedule-revision";
 import { getSlotsInWeek } from "@/lib/schedule";
 import { getSlotType, isPitchSlot, SLOT_TYPES } from "@/lib/slot-types";
+import { deleteTrainingScope, pitchByCode, previewSeries, saveTrainingSeries, teamName } from "@/lib/training-series";
 import { addDaysISO, weekDates } from "@/lib/week";
 import { endSession, requireAdmin } from "@/lib/auth";
 
@@ -51,7 +53,7 @@ export async function saveSlot(input: SlotInput) {
         ? input.endDate
         : input.date
       : null;
-  const startTime = input.startTime?.trim() || null;
+  const startTime = input.startTime?.trim() ? roundToQuarterHour(input.startTime) : null;
 
   if (isPitchSlot(input.type) && !startTime) {
     return { error: "יש לבחור שעה עבור אימון במגרש" };
@@ -159,10 +161,11 @@ export async function saveSlotForm(formData: FormData) {
   const date = String(formData.get("date"));
   const idRaw = String(formData.get("id") ?? "").trim();
 
-  const startTime = normalizeClock(String(formData.get("startTime") || ""));
-  const endTime = normalizeClock(String(formData.get("endTime") || ""));
+  const startTime = roundToQuarterHour(String(formData.get("startTime") || ""));
+  const endTime = roundToQuarterHour(String(formData.get("endTime") || ""));
   const durationMinutes = durationBetween(startTime, endTime);
   const rotationRaw = String(formData.get("rotationTemplateId") ?? "").trim();
+  const type = String(formData.get("type"));
 
   if (startTime && endTime && toMinutes(endTime) <= toMinutes(startTime)) {
     redirect(
@@ -175,13 +178,72 @@ export async function saveSlotForm(formData: FormData) {
     );
   }
 
+  if (!idRaw && String(formData.get("series") ?? "") === "1") {
+    if (GAME_TYPES.includes(type) || type === "camp") {
+      redirect(adminWeekPath(week, { team: String(teamId), date, error: "אי אפשר לחזור על משחק או מחנה כסדרה" }));
+    }
+    if (!startTime || durationMinutes <= 0) {
+      redirect(adminWeekPath(week, { team: String(teamId), date, error: "לסדרה צריך שעת התחלה ושעת סיום" }));
+    }
+    const dates = String(formData.get("seriesDates") ?? "")
+      .split(",")
+      .map((item) => item.trim())
+      .filter((item) => /^\d{4}-\d{2}-\d{2}$/.test(item));
+    const weekdays = String(formData.get("seriesWeekdays") ?? "")
+      .split(",")
+      .map((item) => Number(item))
+      .filter((item) => item >= 0 && item <= 6);
+    const until = String(formData.get("seriesUntil") ?? "");
+    const pitch = isPitchSlot(type) ? await pitchByCode(type) : null;
+    if (isPitchSlot(type) && !pitch) {
+      redirect(adminWeekPath(week, { team: String(teamId), date, error: "המגרש לא נמצא" }));
+    }
+    const result = await saveTrainingSeries({
+      anchor: date,
+      dates,
+      choices: parseSeriesChoices(String(formData.get("seriesChoices") ?? "")),
+      teamId,
+      type,
+      startTime,
+      durationMinutes,
+      note: String(formData.get("note") || "").trim() || null,
+      rotationTemplateId: rotationRaw ? Number(rotationRaw) : null,
+      pitchId: pitch?.id ?? null,
+      subdivisionCode: pitch ? "whole" : null,
+      weekdays,
+      untilDate: /^\d{4}-\d{2}-\d{2}$/.test(until) ? until : null,
+      status: "active",
+      statusNote: null,
+      substituteStaffId: null,
+    });
+    if (result.error || result.created === 0) {
+      redirect(
+        adminWeekPath(week, {
+          team: String(teamId),
+          date,
+          error: result.error || "לא נשמר אף מועד",
+        }),
+      );
+    }
+    const name = await teamName(teamId);
+    const skipped = result.skipped.length ? `, ${result.skipped.length} מועדים דולגו` : "";
+    await logChange({
+      action: "create",
+      summary: `נוספה סדרת אימונים (${result.created} מועדים${skipped}): ${name}, ${getSlotType(type).label}, ${startTime}`,
+      teamId,
+      date,
+    });
+    await refreshSchedule();
+    redirect(adminWeekPath(week, { saved: "1", skipped: result.skipped.length ? String(result.skipped.length) : undefined }));
+  }
+
   const result = await saveSlot({
     id: idRaw ? Number(idRaw) : undefined,
     teamId,
     date,
     endDate: String(formData.get("endDate") || "") || null,
     startTime,
-    type: String(formData.get("type")),
+    type,
     note: String(formData.get("note") || ""),
     rotationTemplateId: rotationRaw ? Number(rotationRaw) : null,
     durationMinutes: durationMinutes > 0 ? durationMinutes : null,
@@ -204,8 +266,45 @@ export async function saveSlotForm(formData: FormData) {
 export async function deleteSlotForm(formData: FormData) {
   const week = String(formData.get("week") ?? "");
   const id = Number(formData.get("id"));
-  await deleteSlot(id);
+  const scopeRaw = String(formData.get("scope") ?? "one");
+  const scope = scopeRaw === "future" || scopeRaw === "series" ? scopeRaw : "one";
+  if (scope === "one") {
+    await deleteSlot(id);
+  } else {
+    await requireAdmin();
+    const result = await deleteTrainingScope(id, scope);
+    if (result) {
+      const count = result.removed.length;
+      await logChange({
+        action: "delete",
+        summary: scope === "series" ? `נמחקה סדרת אימונים (${count} מועדים)` : `נמחקו ${count} מועדים מהסדרה, מהיום הזה והלאה`,
+        teamId: result.slot.teamId,
+        date: result.slot.date,
+      });
+      await refreshSchedule();
+    }
+  }
   redirect(adminWeekPath(week));
+}
+
+export async function previewWeeklySeries(input: {
+  dates: string[];
+  teamId: number;
+  type: string;
+  startTime: string;
+  durationMinutes: number;
+}) {
+  await requireAdmin();
+  const startTime = roundToQuarterHour(input.startTime);
+  const pitch = isPitchSlot(input.type) ? await pitchByCode(input.type) : null;
+  return previewSeries({
+    dates: input.dates.filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date)),
+    teamId: input.teamId,
+    pitchId: pitch?.id ?? null,
+    subdivisionCode: pitch ? "whole" : null,
+    startTime,
+    durationMinutes: input.durationMinutes,
+  });
 }
 
 export async function copyPreviousWeekForm(formData: FormData) {

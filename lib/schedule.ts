@@ -23,6 +23,7 @@ function toSlotDTO(slot: {
   status: string;
   statusNote: string | null;
   substituteStaffId: number | null;
+  seriesId: number | null;
 }, substituteNames: Map<number, string>): SlotDTO {
   return {
     id: slot.id,
@@ -35,6 +36,7 @@ function toSlotDTO(slot: {
     status: slot.status,
     statusNote: slot.statusNote,
     substituteName: slot.substituteStaffId ? (substituteNames.get(slot.substituteStaffId) ?? null) : null,
+    seriesId: slot.seriesId,
   };
 }
 

@@ -1,5 +1,7 @@
 import { and, eq } from "drizzle-orm";
-import { cities, db, slotGameDetails, slots } from "@/lib/db";
+import { cities, db, slotGameDetails, slots, teams } from "@/lib/db";
+import { departureFor } from "@/lib/game-rules";
+import { cityForOpponent } from "@/lib/opponent-cities";
 import { bumpScheduleRevision } from "@/lib/schedule-revision";
 import {
   GAME_DETAIL_SOURCES,
@@ -51,6 +53,17 @@ export async function upsertIfaGame(
     slotId = inserted.id;
   }
 
+  const [existing] = byExternal
+    ? await db
+        .select({
+          cityId: slotGameDetails.cityId,
+          departureTime: slotGameDetails.departureTime,
+        })
+        .from(slotGameDetails)
+        .where(eq(slotGameDetails.slotId, slotId))
+        .limit(1)
+    : [];
+
   let cityId: number | null = null;
   if (input.cityName?.trim()) {
     const [city] = await db
@@ -60,6 +73,28 @@ export async function upsertIfaGame(
       .limit(1);
     cityId = city?.id ?? null;
   }
+  // A city already stored on the game (admin or a previous scrape) stays, unless the
+  // venue name resolved to a city just now.
+  if (cityId == null && existing?.cityId) cityId = existing.cityId;
+  const mappedCityId = input.opponent?.trim() ? await cityForOpponent(input.opponent) : null;
+  if (cityId == null && input.gameKind === "away_game") cityId = mappedCityId;
+
+  let departureTime: string | null = null;
+  let travelMinutes: number | null = null;
+  if (input.gameKind === "away_game" && cityId && input.kickoffTime && !existing?.departureTime) {
+    const [city] = await db.select().from(cities).where(eq(cities.id, cityId)).limit(1);
+    const [team] = await db.select({ name: teams.name }).from(teams).where(eq(teams.id, input.teamId)).limit(1);
+    if (city && team) {
+      travelMinutes = city.travelMinutesFromBeerSheva;
+      departureTime = departureFor({
+        teamName: team.name,
+        date: input.date,
+        kickoff: input.kickoffTime,
+        travelMinutes,
+        north: city.northOfHaderaLine,
+      }).departure;
+    }
+  }
 
   const detailPayload = {
     gameKind: input.gameKind,
@@ -68,6 +103,7 @@ export async function upsertIfaGame(
     cityId,
     source,
     externalId: input.externalId,
+    ...(departureTime ? { departureTime, travelMinutes } : {}),
   };
 
   await db

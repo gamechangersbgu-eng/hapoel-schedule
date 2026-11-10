@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { normalizeClock } from "@/lib/pitch-rules";
+import { QuarterHourSelect } from "@/components/QuarterHourSelect";
+import { roundToQuarterHour } from "@/lib/pitch-rules";
 import { SLOT_TYPES, isCampSlot, isPitchSlot } from "@/lib/slot-types";
 
 type TypeAndCampFieldsProps = {
@@ -13,6 +14,7 @@ type TypeAndCampFieldsProps = {
   date: string;
   defaultEndDate?: string | null;
   weekOptions: string[];
+  onTypeChange?: (type: string) => void;
 };
 
 export function TypeAndCampFields({
@@ -24,6 +26,7 @@ export function TypeAndCampFields({
   date,
   defaultEndDate,
   weekOptions,
+  onTypeChange,
 }: TypeAndCampFieldsProps) {
   const [type, setType] = useState(defaultType);
   const pitchSelected = isPitchSlot(type);
@@ -36,7 +39,10 @@ export function TypeAndCampFields({
         <select
           name="type"
           value={type}
-          onChange={(event) => setType(event.target.value)}
+          onChange={(event) => {
+            setType(event.target.value);
+            onTypeChange?.(event.target.value);
+          }}
           className="mt-1 w-full rounded-md border border-zinc-300 p-2 font-medium"
         >
           {SLOT_TYPES.map((item) => (
@@ -47,38 +53,33 @@ export function TypeAndCampFields({
         </select>
       </label>
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <div className="block text-sm font-bold">
           <label htmlFor="slot-start">
             שעת התחלה {pitchSelected ? <span className="text-red-700">*</span> : null}
           </label>
-          <input
+          <QuarterHourSelect
             id="slot-start"
-            type="time"
             name="startTime"
-            dir="ltr"
-            step={60}
             value={startTime}
             required={pitchSelected}
-            onChange={(event) => onStartTimeChange(normalizeClock(event.target.value))}
+            onChange={(value) => onStartTimeChange(roundToQuarterHour(value))}
             className={timeField}
           />
         </div>
         {pitchSelected ? (
           <div className="block text-sm font-bold">
             <label htmlFor="slot-end">שעת סיום</label>
-            <input
+            <QuarterHourSelect
               id="slot-end"
-              type="time"
               name="endTime"
-              dir="ltr"
-              step={60}
               value={endTime}
-              onChange={(event) => onEndTimeChange(normalizeClock(event.target.value))}
+              onChange={(value) => onEndTimeChange(roundToQuarterHour(value))}
               className={timeField}
             />
           </div>
         ) : null}
+        <p className="col-span-2 text-xs font-semibold text-zinc-500">השעות בקפיצות של רבע שעה.</p>
       </div>
 
       {isCampSlot(type) ? (

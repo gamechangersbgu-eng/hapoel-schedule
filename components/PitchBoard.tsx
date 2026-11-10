@@ -69,6 +69,7 @@ function bookingSummary(booking: BoardBooking) {
   const place = isGame ? `משחק בית${booking.opponent ? ` · ${booking.opponent}` : ""}` : SHORT_SUB[booking.subdivisionCode];
   const extra = [
     booking.substituteStaffId ? "מאמן מחליף" : null,
+    !isGame && booking.seriesId ? "סדרה" : null,
     !isGame && booking.durationMinutes == null ? "משך לא הוגדר" : null,
   ]
     .filter(Boolean)
@@ -114,6 +115,7 @@ function Block({
       </span>
       {cancelled ? <span className="block text-[11px] font-black">בוטל{booking.statusNote ? ` · ${booking.statusNote}` : ""}</span> : null}
       {booking.substituteStaffId && !cancelled ? <span className="block truncate text-[11px] font-black">↺ מאמן מחליף</span> : null}
+      {booking.seriesId && !cancelled ? <span className="block text-[11px] font-black">סדרה</span> : null}
       <span dir="ltr" className="block text-right text-[11px] font-bold tabular-nums opacity-90">
         {toTime(booking.start)}–{toTime(booking.end)}
       </span>

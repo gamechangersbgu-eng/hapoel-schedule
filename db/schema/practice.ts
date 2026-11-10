@@ -2,7 +2,19 @@ import { boolean, integer, pgTable, serial, text, uniqueIndex } from "drizzle-or
 
 import { slots } from "./game";
 import { pitchSubdivisions, pitches } from "./pitch";
-import { teamAgeBands } from "./team";
+import { teamAgeBands, teams } from "./team";
+
+/** One recurring training: each occurrence is a `slots` row with this id. */
+export const trainingSeries = pgTable("training_series", {
+  id: serial().primaryKey(),
+  teamId: integer("team_id")
+    .notNull()
+    .references(() => teams.id, { onDelete: "cascade" }),
+  /** Comma-separated weekdays (0 = Sunday) the series was created with. */
+  weekdays: text(),
+  untilDate: text("until_date"),
+  createdAt: text("created_at").notNull(),
+});
 
 export const trainingSessionDurations = pgTable("training_session_durations", {
   minutes: integer().primaryKey(),
