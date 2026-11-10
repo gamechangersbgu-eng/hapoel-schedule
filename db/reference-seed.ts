@@ -1,3 +1,9 @@
+import { eq } from "drizzle-orm";
+import {
+  DURATION_PRESETS,
+  ROTATION_PRESETS,
+  durationLabelHe,
+} from "../lib/pitch-rules";
 import {
   cities,
   drivers,
@@ -58,6 +64,98 @@ async function seedGameBanks(database: Db) {
     { name: "יוסי מזרחי", phone: "050-1000001", isActive: true },
     { name: "אבי נהג", phone: "050-1000002", isActive: true },
   ]);
+}
+
+/** Inserts the standard training lengths (60 / 105 / 120) when they are missing. */
+export async function ensureTrainingDurations(database: Db) {
+  const existing = await database
+    .select({ minutes: trainingSessionDurations.minutes })
+    .from(trainingSessionDurations);
+  const have = new Set(existing.map((row) => row.minutes));
+  const missing = DURATION_PRESETS.filter((row) => !have.has(row.minutes));
+  if (missing.length === 0) return;
+  await database
+    .insert(trainingSessionDurations)
+    .values(missing)
+    .onConflictDoNothing({ target: trainingSessionDurations.minutes });
+}
+
+/** Makes one duration legal to store (the column references this table). */
+export async function ensureTrainingDuration(database: Db, minutes: number) {
+  if (!Number.isInteger(minutes) || minutes <= 0 || minutes > 12 * 60) return;
+  await database
+    .insert(trainingSessionDurations)
+    .values({ minutes, labelHe: durationLabelHe(minutes) })
+    .onConflictDoNothing({ target: trainingSessionDurations.minutes });
+}
+
+/**
+ * Inserts סבב 1–5 and their start times when missing.
+ * Safe to run on every pitch-board / admin load and from the idempotent migration.
+ */
+export async function ensureRotationTemplates(database: Db) {
+  const rows = await database
+    .select({
+      id: rotationTemplates.id,
+      rotationNumber: rotationTemplates.rotationNumber,
+    })
+    .from(rotationTemplates);
+  const byNumber = new Map(rows.map((row) => [row.rotationNumber, row.id]));
+  const missingTemplates = ROTATION_PRESETS.filter((item) => !byNumber.has(item.number));
+  if (missingTemplates.length > 0) {
+    const created = await database
+      .insert(rotationTemplates)
+      .values(
+        missingTemplates.map((item) => ({
+          rotationNumber: item.number,
+          weekday: item.weekday,
+          labelHe: item.label,
+        })),
+      )
+      .onConflictDoNothing({ target: rotationTemplates.rotationNumber })
+      .returning({ id: rotationTemplates.id, rotationNumber: rotationTemplates.rotationNumber });
+    for (const row of created) byNumber.set(row.rotationNumber, row.id);
+    if (created.length < missingTemplates.length) {
+      const again = await database
+        .select({ id: rotationTemplates.id, rotationNumber: rotationTemplates.rotationNumber })
+        .from(rotationTemplates);
+      for (const row of again) byNumber.set(row.rotationNumber, row.id);
+    }
+  }
+
+  const existingTimes = await database
+    .select({
+      rotationTemplateId: rotationTemplateTimes.rotationTemplateId,
+      sequence: rotationTemplateTimes.sequence,
+    })
+    .from(rotationTemplateTimes);
+  const haveTime = new Set(existingTimes.map((row) => `${row.rotationTemplateId}:${row.sequence}`));
+  const missingTimes = ROTATION_PRESETS.flatMap((item) => {
+    const rotationTemplateId = byNumber.get(item.number);
+    if (rotationTemplateId == null) return [];
+    return item.times.flatMap((startTime, sequence) => {
+      if (haveTime.has(`${rotationTemplateId}:${sequence}`)) return [];
+      return [{ rotationTemplateId, sequence, startTime }];
+    });
+  });
+  if (missingTimes.length === 0) return;
+  await database
+    .insert(rotationTemplateTimes)
+    .values(missingTimes)
+    .onConflictDoNothing({
+      target: [rotationTemplateTimes.rotationTemplateId, rotationTemplateTimes.sequence],
+    });
+}
+
+/** True when this rotation id is a real database row (fallback chips use negative ids). */
+export async function resolveRotationTemplateId(database: Db, id: number | null | undefined) {
+  if (!id || id <= 0) return null;
+  const [row] = await database
+    .select({ id: rotationTemplates.id })
+    .from(rotationTemplates)
+    .where(eq(rotationTemplates.id, id))
+    .limit(1);
+  return row?.id ?? null;
 }
 
 /** Ensures schedule_revision row exists (migrations also insert id=1). */
@@ -194,11 +292,7 @@ async function seedTeamAgeBandData(database: Db) {
 // --- נתוני אימונים (practice) ---
 
 async function seedPracticeData(database: Db) {
-  await database.insert(trainingSessionDurations).values([
-    { minutes: 60, labelHe: "שעה" },
-    { minutes: 105, labelHe: "שעה 45 דקות" },
-    { minutes: 120, labelHe: "שעתיים" },
-  ]);
+  await ensureTrainingDurations(database);
 
   const halfAndWhole = ["whole", "half_north", "half_south"] as const;
   const allSubdivisions = [
@@ -250,38 +344,7 @@ async function seedPracticeData(database: Db) {
     },
   ]);
 
-  const rotationRows = await database
-    .insert(rotationTemplates)
-    .values([
-      { rotationNumber: 1, weekday: 0, labelHe: "סבב 1" },
-      { rotationNumber: 2, weekday: null, labelHe: "סבב 2" },
-      { rotationNumber: 3, weekday: null, labelHe: "סבב 3" },
-      { rotationNumber: 4, weekday: null, labelHe: "סבב 4" },
-      { rotationNumber: 5, weekday: null, labelHe: "סבב 5" },
-    ])
-    .returning();
-
-  const byNumber = Object.fromEntries(
-    rotationRows.map((row) => [row.rotationNumber, row.id]),
-  );
-
-  const rotationTimes: Record<number, string[]> = {
-    1: ["16:30"],
-    2: ["16:30", "18:30"],
-    3: ["16:00", "17:45", "19:15"],
-    4: ["15:30", "17:00", "18:30", "20:00"],
-    5: ["08:30", "10:00", "11:30", "13:00", "14:30"],
-  };
-
-  await database.insert(rotationTemplateTimes).values(
-    Object.entries(rotationTimes).flatMap(([number, times]) =>
-      times.map((startTime, index) => ({
-        rotationTemplateId: byNumber[Number(number)],
-        sequence: index,
-        startTime,
-      })),
-    ),
-  );
+  await ensureRotationTemplates(database);
 }
 
 /** Maps calendar row Hebrew names → `team_age_bands.code` (team domain). Team list per the club spec (Nov 2026). */

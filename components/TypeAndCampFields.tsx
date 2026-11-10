@@ -1,11 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { normalizeClock } from "@/lib/pitch-rules";
 import { SLOT_TYPES, isCampSlot, isPitchSlot } from "@/lib/slot-types";
 
 type TypeAndCampFieldsProps = {
   defaultType: string;
-  defaultStartTime?: string | null;
+  startTime: string;
+  onStartTimeChange: (value: string) => void;
+  endTime: string;
+  onEndTimeChange: (value: string) => void;
   date: string;
   defaultEndDate?: string | null;
   weekOptions: string[];
@@ -13,13 +17,17 @@ type TypeAndCampFieldsProps = {
 
 export function TypeAndCampFields({
   defaultType,
-  defaultStartTime,
+  startTime,
+  onStartTimeChange,
+  endTime,
+  onEndTimeChange,
   date,
   defaultEndDate,
   weekOptions,
 }: TypeAndCampFieldsProps) {
   const [type, setType] = useState(defaultType);
   const pitchSelected = isPitchSlot(type);
+  const timeField = "mt-1 w-full rounded-md border border-zinc-300 p-2 tabular-nums";
 
   return (
     <>
@@ -39,16 +47,39 @@ export function TypeAndCampFields({
         </select>
       </label>
 
-      <label className="block text-sm font-bold">
-        שעה {pitchSelected ? <span className="text-red-700">*</span> : null}
-        <input
-          type="time"
-          name="startTime"
-          defaultValue={defaultStartTime ?? ""}
-          required={pitchSelected}
-          className="mt-1 w-full rounded-md border border-zinc-300 p-2"
-        />
-      </label>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="block text-sm font-bold">
+          <label htmlFor="slot-start">
+            שעת התחלה {pitchSelected ? <span className="text-red-700">*</span> : null}
+          </label>
+          <input
+            id="slot-start"
+            type="time"
+            name="startTime"
+            dir="ltr"
+            step={60}
+            value={startTime}
+            required={pitchSelected}
+            onChange={(event) => onStartTimeChange(normalizeClock(event.target.value))}
+            className={timeField}
+          />
+        </div>
+        {pitchSelected ? (
+          <div className="block text-sm font-bold">
+            <label htmlFor="slot-end">שעת סיום</label>
+            <input
+              id="slot-end"
+              type="time"
+              name="endTime"
+              dir="ltr"
+              step={60}
+              value={endTime}
+              onChange={(event) => onEndTimeChange(normalizeClock(event.target.value))}
+              className={timeField}
+            />
+          </div>
+        ) : null}
+      </div>
 
       {isCampSlot(type) ? (
         <label className="block text-sm font-bold">

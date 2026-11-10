@@ -23,6 +23,59 @@ const PX_PER_MINUTE = 1.15;
 const SURFACE_HE: Record<string, string> = { synthetic: "סינטטי", natural: "דשא טבעי" };
 const SHORT_SUB = SUBDIVISION_SHORT;
 
+function PitchActions({
+  pitchId,
+  locked,
+  date,
+  baseHref,
+}: {
+  pitchId: number;
+  locked: boolean;
+  date: string;
+  baseHref: string;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <Link
+        href={`${baseHref}&new=1&pitch=${pitchId}`}
+        className={`rounded-md px-2.5 py-1 text-xs font-bold ${
+          locked ? "pointer-events-none bg-zinc-100 text-zinc-400" : "bg-[#c8102e] text-white hover:bg-[#a50d26]"
+        }`}
+        aria-disabled={locked}
+      >
+        + שיבוץ
+      </Link>
+      <form action={toggleReservedLock}>
+        <input type="hidden" name="date" value={date} />
+        <input type="hidden" name="pitchId" value={pitchId} />
+        <button
+          type="submit"
+          className={`rounded-md px-2.5 py-1 text-xs font-bold ring-1 ${
+            locked ? "bg-amber-100 text-amber-900 ring-amber-300" : "text-zinc-600 ring-zinc-300 hover:bg-zinc-50"
+          }`}
+          title={locked ? "המגרש משוריין. לחצו לשחרור" : "שריון המגרש: אי אפשר יהיה לשבץ עליו"}
+        >
+          {locked ? "🔒 משוריין" : "שריון"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function bookingSummary(booking: BoardBooking) {
+  const cancelled = booking.status === "cancelled";
+  const isGame = booking.kind === "home_game";
+  if (cancelled) return booking.statusNote ? `בוטל · ${booking.statusNote}` : "בוטל";
+  const place = isGame ? `משחק בית${booking.opponent ? ` · ${booking.opponent}` : ""}` : SHORT_SUB[booking.subdivisionCode];
+  const extra = [
+    booking.substituteStaffId ? "מאמן מחליף" : null,
+    !isGame && booking.durationMinutes == null ? "משך לא הוגדר" : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return extra ? `${place} · ${extra}` : place;
+}
+
 function yAt(boardStart: number, minutes: number) {
   return (minutes - boardStart) * PX_PER_MINUTE;
 }
@@ -86,6 +139,73 @@ function Block({
   );
 }
 
+function PitchList({ day, baseHref }: { day: PitchDay; baseHref: string }) {
+  return (
+    <div className="flex flex-col gap-3 md:hidden">
+      {day.pitches.map((pitch) => {
+        const color = PITCH_COLORS[pitch.colorKey] ?? PITCH_COLORS.black;
+        const bookings = day.bookings
+          .filter((booking) => booking.pitchId === pitch.id)
+          .sort((a, b) => a.start - b.start || a.slotId - b.slotId);
+        return (
+          <section key={pitch.id} className="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-black/10">
+            <header className="flex items-center gap-2 px-3 py-2.5" style={{ background: color.soft }}>
+              <span aria-hidden className="h-3.5 w-3.5 shrink-0 rounded-full" style={{ background: color.bg }} />
+              <h2 className="min-w-0 flex-1 truncate text-base font-black">{pitch.nameHe}</h2>
+              <span className="shrink-0 text-xs font-semibold text-zinc-500">{SURFACE_HE[pitch.surfaceType]}</span>
+            </header>
+            <div className="flex items-center justify-between gap-2 px-3 py-2">
+              <PitchActions pitchId={pitch.id} locked={pitch.isReservedLock} date={day.date} baseHref={baseHref} />
+              <span className="text-xs font-bold text-zinc-500">
+                {bookings.length === 0 ? "פנוי" : `${bookings.length} שיבוצים`}
+              </span>
+            </div>
+            {bookings.length === 0 ? (
+              <p className="px-3 pb-3 text-sm text-zinc-500">אין שיבוץ ביום זה</p>
+            ) : (
+              <ul className="divide-y divide-zinc-100 border-t border-zinc-100">
+                {bookings.map((booking) => {
+                  const cancelled = booking.status === "cancelled";
+                  const isGame = booking.kind === "home_game";
+                  const body = (
+                    <span className="flex min-h-12 items-center gap-3 px-3 py-2">
+                      <span
+                        dir="ltr"
+                        className={`w-[6.75rem] shrink-0 text-left text-sm font-black tabular-nums ${cancelled ? "text-zinc-400 line-through" : ""}`}
+                      >
+                        {toTime(booking.start)}–{toTime(booking.end)}
+                      </span>
+                      <span className="min-w-0 flex-1 text-right">
+                        <span className={`block truncate text-sm font-black ${cancelled ? "text-zinc-500 line-through" : ""}`}>
+                          {booking.teamName}
+                        </span>
+                        <span className="block truncate text-xs font-semibold text-zinc-600">{bookingSummary(booking)}</span>
+                      </span>
+                    </span>
+                  );
+                  return (
+                    <li key={booking.slotId}>
+                      {isGame ? (
+                        <div className="bg-zinc-50" title="משחקים נערכים במסך הניהול הרגיל">
+                          {body}
+                        </div>
+                      ) : (
+                        <Link href={`${baseHref}&slot=${booking.slotId}`} className="block hover:bg-zinc-50">
+                          {body}
+                        </Link>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
 export function PitchBoard({ day, baseHref }: { day: PitchDay; baseHref: string }) {
   const boardStart = boardStartFor(day);
   const y = (minutes: number) => yAt(boardStart, minutes);
@@ -94,49 +214,30 @@ export function PitchBoard({ day, baseHref }: { day: PitchDay; baseHref: string 
   const totalHeight = y(BOARD_END_MINUTES);
 
   return (
-    <div className="overflow-x-auto rounded-xl bg-white shadow-sm ring-1 ring-black/10">
-      <div className="grid min-w-[760px]" style={{ gridTemplateColumns: "3.5rem repeat(4, minmax(0, 1fr))" }}>
+    <div className="flex flex-col gap-3">
+      <PitchList day={day} baseHref={baseHref} />
+      <div className="hidden overflow-x-auto rounded-xl bg-white shadow-sm ring-1 ring-black/10 md:block">
+      <div className="grid min-w-[680px]" style={{ gridTemplateColumns: "3.25rem repeat(4, minmax(0, 1fr))" }}>
         {/* header row */}
         <div className="sticky top-0 z-20 border-b border-black/10 bg-white" />
         {day.pitches.map((pitch) => {
           const color = PITCH_COLORS[pitch.colorKey] ?? PITCH_COLORS.black;
+          const count = day.bookings.filter((booking) => booking.pitchId === pitch.id).length;
           return (
             <div
               key={pitch.id}
-              className="sticky top-0 z-20 border-b border-s border-black/10 bg-white px-2 pt-2 pb-1.5"
+              className="sticky top-0 z-20 border-b border-s border-black/10 bg-white px-2 py-2"
             >
               <div className="flex items-center gap-2">
-                <span aria-hidden className="h-3.5 w-3.5 shrink-0 rounded-full" style={{ background: color.bg }} />
-                <span className="truncate text-base font-black">{pitch.nameHe}</span>
-                <span className="truncate text-xs font-semibold text-zinc-500">{SURFACE_HE[pitch.surfaceType]}</span>
+                <span aria-hidden className="h-3 w-3 shrink-0 rounded-full" style={{ background: color.bg }} />
+                <span className="truncate text-sm font-black">{pitch.nameHe}</span>
+                <span className="truncate text-[11px] font-semibold text-zinc-500">
+                  {SURFACE_HE[pitch.surfaceType]}
+                  {count ? ` · ${count}` : ""}
+                </span>
               </div>
-              <div className="mt-1.5 flex items-center gap-1.5">
-                <Link
-                  href={`${baseHref}&new=1&pitch=${pitch.id}`}
-                  className={`rounded-md px-2 py-1 text-xs font-bold ${
-                    pitch.isReservedLock
-                      ? "pointer-events-none bg-zinc-100 text-zinc-400"
-                      : "bg-[#c8102e] text-white hover:bg-[#a50d26]"
-                  }`}
-                  aria-disabled={pitch.isReservedLock}
-                >
-                  + שיבוץ
-                </Link>
-                <form action={toggleReservedLock}>
-                  <input type="hidden" name="date" value={day.date} />
-                  <input type="hidden" name="pitchId" value={pitch.id} />
-                  <button
-                    type="submit"
-                    className={`rounded-md px-2 py-1 text-xs font-bold ring-1 ${
-                      pitch.isReservedLock
-                        ? "bg-amber-100 text-amber-900 ring-amber-300"
-                        : "text-zinc-600 ring-zinc-300 hover:bg-zinc-50"
-                    }`}
-                    title={pitch.isReservedLock ? "המגרש משוריין. לחצו לשחרור" : "שריון המגרש: אי אפשר יהיה לשבץ עליו"}
-                  >
-                    {pitch.isReservedLock ? "🔒 משוריין" : "שריון"}
-                  </button>
-                </form>
+              <div className="mt-1.5">
+                <PitchActions pitchId={pitch.id} locked={pitch.isReservedLock} date={day.date} baseHref={baseHref} />
               </div>
               <div className="mt-1 flex justify-between text-[10px] font-semibold text-zinc-400">
                 <span>צפון</span>
@@ -193,6 +294,7 @@ export function PitchBoard({ day, baseHref }: { day: PitchDay; baseHref: string 
             </div>
           );
         })}
+      </div>
       </div>
     </div>
   );

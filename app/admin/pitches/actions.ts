@@ -3,8 +3,9 @@
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { ensureTrainingDuration, resolveRotationTemplateId } from "@/db/reference-seed";
 import { db, pitches, slotTrainingDetails, slots } from "@/lib/db";
-import { checkBooking, getPitchDay, toMinutes, toTime } from "@/lib/pitch-board";
+import { checkBooking, durationBetween, getPitchDay, normalizeClock, toMinutes, toTime } from "@/lib/pitch-board";
 import { bumpScheduleRevision } from "@/lib/schedule-revision";
 import { requireAdmin } from "@/lib/auth";
 import { formatDateHe, logChange } from "@/lib/history";
@@ -36,8 +37,10 @@ export async function saveBoardBooking(formData: FormData) {
   const teamId = Number(formData.get("teamId"));
   const pitchId = Number(formData.get("pitchId"));
   const subdivisionCode = String(formData.get("subdivisionCode") ?? "");
-  const startTime = String(formData.get("startTime") ?? "");
-  const durationMinutes = Number(formData.get("durationMinutes"));
+  const startTime = normalizeClock(String(formData.get("startTime") ?? ""));
+  const endTime = normalizeClock(String(formData.get("endTime") ?? ""));
+  const durationFromClocks = durationBetween(startTime, endTime);
+  const durationMinutes = durationFromClocks || Number(formData.get("durationMinutes")) || 0;
   const rotationRaw = String(formData.get("rotationTemplateId") ?? "");
   const note = String(formData.get("note") ?? "").trim() || null;
   const statusChoice = String(formData.get("status") ?? "active");
@@ -61,7 +64,8 @@ export async function saveBoardBooking(formData: FormData) {
 
   if (!DATE_RE.test(date)) redirect("/admin/pitches");
   if (!TIME_RE.test(startTime)) back("יש לבחור שעת התחלה");
-  if (!durationMinutes) back("יש לבחור משך אימון");
+  if (!TIME_RE.test(endTime) || durationMinutes <= 0) back("יש לבחור שעת סיום שאחרי שעת ההתחלה");
+  if (durationMinutes > 12 * 60) back("משך האימון ארוך מדי");
 
   const day = await getPitchDay(date);
   const problems = checkBooking(day, {
@@ -88,11 +92,13 @@ export async function saveBoardBooking(formData: FormData) {
     statusNote,
     substituteStaffId,
   };
+  await ensureTrainingDuration(db, durationMinutes);
+  const rotationTemplateId = await resolveRotationTemplateId(db, rotationRaw ? Number(rotationRaw) : null);
   const details = {
     pitchId,
     subdivisionCode,
     durationMinutes,
-    rotationTemplateId: rotationRaw ? Number(rotationRaw) : null,
+    rotationTemplateId,
   };
 
   const team = day.teams.find((item) => item.id === teamId)!;

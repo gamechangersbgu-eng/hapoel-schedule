@@ -5,7 +5,17 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { deleteBoardBooking, saveBoardBooking } from "@/app/admin/pitches/actions";
-import { checkBooking, toMinutes, toTime, type PitchDay } from "@/lib/pitch-rules";
+import {
+  DURATION_PRESETS,
+  checkBooking,
+  durationBetween,
+  durationLabelHe,
+  fallbackRotations,
+  normalizeClock,
+  toMinutes,
+  toTime,
+  type PitchDay,
+} from "@/lib/pitch-rules";
 
 type Initial = {
   slotId?: number;
@@ -37,8 +47,13 @@ export function BookingForm({
   const [teamId, setTeamId] = useState<number>(initial.teamId ?? 0);
   const [pitchId, setPitchId] = useState<number>(initial.pitchId ?? day.pitches[0]?.id ?? 0);
   const [subdivisionCode, setSubdivisionCode] = useState(initial.subdivisionCode ?? "whole");
-  const [startTime, setStartTime] = useState(initial.startTime ?? "");
+  const [startTime, setStartTime] = useState(normalizeClock(initial.startTime ?? ""));
   const [duration, setDuration] = useState<number>(initial.durationMinutes ?? 0);
+  const [endTime, setEndTime] = useState(
+    initial.startTime && initial.durationMinutes
+      ? toTime(toMinutes(normalizeClock(initial.startTime)) + initial.durationMinutes)
+      : "",
+  );
   const [rotationId, setRotationId] = useState<number | null>(initial.rotationTemplateId ?? null);
   const [status, setStatus] = useState<"active" | "cancelled" | "substitute">(
     initial.status === "cancelled" ? "cancelled" : initial.substituteStaffId ? "substitute" : "active",
@@ -46,7 +61,43 @@ export function BookingForm({
 
   const team = day.teams.find((item) => item.id === teamId);
   const allowed = team?.allowedSubdivisions ?? [];
-  const rotation = day.rotations.find((item) => item.id === rotationId);
+  const rotations = day.rotations.length > 0 ? day.rotations : fallbackRotations();
+  const presetMinutes = new Set(DURATION_PRESETS.map((item) => item.minutes));
+  const presetDurations = (day.durations.length > 0 ? day.durations : DURATION_PRESETS).filter((item) =>
+    presetMinutes.has(item.minutes),
+  );
+  const durations =
+    duration > 0 && !presetMinutes.has(duration)
+      ? [...(presetDurations.length > 0 ? presetDurations : DURATION_PRESETS), { minutes: duration, labelHe: durationLabelHe(duration) }]
+      : presetDurations.length > 0
+        ? presetDurations
+        : DURATION_PRESETS;
+  const rotation = rotations.find((item) => item.id === rotationId);
+
+  function applyStart(value: string) {
+    const next = normalizeClock(value);
+    setStartTime(next);
+    if (!next) return;
+    if (endTime) {
+      const minutes = durationBetween(next, endTime);
+      if (minutes > 0) {
+        setDuration(minutes);
+        return;
+      }
+    }
+    if (duration > 0) setEndTime(toTime(toMinutes(next) + duration));
+  }
+
+  function applyEnd(value: string) {
+    const next = normalizeClock(value);
+    setEndTime(next);
+    setDuration(startTime ? durationBetween(startTime, next) : 0);
+  }
+
+  function applyDuration(minutes: number) {
+    setDuration(minutes);
+    if (startTime) setEndTime(toTime(toMinutes(startTime) + minutes));
+  }
 
   const problems = useMemo(() => {
     if (!teamId || !pitchId || !subdivisionCode || !/^\d{2}:\d{2}$/.test(startTime) || !duration) return [];
@@ -60,9 +111,9 @@ export function BookingForm({
     });
   }, [day, initial.slotId, teamId, pitchId, subdivisionCode, startTime, duration]);
 
-  const ready = teamId && pitchId && subdivisionCode && startTime && duration;
+  const ready = teamId && pitchId && subdivisionCode && startTime && endTime && duration > 0;
   const teamCoaches = day.coaches.filter((coach) => coach.teamIds.includes(teamId));
-  const end = startTime && duration ? toTime(toMinutes(startTime) + duration) : null;
+  const endBeforeStart = Boolean(startTime && endTime && duration <= 0);
 
   const field = "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-base";
   const chip = (active: boolean, disabled = false) =>
@@ -98,8 +149,8 @@ export function BookingForm({
           <input type="hidden" name="date" value={day.date} />
           {initial.slotId ? <input type="hidden" name="id" value={initial.slotId} /> : null}
           <input type="hidden" name="subdivisionCode" value={subdivisionCode} />
-          <input type="hidden" name="durationMinutes" value={duration || ""} />
-          <input type="hidden" name="rotationTemplateId" value={rotationId ?? ""} />
+          <input type="hidden" name="durationMinutes" value={duration > 0 ? duration : ""} />
+          <input type="hidden" name="rotationTemplateId" value={rotationId != null && rotationId > 0 ? rotationId : ""} />
 
           <label className="flex flex-col gap-1 text-sm font-bold">
             קבוצה
@@ -173,7 +224,7 @@ export function BookingForm({
               <button type="button" onClick={() => setRotationId(null)} aria-pressed={rotationId == null} className={chip(rotationId == null)}>
                 בלי סבב
               </button>
-              {day.rotations.map((item) => (
+              {rotations.map((item) => (
                 <button
                   key={item.id}
                   type="button"
@@ -191,7 +242,7 @@ export function BookingForm({
                   <button
                     key={time}
                     type="button"
-                    onClick={() => setStartTime(time)}
+                    onClick={() => applyStart(time)}
                     aria-pressed={time === startTime}
                     className={`${chip(time === startTime)} tabular-nums`}
                     dir="ltr"
@@ -204,34 +255,47 @@ export function BookingForm({
           </fieldset>
 
           <div className="grid grid-cols-2 gap-3">
-            <label className="flex flex-col gap-1 text-sm font-bold">
-              שעת התחלה
+            <div className="flex flex-col gap-1 text-sm font-bold">
+              <label htmlFor="booking-start">שעת התחלה</label>
               <input
+                id="booking-start"
                 type="time"
                 name="startTime"
-                step={300}
+                step={60}
+                dir="ltr"
                 className={`${field} tabular-nums`}
                 value={startTime}
-                onChange={(event) => setStartTime(event.target.value)}
+                onChange={(event) => applyStart(event.target.value)}
                 required
               />
-            </label>
+            </div>
             <div className="flex flex-col gap-1 text-sm font-bold">
-              סיום
-              <span className="rounded-lg bg-zinc-50 px-3 py-2 text-base font-semibold tabular-nums text-zinc-600" dir="ltr">
-                {end ?? "—"}
-              </span>
+              <label htmlFor="booking-end">שעת סיום</label>
+              <input
+                id="booking-end"
+                type="time"
+                name="endTime"
+                step={60}
+                dir="ltr"
+                className={`${field} tabular-nums`}
+                value={endTime}
+                onChange={(event) => applyEnd(event.target.value)}
+                required
+              />
             </div>
           </div>
+          {endBeforeStart ? (
+            <p className="text-sm font-bold text-red-700">שעת הסיום חייבת להיות אחרי שעת ההתחלה</p>
+          ) : null}
 
           <fieldset className="flex flex-col gap-1.5">
             <legend className="mb-1 text-sm font-bold">משך אימון</legend>
             <div className="flex flex-wrap gap-2">
-              {day.durations.map((item) => (
+              {durations.map((item) => (
                 <button
                   key={item.minutes}
                   type="button"
-                  onClick={() => setDuration(item.minutes)}
+                  onClick={() => applyDuration(item.minutes)}
                   aria-pressed={item.minutes === duration}
                   className={chip(item.minutes === duration)}
                 >

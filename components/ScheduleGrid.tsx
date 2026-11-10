@@ -42,7 +42,9 @@ function SlotChip({ slot, compact }: { slot: SlotDTO; compact?: boolean }) {
     >
       {cancelled ? <span className="text-[11px] font-black">בוטל</span> : null}
       {slot.startTime ? (
-        <span className={`text-sm font-extrabold tabular-nums ${cancelled ? "line-through" : ""}`}>{slot.startTime}</span>
+        <span dir="ltr" className={`text-sm font-extrabold tabular-nums ${cancelled ? "line-through" : ""}`}>
+          {slot.endTime ? `${slot.startTime}–${slot.endTime}` : slot.startTime}
+        </span>
       ) : null}
       {slot.substituteName && !cancelled ? (
         <span className="text-[10px] font-black">מחליף: {slot.substituteName}</span>
@@ -195,7 +197,11 @@ export function ScheduleGrid({
   weekStart,
 }: ScheduleGridProps) {
   return (
-    <div className="schedule-scroll print-full rounded-lg border border-[#c8102e] bg-white shadow-sm">
+    <div
+      className={`schedule-scroll print-full rounded-lg border border-[#c8102e] bg-white shadow-sm ${
+        editable ? "schedule-editable" : ""
+      }`}
+    >
       <table className="schedule-table">
         <thead>
           <tr>

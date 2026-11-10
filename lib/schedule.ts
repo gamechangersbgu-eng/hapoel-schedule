@@ -8,7 +8,7 @@ import {
   staff,
   teams as teamsTable,
 } from "@/lib/db";
-import { SUBDIVISION_SHORT } from "@/lib/pitch-rules";
+import { SUBDIVISION_SHORT, toMinutes, toTime } from "@/lib/pitch-rules";
 import type { SlotDTO, WeekData } from "@/lib/types";
 import { resolveWeekStart, weekDates, weekNumber } from "@/lib/week";
 
@@ -74,6 +74,7 @@ export async function getWeekData(weekParam?: string | null): Promise<WeekData> 
       .filter((row) => row.subdivisionCode && row.subdivisionCode !== "whole")
       .map((row) => [row.slotId, SUBDIVISION_SHORT[row.subdivisionCode!] ?? null]),
   );
+  const trainingBySlot = new Map(trainingRows.map((row) => [row.slotId, row]));
   const gameBySlot = new Map(gameRows.map((row) => [row.slotId, row]));
 
   if (!settings) {
@@ -87,12 +88,22 @@ export async function getWeekData(weekParam?: string | null): Promise<WeekData> 
     weekNumber: weekNumber(weekStart, settings.seasonStartDate),
     dates,
     teams,
-    slots: slots.map((slot) => ({
-      ...toSlotDTO(slot, substituteNames),
-      place: placeBySlot.get(slot.id) ?? null,
-      opponent: gameBySlot.get(slot.id)?.opponent ?? null,
-      departureTime: gameBySlot.get(slot.id)?.departureTime ?? null,
-    })),
+    slots: slots.map((slot) => {
+      const training = trainingBySlot.get(slot.id);
+      const durationMinutes = training?.durationMinutes ?? null;
+      return {
+        ...toSlotDTO(slot, substituteNames),
+        place: placeBySlot.get(slot.id) ?? null,
+        opponent: gameBySlot.get(slot.id)?.opponent ?? null,
+        departureTime: gameBySlot.get(slot.id)?.departureTime ?? null,
+        durationMinutes,
+        rotationTemplateId: training?.rotationTemplateId ?? null,
+        endTime:
+          slot.startTime && durationMinutes
+            ? toTime(toMinutes(slot.startTime) + durationMinutes)
+            : null,
+      };
+    }),
   };
 }
 
