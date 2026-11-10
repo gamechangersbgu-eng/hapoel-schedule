@@ -3,6 +3,7 @@ import { AppHeader } from "@/components/AppHeader";
 import { EditSlotForm } from "@/components/EditSlotForm";
 import { ScheduleView } from "@/components/ScheduleView";
 import { ScheduleLiveRefresh } from "@/components/ScheduleLiveRefresh";
+import { loadRotations } from "@/lib/rotations";
 import { getWeekData } from "@/lib/schedule";
 import { getScheduleRevision } from "@/lib/schedule-revision";
 import { AdminNav } from "@/components/AdminNav";
@@ -27,9 +28,10 @@ type AdminProps = {
 export default async function AdminPage({ searchParams }: AdminProps) {
   const user = await requireAdmin();
   const params = await searchParams;
-  const [data, revision] = await Promise.all([
+  const [data, revision, rotations] = await Promise.all([
     getWeekData(params.week),
     getScheduleRevision(),
+    loadRotations(),
   ]);
   const selectedTeam = data.teams.find(
     (team) => String(team.id) === params.team,
@@ -64,12 +66,14 @@ export default async function AdminPage({ searchParams }: AdminProps) {
       <ScheduleView data={data} editable message={message} />
       {selectedTeam && selectedDate ? (
         <EditSlotForm
+          key={`${selectedTeam.id}-${selectedDate}-${slotId ?? "new"}`}
           team={selectedTeam}
           date={selectedDate}
           weekStart={data.weekStart}
           slots={data.slots}
           slotId={Number.isFinite(slotId) ? slotId : undefined}
           error={params.error}
+          rotations={rotations}
         />
       ) : null}
     </div>

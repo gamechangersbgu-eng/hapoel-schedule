@@ -16,6 +16,17 @@ async function main() {
   }
 
   const db = drizzle(url);
+  // Track applied migrations so each build only runs new ones.
+  await db.execute(
+    dsql.raw(
+      'CREATE TABLE IF NOT EXISTS "_applied_migrations" ("name" text PRIMARY KEY, "applied_at" timestamptz NOT NULL DEFAULT now())',
+    ),
+  );
+  const appliedRows = (await db.execute(
+    dsql.raw('SELECT "name" FROM "_applied_migrations"'),
+  )) as unknown as { rows?: { name: string }[] } | { name: string }[];
+  const rows = Array.isArray(appliedRows) ? appliedRows : (appliedRows.rows ?? []);
+  const applied = new Set(rows.map((r) => r.name));
   const root = join(process.cwd(), "netlify/database/migrations");
   const folders = (await readdir(root, { withFileTypes: true }))
     .filter((d) => d.isDirectory())
@@ -23,6 +34,10 @@ async function main() {
     .sort();
 
   for (const folder of folders) {
+    if (applied.has(folder)) {
+      console.log(`Skipping already applied migration: ${folder}`);
+      continue;
+    }
     const file = join(root, folder, "migration.sql");
     let content: string;
     try {
@@ -40,6 +55,9 @@ async function main() {
       await db.execute(dsql.raw(statement));
     }
 
+    await db.execute(
+      dsql`INSERT INTO "_applied_migrations" ("name") VALUES (${folder}) ON CONFLICT DO NOTHING`,
+    );
     console.log(`Applied migration: ${folder} (${statements.length} statements)`);
   }
 

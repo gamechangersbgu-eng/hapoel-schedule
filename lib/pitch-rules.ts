@@ -97,6 +97,68 @@ export type BoardPitch = {
 
 export type BoardRotation = { id: number; number: number; label: string; times: string[] };
 
+/**
+ * Club rotations (סבב 1–5) and the usual training lengths.
+ * The database is seeded from these. Negative ids in `fallbackRotations` are display-only.
+ */
+export const ROTATION_PRESETS: {
+  number: number;
+  weekday: number | null;
+  label: string;
+  times: string[];
+}[] = [
+  { number: 1, weekday: 0, label: "סבב 1", times: ["16:30"] },
+  { number: 2, weekday: null, label: "סבב 2", times: ["16:30", "18:30"] },
+  { number: 3, weekday: null, label: "סבב 3", times: ["16:00", "17:45", "19:15"] },
+  { number: 4, weekday: null, label: "סבב 4", times: ["15:30", "17:00", "18:30", "20:00"] },
+  { number: 5, weekday: null, label: "סבב 5", times: ["08:30", "10:00", "11:30", "13:00", "14:30"] },
+];
+
+export const DURATION_PRESETS: { minutes: number; labelHe: string }[] = [
+  { minutes: 60, labelHe: "שעה" },
+  { minutes: 105, labelHe: "שעה 45 דקות" },
+  { minutes: 120, labelHe: "שעתיים" },
+];
+
+export function fallbackRotations(): BoardRotation[] {
+  return ROTATION_PRESETS.map((item) => ({
+    id: -item.number,
+    number: item.number,
+    label: item.label,
+    times: [...item.times],
+  }));
+}
+
+/** "16:30" or "16:30:00" → "16:30". Empty when the value is not a clock time. */
+export function normalizeClock(value: string) {
+  const match = /^(\d{1,2}):(\d{2})/.exec(value.trim());
+  if (!match) return "";
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) return "";
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+/** Minutes from start to end. 0 when either clock is missing or the end is not later. */
+export function durationBetween(start: string, end: string) {
+  const from = normalizeClock(start);
+  const to = normalizeClock(end);
+  if (!from || !to) return 0;
+  const minutes = toMinutes(to) - toMinutes(from);
+  return minutes > 0 ? minutes : 0;
+}
+
+export function durationLabelHe(minutes: number) {
+  const preset = DURATION_PRESETS.find((item) => item.minutes === minutes);
+  if (preset) return preset.labelHe;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  if (hours <= 0) return `${rest} דקות`;
+  if (rest === 0) return hours === 1 ? "שעה" : hours === 2 ? "שעתיים" : `${hours} שעות`;
+  if (hours === 1) return `שעה ו-${rest} דקות`;
+  return `${hours} שעות ו-${rest} דקות`;
+}
+
 export type FootballSchoolRule = {
   weekdays: number[];
   start: number;

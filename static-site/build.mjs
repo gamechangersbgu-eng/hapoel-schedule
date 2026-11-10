@@ -1,11 +1,12 @@
-// Builds a static, client-side-editable copy of the schedule for GitHub Pages.
+// Builds a static, read-only copy of the Postgres schedule for GitHub Pages.
 //
-//   PAGES_BASE_PATH=/hapoel-schedule node static-site/build.mjs
+//   NETLIFY_DATABASE_URL=... PAGES_BASE_PATH=/hapoel-schedule node static-site/build.mjs
 //
-// It never touches the real app: it copies the repo to .pages-build/, removes the
-// admin/database/server-action code from the copy, swaps in static versions of a few
-// files from static-site/overlay, runs `next build` with `output: "export"` and moves
-// the result to ./out. The Netlify build on main (`npm run build`) is unchanged.
+// It never writes to the database. It copies the repo to .pages-build/, removes the
+// admin/server-action code from the copy, snapshots settings/teams/slots with
+// static-site/capture-db.ts, swaps in the read-only pages from static-site/overlay,
+// runs `next build` with `output: "export"` and moves the result to ./out.
+// The Netlify build on main (`npm run build`) is unchanged and reads Postgres live.
 import { spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -58,26 +59,19 @@ for (const item of [
   "lib/games.ts",
   "lib/coaches-db.ts",
   "lib/history.ts",
+  "lib/rotations.ts",
 ]) {
   rmSync(join(work, item), { recursive: true, force: true });
 }
 
-// 3. Snapshot demo data by running db/seed.ts against a fake in-memory db.
+// 3. Read-only snapshot of the live Postgres schedule. Fails if the database URL is missing.
 run(
   join(root, "node_modules/.bin/tsx"),
-  [join(root, "static-site/capture-seed.ts"), join(work, "lib/snapshot.json")],
+  [join(root, "static-site/capture-db.ts"), join(work, "lib/snapshot.json")],
   { cwd: root },
 );
-rmSync(join(root, "static-site/.seed-capture.generated.ts"), { force: true });
 
-// 3b. Optional published schedule: a committed ./schedule-data.json (exported from the
-// site's admin mode) becomes the base data for everyone. See README.
-if (existsSync(join(root, "schedule-data.json"))) {
-  cpSync(join(root, "schedule-data.json"), join(work, "public/schedule-data.json"));
-  console.log("Using committed schedule-data.json as base data");
-}
-
-// 4. Static versions of the page, week nav, schedule view and data access.
+// 4. Read-only pages. Week navigation and the grid stay the shared public components.
 cpSync(join(root, "static-site/overlay"), work, { recursive: true });
 cpSync(join(root, "static-site/next.config.static.ts"), join(work, "next.config.ts"));
 

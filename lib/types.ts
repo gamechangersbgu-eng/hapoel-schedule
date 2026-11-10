@@ -14,6 +14,12 @@ export type SlotDTO = {
   substituteName?: string | null;
   /** Part of the pitch for trainings, e.g. "½ צפון" (absent = whole pitch / unknown). */
   place?: string | null;
+  /** Saved training length, used to restore שעת סיום in the editor. */
+  durationMinutes?: number | null;
+  /** Chosen סבב, when the training was booked from one. */
+  rotationTemplateId?: number | null;
+  /** Clock end, derived from start + duration when a length was saved. */
+  endTime?: string | null;
   /** Games: opponent, and for away games the departure time from Beer Sheva. */
   opponent?: string | null;
   departureTime?: string | null;

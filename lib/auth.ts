@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 import { adminUsers, db } from "@/lib/db";
-import { SESSION_COOKIE, decryptSession, encryptSession, sessionCookieOptions } from "@/lib/session";
+import { AUTH_DISABLED, SESSION_COOKIE, decryptSession, encryptSession, sessionCookieOptions } from "@/lib/session";
 
 export type CurrentAdmin = {
   id: number;
@@ -16,6 +16,9 @@ export type CurrentAdmin = {
 
 /** The signed-in manager, checked against the database (active, not signed out since). */
 export const getCurrentAdmin = cache(async (): Promise<CurrentAdmin | null> => {
+  if (AUTH_DISABLED) {
+    return { id: 0, email: "test@local", displayName: "בדיקה", role: "owner", mustChangePassword: false };
+  }
   const session = await decryptSession((await cookies()).get(SESSION_COOKIE)?.value);
   if (!session) return null;
   const [user] = await db.select().from(adminUsers).where(eq(adminUsers.id, session.uid)).limit(1);

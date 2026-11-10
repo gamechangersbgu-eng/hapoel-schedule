@@ -3,7 +3,9 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { and, eq, gte, lte, ne, notInArray } from "drizzle-orm";
+import { ensureTrainingDuration, resolveRotationTemplateId } from "@/db/reference-seed";
 import { db, slotTrainingDetails, slots, teams } from "@/lib/db";
+import { durationBetween, normalizeClock, toMinutes } from "@/lib/pitch-rules";
 import { formatDateHe, logChange } from "@/lib/history";
 import { bumpScheduleRevision } from "@/lib/schedule-revision";
 import { getSlotsInWeek } from "@/lib/schedule";
@@ -28,6 +30,10 @@ export type SlotInput = {
   startTime?: string | null;
   type: string;
   note?: string | null;
+  /** null clears a previously chosen rotation. Omitted leaves training details alone. */
+  rotationTemplateId?: number | null;
+  /** null clears a previously saved length. Omitted leaves training details alone. */
+  durationMinutes?: number | null;
 };
 
 export async function saveSlot(input: SlotInput) {
@@ -90,6 +96,22 @@ export async function saveSlot(input: SlotInput) {
     const [created] = await db.insert(slots).values(data).returning({ id: slots.id });
     slotId = created.id;
   }
+  if (slotId && isPitchSlot(input.type) && (input.rotationTemplateId !== undefined || input.durationMinutes !== undefined)) {
+    const rotationTemplateId = await resolveRotationTemplateId(db, input.rotationTemplateId);
+    const durationMinutes =
+      input.durationMinutes && input.durationMinutes > 0 && input.durationMinutes <= 12 * 60
+        ? input.durationMinutes
+        : null;
+    if (durationMinutes) await ensureTrainingDuration(db, durationMinutes);
+    await db
+      .insert(slotTrainingDetails)
+      .values({ slotId, rotationTemplateId, durationMinutes })
+      .onConflictDoUpdate({
+        target: slotTrainingDetails.slotId,
+        set: { rotationTemplateId, durationMinutes },
+      });
+  }
+
   const [team] = await db.select({ name: teams.name }).from(teams).where(eq(teams.id, input.teamId)).limit(1);
   await logChange({
     action: input.id ? "update" : "create",
@@ -137,14 +159,32 @@ export async function saveSlotForm(formData: FormData) {
   const date = String(formData.get("date"));
   const idRaw = String(formData.get("id") ?? "").trim();
 
+  const startTime = normalizeClock(String(formData.get("startTime") || ""));
+  const endTime = normalizeClock(String(formData.get("endTime") || ""));
+  const durationMinutes = durationBetween(startTime, endTime);
+  const rotationRaw = String(formData.get("rotationTemplateId") ?? "").trim();
+
+  if (startTime && endTime && toMinutes(endTime) <= toMinutes(startTime)) {
+    redirect(
+      adminWeekPath(week, {
+        team: String(teamId),
+        date,
+        slot: idRaw || undefined,
+        error: "שעת הסיום חייבת להיות אחרי שעת ההתחלה",
+      }),
+    );
+  }
+
   const result = await saveSlot({
     id: idRaw ? Number(idRaw) : undefined,
     teamId,
     date,
     endDate: String(formData.get("endDate") || "") || null,
-    startTime: String(formData.get("startTime") || ""),
+    startTime,
     type: String(formData.get("type")),
     note: String(formData.get("note") || ""),
+    rotationTemplateId: rotationRaw ? Number(rotationRaw) : null,
+    durationMinutes: durationMinutes > 0 ? durationMinutes : null,
   });
 
   if (result && "error" in result && result.error) {

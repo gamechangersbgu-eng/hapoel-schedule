@@ -1,6 +1,10 @@
+"use client";
+
+import { useState } from "react";
 import { deleteSlotForm, saveSlotForm } from "@/app/actions";
 import { TypeAndCampFields } from "@/components/TypeAndCampFields";
 import { SLOT_TYPES, isCampSlot } from "@/lib/slot-types";
+import { durationBetween, normalizeClock, toMinutes, toTime, type BoardRotation } from "@/lib/pitch-rules";
 import type { SlotDTO, TeamDTO } from "@/lib/types";
 import { addDaysISO } from "@/lib/week";
 
@@ -11,6 +15,7 @@ type EditSlotFormProps = {
   slots: SlotDTO[];
   slotId?: number;
   error?: string;
+  rotations: BoardRotation[];
 };
 
 export function EditSlotForm({
@@ -20,6 +25,7 @@ export function EditSlotForm({
   slots,
   slotId,
   error,
+  rotations,
 }: EditSlotFormProps) {
   const cellSlots = slots.filter((slot) => {
     if (slot.teamId !== team.id) return false;
@@ -37,10 +43,27 @@ export function EditSlotForm({
   const addHref = `/admin?week=${weekStart}&team=${team.id}&date=${date}`;
   const weekOptions = Array.from({ length: 7 }, (_, i) => addDaysISO(weekStart, i));
   const displayDate = date.split("-").reverse().join(".");
+  const [startTime, setStartTime] = useState(normalizeClock(editing?.startTime ?? ""));
+  const [endTime, setEndTime] = useState(normalizeClock(editing?.endTime ?? ""));
+  const [rotationId, setRotationId] = useState<number | null>(editing?.rotationTemplateId ?? null);
+  const duration = durationBetween(startTime, endTime);
+  const rotation = rotations.find((item) => item.id === rotationId);
+  const chip = (active: boolean) =>
+    `rounded-lg px-3 py-2 text-sm font-bold ring-1 ${
+      active ? "bg-[#c8102e] text-white ring-[#c8102e]" : "bg-white text-zinc-800 ring-zinc-300"
+    }`;
+
+  function pickRotationTime(id: number, time: string) {
+    const next = normalizeClock(time);
+    const kept = duration > 0 ? duration : 0;
+    setRotationId(id);
+    setStartTime(next);
+    if (next && kept > 0) setEndTime(toTime(toMinutes(next) + kept));
+  }
 
   return (
     <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/55 p-3">
-      <div className="w-full max-w-md rounded-xl bg-white p-4 text-right shadow-2xl">
+      <div className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-xl bg-white p-4 text-right shadow-2xl">
         <div className="mb-3 flex items-start justify-between gap-3">
           <div>
             <h3 className="text-lg font-black text-[#8e0b20]">{team.name}</h3>
@@ -103,13 +126,62 @@ export function EditSlotForm({
             {editing ? "עריכת אימון" : "אימון חדש"}
           </p>
 
+          <input type="hidden" name="rotationTemplateId" value={rotationId != null && rotationId > 0 ? rotationId : ""} />
+          <input type="hidden" name="durationMinutes" value={duration > 0 ? duration : ""} />
+
+          <fieldset className="flex flex-col gap-1.5">
+            <legend className="text-sm font-bold">סבב (לבחירת שעה מהירה)</legend>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => setRotationId(null)} aria-pressed={rotationId == null} className={chip(rotationId == null)}>
+                בלי סבב
+              </button>
+              {rotations.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setRotationId(item.id)}
+                  aria-pressed={item.id === rotationId}
+                  className={chip(item.id === rotationId)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+            {rotation ? (
+              <div className="mt-1 flex flex-wrap gap-2">
+                {rotation.times.map((time) => (
+                  <button
+                    key={time}
+                    type="button"
+                    dir="ltr"
+                    onClick={() => pickRotationTime(rotation.id, time)}
+                    aria-pressed={time === startTime}
+                    className={`${chip(time === startTime)} tabular-nums`}
+                  >
+                    {time}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </fieldset>
+
           <TypeAndCampFields
             defaultType={editing?.type ?? (team.isComments ? "other" : "vasermil_1")}
-            defaultStartTime={editing?.startTime}
+            startTime={startTime}
+            onStartTimeChange={(value) => {
+              setStartTime(value);
+              setRotationId(null);
+            }}
+            endTime={endTime}
+            onEndTimeChange={setEndTime}
             date={date}
             defaultEndDate={editing?.endDate}
             weekOptions={weekOptions}
           />
+
+          {startTime && endTime && duration <= 0 ? (
+            <p className="text-sm font-bold text-red-700">שעת הסיום חייבת להיות אחרי שעת ההתחלה</p>
+          ) : null}
 
           <label className="block text-sm font-bold">
             הערה

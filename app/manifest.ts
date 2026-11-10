@@ -1,3 +1,5 @@
+export const dynamic = "force-static";
+
 import type { MetadataRoute } from "next";
 
 // Makes the site installable ("Add to Home Screen"): name, icon, opens full screen.

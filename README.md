@@ -18,14 +18,14 @@ All schedule, team, pitch, and game data lives in **one Postgres database** (Net
 |------|--------|
 | Schema | `db/schema/` (team, pitch, practice, game domains) |
 | Migrations | `netlify/database/migrations/` |
-| Demo / synthetic data | `db/seed.ts` — **two weeks** of practices and games from the current Sunday |
+| Demo / synthetic data | `db/seed.ts` — **local Postgres only**. Not read by the live site or GitHub Pages |
 | Shared contract | `shared/` (+ `ARCHITECTURE.md`, `WRITE_CONTRACT.md`) |
 
-There is **no** SQLite, textdb, or in-browser store for the Netlify app. The GitHub Pages static build (below) is a separate legacy demo without Postgres.
+There is no SQLite, textdb, or in-browser schedule store. The Netlify app reads Postgres on each request. The GitHub Pages build publishes a read-only snapshot of that same database (`static-site/capture-db.ts`).
 
 ### Create Postgres (recommended — no local PC)
 
-You do **not** need Node on your laptop. Use **Netlify** for the database and **GitHub Actions** to migrate/seed.
+You do **not** need Node on your laptop. Use **Netlify** for the database and **GitHub Actions** to apply migrations.
 
 **1. Netlify — create Postgres**
 
@@ -41,14 +41,15 @@ You do **not** need Node on your laptop. Use **Netlify** for the database and **
    Name: `NETLIFY_DATABASE_URL`  
    Value: paste the connection string.
 
-**3. GitHub Actions — load demo data (two weeks)**
+**3. GitHub Actions — migrations only**
 
 1. GitHub → **Actions** → **Database (Postgres)** → **Run workflow**.
-2. Choose **`migrate-and-seed`** (first time) or **`seed`** to refresh demo schedule only.
 
-This fills Postgres with synthetic **practices** and **games** for **14 days** from the current week’s Sunday (`db/seed.ts`).
+This applies SQL migrations. It does **not** load the two-week demo schedule. The schedule on the site is whatever is already in Postgres (today: games written by the IFA scraper).
 
-**Optional — local dev** (only if you want a dev machine later)
+**Optional — local demo data** (only if you want a dev machine later)
+
+`db/seed.ts` refuses to run unless the database URL points at localhost. It cannot replace the Postgres database the site displays.
 
 ```bash
 npm ci && npm run dev:local
@@ -60,7 +61,7 @@ npx netlify dev:exec -- npm run db:seed
 
 ```bash
 npm run db:migrate:apply  # Apply SQL migrations (Netlify build + GitHub Action)
-npm run db:seed           # Two-week demo schedule + reference data
+npm run db:seed           # Local demo schedule only (localhost URL required)
 npm run db:generate       # Generate SQL after schema changes (developers)
 npm run db:migrate        # drizzle-kit migrate (needs DATABASE_URL; prefer db:migrate:apply)
 ```
@@ -108,7 +109,7 @@ npm run build       # Production build
 npm start           # Run an already-built production app
 npm run lint        # Lint
 npm run db:migrate  # Apply migrations
-npm run db:seed     # Two weeks of synthetic schedule data
+npm run db:seed     # Local demo schedule only (does not touch the displayed database)
 ```
 
 ## Project structure
@@ -144,6 +145,8 @@ The home page reads `settings`, `teams`, and `slots` for the selected week (`get
 
 Do not commit real credentials. Connection strings are provided by Netlify at runtime.
 
-## Legacy: static site on GitHub Pages
+## Static site on GitHub Pages
 
-`npm run build:pages` builds a **non-Postgres** static copy for GitHub Pages (textdb.dev overlay). It is **not** the Hapoel management database path. See `static-site/` and the long comment block in git history if you still maintain that demo.
+`npm run build:pages` exports a read-only copy of the Postgres schedule. The build runs `static-site/capture-db.ts`, which only runs `SELECT`. It needs the repository secret `NETLIFY_DATABASE_URL` (the same connection string as the Database workflow). `NETLIFY_DB_URL` is accepted as well. If neither is set, the Pages build fails and does not publish demo data.
+
+The export does not include the demo seed, textdb.dev, a committed `schedule-data.json`, or browser edits. Week navigation filters the snapshot in the browser. Management pages stay on the Netlify app.

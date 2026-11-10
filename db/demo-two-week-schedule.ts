@@ -1,4 +1,7 @@
-/** Demo practices and games for the current week + the following week (14 days). */
+/**
+ * Demo practices and games for a local database only (current week + the next, 14 days).
+ * The live site and the GitHub Pages build do not read this file.
+ */
 
 export type DemoSlotSpec = {
   teamName: string;
