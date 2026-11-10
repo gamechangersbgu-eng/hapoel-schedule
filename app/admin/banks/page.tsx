@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { asc } from "drizzle-orm";
 import { AdminShell } from "@/components/AdminShell";
-import { saveBankItem, setBankItemActive } from "@/app/admin/banks/actions";
+import { saveBankItem, saveOpponentClub, setBankItemActive } from "@/app/admin/banks/actions";
 import { requireAdmin } from "@/lib/auth";
-import { cities, db, drivers, medics } from "@/lib/db";
+import { cities, db, drivers, medics, opponentClubs } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "חובשים, נהגים וערים · מצב מנהל" };
@@ -75,11 +75,16 @@ function PeopleBank({ bank, title, hint, people, phoneRequired }: {
 export default async function BanksPage({ searchParams }: Props) {
   const user = await requireAdmin();
   const { error, done } = await searchParams;
-  const [medicRows, driverRows, cityRows] = await Promise.all([
+  const [medicRows, driverRows, cityRows, clubRows] = await Promise.all([
     db.select().from(medics).orderBy(asc(medics.name)),
     db.select().from(drivers).orderBy(asc(drivers.name)),
     db.select().from(cities).orderBy(asc(cities.name)),
+    db.select().from(opponentClubs).orderBy(asc(opponentClubs.name)),
   ]);
+  const clubs = [...clubRows].sort(
+    (a, b) => Number(a.cityId != null) - Number(b.cityId != null) || a.name.localeCompare(b.name, "he"),
+  );
+  const unmatched = clubs.filter((club) => club.cityId == null);
 
   return (
     <AdminShell user={user} title="חובשים, נהגים וערים" current="/admin/banks">
@@ -156,6 +161,58 @@ export default async function BanksPage({ searchParams }: Props) {
             <input name="north" type="checkbox" className="h-4 w-4" />
             חיפה וצפונה
           </label>
+          <button type="submit" className={`${button} bg-[#c8102e] text-white`}>
+            + הוספה
+          </button>
+        </form>
+      </section>
+
+      <section className="rounded-2xl bg-white shadow-sm ring-1 ring-black/5">
+        <div className="border-b border-zinc-100 px-5 py-3">
+          <h2 className="text-lg font-black text-[#8e0b20]">יריבות וערים</h2>
+          <p className="text-sm text-zinc-600">
+            במשחק חוץ העיר נבחרת לפי שם היריבה. ההתאמה הראשונה היא העיר הארוכה ביותר שבתוך השם, ואפשר לתקן כאן.
+          </p>
+        </div>
+        {unmatched.length ? (
+          <p role="status" className="mx-5 mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm font-bold text-amber-950 ring-1 ring-amber-200">
+            יריבות בלי עיר ({unmatched.length}): {unmatched.map((club) => club.name).join(" · ")}
+          </p>
+        ) : (
+          <p className="mx-5 mt-3 text-sm font-bold text-emerald-800">לכל היריבות השמורות יש עיר.</p>
+        )}
+        <ul className="divide-y divide-zinc-100">
+          {clubs.length === 0 ? <li className="px-5 py-3 text-sm text-zinc-500">עוד אין יריבות. הן נוספות ממשחקים ומכאן.</li> : null}
+          {clubs.map((club) => (
+            <li key={club.id} className={`px-5 py-2.5 ${club.cityId == null ? "bg-amber-50/60" : ""}`}>
+              <form action={saveOpponentClub} className="flex flex-wrap items-center gap-2">
+                <input type="hidden" name="id" value={club.id} />
+                <input name="name" defaultValue={club.name} aria-label="שם היריבה" className={`${input} min-w-40 flex-1`} required />
+                <select name="cityId" defaultValue={club.cityId ?? ""} aria-label="עיר" className={`${input} min-w-36`}>
+                  <option value="">לא הותאמה עיר</option>
+                  {cityRows.map((city) => (
+                    <option key={city.id} value={city.id}>
+                      {city.name}
+                    </option>
+                  ))}
+                </select>
+                <button type="submit" className={`${button} ring-1 ring-zinc-300 hover:bg-zinc-50`}>
+                  שמירה
+                </button>
+              </form>
+            </li>
+          ))}
+        </ul>
+        <form action={saveOpponentClub} className="flex flex-wrap items-center gap-2 border-t border-zinc-100 bg-zinc-50/60 px-5 py-3">
+          <input name="name" placeholder="שם יריבה חדשה" className={`${input} min-w-40 flex-1`} required />
+          <select name="cityId" aria-label="עיר" className={`${input} min-w-36`} defaultValue="">
+            <option value="">לא הותאמה עיר</option>
+            {cityRows.map((city) => (
+              <option key={city.id} value={city.id}>
+                {city.name}
+              </option>
+            ))}
+          </select>
           <button type="submit" className={`${button} bg-[#c8102e] text-white`}>
             + הוספה
           </button>

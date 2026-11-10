@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { cities, db, drivers, medics } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
 import { logChange } from "@/lib/history";
+import { saveOpponentMapping } from "@/lib/opponent-cities";
 
 type Bank = "medics" | "drivers" | "cities";
 const LABEL: Record<Bank, string> = { medics: "חובש", drivers: "נהג", cities: "עיר" };
@@ -49,6 +50,23 @@ export async function saveBankItem(formData: FormData) {
   }
   await logChange({ action: "bank", summary: `${id ? "עודכן" : "נוסף"} ${LABEL[bank]}: ${name}` });
   done(`${LABEL[bank]} ${name} ${id ? "עודכן" : "נוסף"}`);
+}
+
+/** Opponent name → city. An empty city leaves the club unmatched. */
+export async function saveOpponentClub(formData: FormData) {
+  await requireAdmin();
+  const id = Number(formData.get("id") || 0) || undefined;
+  const name = String(formData.get("name") ?? "");
+  const cityRaw = String(formData.get("cityId") ?? "");
+  const cityId = cityRaw ? Number(cityRaw) : null;
+  try {
+    const result = await saveOpponentMapping({ id, name, cityId });
+    if ("error" in result && result.error) done(result.error, true);
+  } catch {
+    done("לא הצלחנו לשמור את היריבה. ייתכן שהשם כבר קיים.", true);
+  }
+  await logChange({ action: "bank", summary: `יריבה: ${name.trim() || "ללא שם"}` });
+  done(`היריבה ${name.trim()} נשמרה`);
 }
 
 /** People are deactivated rather than deleted, so past games keep their names. */

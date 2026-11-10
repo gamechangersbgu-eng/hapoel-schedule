@@ -5,6 +5,7 @@ import {
   db,
   drivers as driversTable,
   medics as medicsTable,
+  opponentClubs,
   pitches as pitchesTable,
   slotGameDetails,
   slotTrainingDetails,
@@ -42,18 +43,20 @@ export type GamesWeek = {
   medics: { id: number; name: string; phone: string | null; isActive: boolean }[];
   drivers: { id: number; name: string; phone: string; isActive: boolean }[];
   cities: { id: number; name: string; travelMinutesFromBeerSheva: number; northOfHaderaLine: boolean }[];
+  opponentClubs: { name: string; cityId: number | null }[];
   /** Trainings on home-game pitches this week, to warn about overlaps. */
   pitchTrainings: { date: string; pitchId: number; start: number; end: number; teamName: string }[];
 };
 
 export async function getGamesWeek(weekStart: string): Promise<GamesWeek> {
   const dates = weekDates(weekStart);
-  const [teamRows, pitchRows, medicRows, driverRows, cityRows, gameRows, trainingRows] = await Promise.all([
+  const [teamRows, pitchRows, medicRows, driverRows, cityRows, clubRows, gameRows, trainingRows] = await Promise.all([
     db.select().from(teamsTable).orderBy(asc(teamsTable.sortOrder)),
     db.select().from(pitchesTable).orderBy(asc(pitchesTable.sortOrder)),
     db.select().from(medicsTable).orderBy(asc(medicsTable.name)),
     db.select().from(driversTable).orderBy(asc(driversTable.name)),
     db.select().from(citiesTable).orderBy(asc(citiesTable.name)),
+    db.select({ name: opponentClubs.name, cityId: opponentClubs.cityId }).from(opponentClubs).orderBy(asc(opponentClubs.name)),
     db
       .select({ slot: slots, game: slotGameDetails })
       .from(slots)
@@ -75,6 +78,7 @@ export async function getGamesWeek(weekStart: string): Promise<GamesWeek> {
     medics: medicRows,
     drivers: driverRows,
     cities: cityRows,
+    opponentClubs: clubRows,
     games: gameRows.map(({ slot, game }) => ({
       slotId: slot.id,
       teamId: slot.teamId,

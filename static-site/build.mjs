@@ -60,6 +60,8 @@ for (const item of [
   "lib/coaches-db.ts",
   "lib/history.ts",
   "lib/rotations.ts",
+  "lib/opponent-cities.ts",
+  "lib/training-series.ts",
 ]) {
   rmSync(join(work, item), { recursive: true, force: true });
 }

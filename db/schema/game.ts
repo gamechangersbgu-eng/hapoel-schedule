@@ -27,6 +27,18 @@ export const cities = pgTable("cities", {
   northOfHaderaLine: boolean("north_of_hadera_line").notNull().default(false),
 });
 
+/** Opponent club name → city, so away games can fill the city from the opponent. */
+export const opponentClubs = pgTable(
+  "opponent_clubs",
+  {
+    id: serial().primaryKey(),
+    name: text().notNull(),
+    cityId: integer("city_id").references(() => cities.id, { onDelete: "set null" }),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [uniqueIndex("opponent_clubs_name_idx").on(table.name)],
+);
+
 /**
  * Calendar event on a team row (`teams`). `type` matches UI slot kinds.
  * Training-specific fields: `practice.slotTrainingDetails`. Game fields: `slotGameDetails`.
@@ -49,6 +61,8 @@ export const slots = pgTable(
     statusNote: text("status_note"),
     /** Substitute coach for this one session (staff row). */
     substituteStaffId: integer("substitute_staff_id").references(() => staff.id, { onDelete: "set null" }),
+    /** Recurring training series (`practice.trainingSeries`). Null for a one-off. */
+    seriesId: integer("series_id"),
   },
   (table) => [
     index("slots_date_idx").on(table.date),

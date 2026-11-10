@@ -6,6 +6,8 @@ import { redirect } from "next/navigation";
 import { cities, db, slotGameDetails, slots, teams } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
 import { departureFor } from "@/lib/game-rules";
+import { cityForOpponent, rememberOpponentCity } from "@/lib/opponent-cities";
+import { roundToQuarterHour } from "@/lib/pitch-rules";
 import { formatDateHe, logChange } from "@/lib/history";
 import { bumpScheduleRevision } from "@/lib/schedule-revision";
 import { GAME_DETAIL_SOURCES } from "@/shared/game";
@@ -32,7 +34,7 @@ export async function saveGame(formData: FormData) {
   const teamId = Number(formData.get("teamId"));
   const date = String(formData.get("date") ?? "");
   const kind = formData.get("kind") === "away_game" ? "away_game" : "home_game";
-  const kickoff = String(formData.get("kickoff") ?? "");
+  const kickoff = roundToQuarterHour(String(formData.get("kickoff") ?? ""));
   const opponent = String(formData.get("opponent") ?? "").trim() || null;
   const num = (name: string) => Number(formData.get(name) || 0) || null;
   const cancelled = formData.get("status") === "cancelled";
@@ -49,7 +51,11 @@ export async function saveGame(formData: FormData) {
 
   let departureTime: string | null = null;
   let travelMinutes: number | null = null;
-  const cityId = kind === "away_game" ? num("cityId") : null;
+  let cityId = kind === "away_game" ? num("cityId") : null;
+  if (kind === "away_game") {
+    if (cityId) await rememberOpponentCity(opponent, cityId);
+    else cityId = await cityForOpponent(opponent);
+  }
   if (cityId) {
     const [city] = await db.select().from(cities).where(eq(cities.id, cityId)).limit(1);
     if (city) {

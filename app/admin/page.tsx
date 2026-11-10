@@ -22,6 +22,8 @@ type AdminProps = {
     slot?: string;
     error?: string;
     copied?: string;
+    saved?: string;
+    skipped?: string;
   }>;
 };
 
@@ -40,9 +42,13 @@ export default async function AdminPage({ searchParams }: AdminProps) {
   const slotId = params.slot ? Number(params.slot) : undefined;
   const message = params.copied
     ? "השבוע הקודם הועתק"
-    : params.error && !selectedTeam
-      ? params.error
-      : undefined;
+    : params.saved
+      ? params.skipped
+        ? `הסדרה נשמרה. ${params.skipped === "1" ? "מועד אחד דולג." : `${params.skipped} מועדים דולגו.`}`
+        : "האימון נשמר"
+      : params.error && !selectedTeam
+        ? params.error
+        : undefined;
 
   return (
     <div className="min-h-full">

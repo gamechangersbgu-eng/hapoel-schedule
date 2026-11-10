@@ -20,6 +20,8 @@ export type SlotDTO = {
   rotationTemplateId?: number | null;
   /** Clock end, derived from start + duration when a length was saved. */
   endTime?: string | null;
+  /** Recurring training series, when this row is one occurrence. */
+  seriesId?: number | null;
   /** Games: opponent, and for away games the departure time from Beer Sheva. */
   opponent?: string | null;
   departureTime?: string | null;

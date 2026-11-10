@@ -19,15 +19,20 @@ import {
   DEFAULT_TRAINING_MINUTES,
   HOME_GAME_BLOCK_MINUTES,
   SUBDIVISION_RANGE,
+  classifyBooking,
   toMinutes,
   type BoardBooking,
   type PitchDay,
+  type ProposedBooking,
 } from "@/lib/pitch-rules";
 
 export * from "@/lib/pitch-rules";
 import { getCoaches } from "@/lib/coaches-db";
 
-export async function getPitchDay(date: string): Promise<PitchDay> {
+type PitchCatalog = Omit<PitchDay, "date" | "bookings">;
+type LoadedCatalog = { catalog: PitchCatalog; teamName: Record<number, string> };
+
+async function loadCatalog(): Promise<LoadedCatalog> {
   const [pitchRows, subdivisionRows, durationRows, rotationRows, teamRows, bandRows, ruleRows, coaches] =
     await Promise.all([
       db.select().from(pitchesTable).orderBy(asc(pitchesTable.sortOrder)),
@@ -40,11 +45,53 @@ export async function getPitchDay(date: string): Promise<PitchDay> {
       getCoaches(),
     ]);
 
-  const pitchCodes = pitchRows.map((pitch) => pitch.code);
-  const pitchIdByCode = Object.fromEntries(pitchRows.map((pitch) => [pitch.code, pitch.id]));
-  const teamName = Object.fromEntries(teamRows.map((team) => [team.id, team.name]));
+  const allowed = new Map<string, string[]>();
+  for (const row of bandRows) {
+    allowed.set(row.ageBandCode, [...(allowed.get(row.ageBandCode) ?? []), row.subdivisionCode]);
+  }
 
-  const daySlots = await db
+  return {
+    catalog: {
+      pitches: pitchRows,
+      subdivisions: subdivisionRows,
+      durations: durationRows,
+      rotations: rotationRows,
+      teams: teamRows
+        .filter((team) => !team.isComments)
+        .map((team) => ({
+          id: team.id,
+          name: team.name,
+          ageBandCode: team.ageBandCode,
+          allowedSubdivisions: team.ageBandCode
+            ? (allowed.get(team.ageBandCode) ?? Object.keys(SUBDIVISION_RANGE))
+            : Object.keys(SUBDIVISION_RANGE),
+        })),
+      footballSchoolRules: ruleRows.map((rule) => ({
+        weekdays: rule.weekdays.split(",").map(Number),
+        start: toMinutes(rule.startTime),
+        end: toMinutes(rule.endTime),
+        allowedSubdivisions: rule.allowedSubdivisions.split(","),
+        biweekly: rule.biweekly,
+        noteHe: rule.noteHe,
+      })),
+      coaches,
+    },
+    teamName: Object.fromEntries(teamRows.map((team) => [team.id, team.name])),
+  };
+}
+
+async function loadBookings(
+  catalog: PitchCatalog,
+  teamName: Record<number, string>,
+  dates: string[],
+): Promise<Map<string, BoardBooking[]>> {
+  const byDate = new Map<string, BoardBooking[]>();
+  for (const date of dates) byDate.set(date, []);
+  if (dates.length === 0) return byDate;
+
+  const pitchCodes = catalog.pitches.map((pitch) => pitch.code);
+  const pitchIdByCode = Object.fromEntries(catalog.pitches.map((pitch) => [pitch.code, pitch.id]));
+  const rows = await db
     .select({
       slot: slotsTable,
       training: slotTrainingDetails,
@@ -53,16 +100,17 @@ export async function getPitchDay(date: string): Promise<PitchDay> {
     .from(slotsTable)
     .leftJoin(slotTrainingDetails, eq(slotTrainingDetails.slotId, slotsTable.id))
     .leftJoin(slotGameDetails, eq(slotGameDetails.slotId, slotsTable.id))
-    .where(and(eq(slotsTable.date, date), inArray(slotsTable.type, [...pitchCodes, "home_game"])))
-    .orderBy(asc(slotsTable.startTime), asc(slotsTable.id));
+    .where(and(inArray(slotsTable.date, dates), inArray(slotsTable.type, [...pitchCodes, "home_game"])))
+    .orderBy(asc(slotsTable.date), asc(slotsTable.startTime), asc(slotsTable.id));
 
-  const bookings: BoardBooking[] = [];
-  for (const { slot, training, game } of daySlots) {
+  for (const { slot, training, game } of rows) {
+    const list = byDate.get(slot.date);
+    if (!list) continue;
     if (slot.type === "home_game") {
       const kickoff = game?.kickoffTime || slot.startTime;
       if (!kickoff || !game?.pitchId) continue;
       const start = toMinutes(kickoff);
-      bookings.push({
+      list.push({
         slotId: slot.id,
         kind: "home_game",
         teamId: slot.teamId,
@@ -78,6 +126,7 @@ export async function getPitchDay(date: string): Promise<PitchDay> {
         status: slot.status,
         statusNote: slot.statusNote,
         substituteStaffId: slot.substituteStaffId,
+        seriesId: slot.seriesId,
       });
       continue;
     }
@@ -85,7 +134,7 @@ export async function getPitchDay(date: string): Promise<PitchDay> {
     const pitchId = training?.pitchId ?? pitchIdByCode[slot.type];
     const start = toMinutes(slot.startTime);
     const duration = training?.durationMinutes ?? null;
-    bookings.push({
+    list.push({
       slotId: slot.id,
       kind: "training",
       teamId: slot.teamId,
@@ -101,40 +150,26 @@ export async function getPitchDay(date: string): Promise<PitchDay> {
       status: slot.status,
       statusNote: slot.statusNote,
       substituteStaffId: slot.substituteStaffId,
+      seriesId: slot.seriesId,
     });
   }
+  return byDate;
+}
 
-  const allowed = new Map<string, string[]>();
-  for (const row of bandRows) {
-    allowed.set(row.ageBandCode, [...(allowed.get(row.ageBandCode) ?? []), row.subdivisionCode]);
-  }
+export async function getPitchDay(date: string): Promise<PitchDay> {
+  const { catalog, teamName } = await loadCatalog();
+  const bookings = await loadBookings(catalog, teamName, [date]);
+  return { date, ...catalog, bookings: bookings.get(date) ?? [] };
+}
 
-  return {
-    date,
-    pitches: pitchRows,
-    subdivisions: subdivisionRows,
-    durations: durationRows,
-    rotations: rotationRows,
-    teams: teamRows
-      .filter((team) => !team.isComments)
-      .map((team) => ({
-        id: team.id,
-        name: team.name,
-        ageBandCode: team.ageBandCode,
-        allowedSubdivisions: team.ageBandCode
-          ? (allowed.get(team.ageBandCode) ?? Object.keys(SUBDIVISION_RANGE))
-          : Object.keys(SUBDIVISION_RANGE),
-      })),
-    footballSchoolRules: ruleRows.map((rule) => ({
-      weekdays: rule.weekdays.split(",").map(Number),
-      start: toMinutes(rule.startTime),
-      end: toMinutes(rule.endTime),
-      allowedSubdivisions: rule.allowedSubdivisions.split(","),
-      biweekly: rule.biweekly,
-      noteHe: rule.noteHe,
-    })),
-    bookings,
-    coaches,
-  };
+/** Same rules as one day on the board, for every date of a recurring training. */
+export async function classifyDates(dates: string[], booking: ProposedBooking) {
+  const unique = [...new Set(dates)].sort();
+  const { catalog, teamName } = await loadCatalog();
+  const bookings = await loadBookings(catalog, teamName, unique);
+  return unique.map((date) => {
+    const day: PitchDay = { date, ...catalog, bookings: bookings.get(date) ?? [] };
+    return { date, ...classifyBooking(day, booking) };
+  });
 }
 

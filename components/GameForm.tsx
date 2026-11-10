@@ -5,8 +5,19 @@
 import Link from "next/link";
 import { useState } from "react";
 import { deleteGame, saveGame } from "@/app/admin/games/actions";
+import { QuarterHourSelect } from "@/components/QuarterHourSelect";
 import { departureFor } from "@/lib/game-rules";
+import { matchCityInName } from "@/lib/opponent-city-match";
+import { roundToQuarterHour } from "@/lib/pitch-rules";
 import type { GameRow, GamesWeek } from "@/lib/games";
+
+function suggestedCity(name: string, week: { opponentClubs: { name: string; cityId: number | null }[]; cities: { id: number; name: string }[] }) {
+  const trimmed = name.trim();
+  if (!trimmed) return 0;
+  const stored = week.opponentClubs.find((club) => club.name === trimmed);
+  if (stored) return stored.cityId ?? 0;
+  return matchCityInName(trimmed, week.cities)?.id ?? 0;
+}
 
 export function GameForm({
   week,
@@ -15,7 +26,7 @@ export function GameForm({
   closeHref,
   error,
 }: {
-  week: Pick<GamesWeek, "teams" | "pitches" | "medics" | "drivers" | "cities">;
+  week: Pick<GamesWeek, "teams" | "pitches" | "medics" | "drivers" | "cities" | "opponentClubs">;
   weekStart: string;
   game?: GameRow;
   closeHref: string;
@@ -24,8 +35,10 @@ export function GameForm({
   const [kind, setKind] = useState<"home_game" | "away_game">(game?.kind ?? "home_game");
   const [teamId, setTeamId] = useState<number>(game?.teamId ?? 0);
   const [date, setDate] = useState(game?.date ?? weekStart);
-  const [kickoff, setKickoff] = useState(game?.kickoff ?? "");
-  const [cityId, setCityId] = useState<number>(game?.cityId ?? 0);
+  const [kickoff, setKickoff] = useState(roundToQuarterHour(game?.kickoff ?? ""));
+  const [opponent, setOpponent] = useState(game?.opponent ?? "");
+  const [cityTouched, setCityTouched] = useState(Boolean(game?.cityId));
+  const [cityId, setCityId] = useState<number>(game?.cityId || suggestedCity(game?.opponent ?? "", week));
   const [cancelled, setCancelled] = useState(game?.status === "cancelled");
 
   const team = week.teams.find((item) => item.id === teamId);
@@ -65,7 +78,10 @@ export function GameForm({
               <button
                 key={value}
                 type="button"
-                onClick={() => setKind(value)}
+                onClick={() => {
+                  setKind(value);
+                  if (value === "away_game" && !cityTouched) setCityId(suggestedCity(opponent, week));
+                }}
                 aria-pressed={kind === value}
                 className={`min-h-11 rounded-lg text-base font-black ring-1 ${
                   kind === value
@@ -89,19 +105,36 @@ export function GameForm({
               ))}
             </select>
           </label>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className={label}>
               תאריך
               <input type="date" name="date" className={field} value={date} onChange={(e) => setDate(e.target.value)} required />
             </label>
-            <label className={label}>
-              שעת שריקה
-              <input type="time" name="kickoff" step={300} className={`${field} tabular-nums`} value={kickoff} onChange={(e) => setKickoff(e.target.value)} required />
-            </label>
+            <div className={label}>
+              <label htmlFor="game-kickoff">שעת שריקה</label>
+              <QuarterHourSelect
+                id="game-kickoff"
+                name="kickoff"
+                className={field}
+                value={kickoff}
+                onChange={setKickoff}
+                required
+              />
+            </div>
           </div>
           <label className={label}>
             יריבה
-            <input name="opponent" className={field} defaultValue={game?.opponent ?? ""} placeholder="שם הקבוצה היריבה" />
+            <input
+              name="opponent"
+              className={field}
+              value={opponent}
+              placeholder="שם הקבוצה היריבה"
+              onChange={(event) => {
+                const next = event.target.value;
+                setOpponent(next);
+                if (kind === "away_game" && !cityTouched) setCityId(suggestedCity(next, week));
+              }}
+            />
           </label>
 
           {kind === "home_game" ? (
@@ -134,7 +167,15 @@ export function GameForm({
             <div className="grid gap-3 sm:grid-cols-2">
               <label className={label}>
                 עיר
-                <select name="cityId" className={field} value={cityId || ""} onChange={(e) => setCityId(Number(e.target.value))}>
+                <select
+                  name="cityId"
+                  className={field}
+                  value={cityId || ""}
+                  onChange={(event) => {
+                    setCityTouched(true);
+                    setCityId(Number(event.target.value));
+                  }}
+                >
                   <option value="">בחרו עיר</option>
                   {week.cities.map((c) => (
                     <option key={c.id} value={c.id}>{c.name} ({c.travelMinutesFromBeerSheva} דק׳)</option>
@@ -150,6 +191,9 @@ export function GameForm({
                   ))}
                 </select>
               </label>
+              {kind === "away_game" && cityId && !cityTouched ? (
+                <p className="text-sm font-bold text-emerald-800 sm:col-span-2">העיר מולאה לפי שם היריבה. אפשר לשנות.</p>
+              ) : null}
               {departure ? (
                 <div className="rounded-lg bg-sky-50 px-3 py-2.5 text-sm ring-1 ring-sky-200 sm:col-span-2">
                   <p className="text-base font-black text-sky-950">
