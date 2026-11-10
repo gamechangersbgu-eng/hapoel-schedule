@@ -199,7 +199,7 @@ export function EditSlotForm({
           {editing ? <input type="hidden" name="id" value={editing.id} /> : null}
 
           <p className="text-sm font-black text-[#8e0b20]">
-            {editing ? "עריכת אימון" : "אימון חדש"}
+            {editing ? "עריכת אימון" : cellSlots.length > 0 ? "+ הוספת אימון נוסף ליום הזה" : "אימון חדש"}
           </p>
 
           <input type="hidden" name="rotationTemplateId" value={rotationId != null && rotationId > 0 ? rotationId : ""} />

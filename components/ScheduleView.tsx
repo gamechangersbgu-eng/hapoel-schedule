@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { copyPreviousWeekForm } from "@/app/actions";
 import { Legend } from "@/components/Legend";
+import { TeamFilter } from "@/components/TeamFilter";
 import { TeamWeek } from "@/components/TeamWeek";
+import { readTeamSelection, saveTeamSelection } from "@/lib/team-selection";
 import { ScheduleGrid } from "@/components/ScheduleGrid";
 import type { WeekData } from "@/lib/types";
 
@@ -19,41 +21,37 @@ export function ScheduleView({
   editable = false,
   message,
 }: ScheduleViewProps) {
-  const [teamFilter, setTeamFilter] = useState<string>("all");
+  const scope = editable ? "admin" : "public";
+  /** null = all teams. Remembered in this browser (shared with the phone view on the public page). */
+  const [selected, setSelected] = useState<number[] | null>(null);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time read of browser-only state after mount
+    setSelected(readTeamSelection(scope));
+  }, [scope]);
+  function changeSelection(ids: number[] | null) {
+    setSelected(ids);
+    saveTeamSelection(scope, ids);
+  }
 
   const teams = useMemo(() => {
-    if (teamFilter === "all") return data.teams;
-    return data.teams.filter(
-      (team) => String(team.id) === teamFilter || team.isComments,
-    );
-  }, [data.teams, teamFilter]);
+    if (!selected) return data.teams;
+    return data.teams.filter((team) => selected.includes(team.id) || team.isComments);
+  }, [data.teams, selected]);
 
   const isEmpty = data.slots.length === 0;
 
   return (
     <div className="mx-auto flex max-w-[1400px] flex-col gap-3 px-3 py-4 sm:px-5">
       <div
-        className={`no-print flex-wrap items-center justify-between gap-3 ${editable ? "flex" : "hidden md:flex"}`}
+        className={`no-print relative z-30 flex-wrap items-center justify-between gap-3 ${editable ? "flex" : "hidden md:flex"}`}
       >
-        <label
-          className={`items-center gap-2 text-sm font-bold ${editable ? "flex" : "hidden md:flex"}`}
-        >
-          קבוצה
-          <select
-            value={teamFilter}
-            onChange={(event) => setTeamFilter(event.target.value)}
-            className="rounded-md border border-[#d7b4b8] bg-white px-2 py-1.5 font-medium"
-          >
-            <option value="all">כל הקבוצות</option>
-            {data.teams
-              .filter((team) => !team.isComments)
-              .map((team) => (
-                <option key={team.id} value={team.id}>
-                  {team.name}
-                </option>
-              ))}
-          </select>
-        </label>
+        <div className={`items-center gap-2 ${editable ? "flex" : "hidden md:flex"}`}>
+          <TeamFilter
+            teams={data.teams.filter((team) => !team.isComments)}
+            selected={selected}
+            onChange={changeSelection}
+          />
+        </div>
 
         <div className="flex flex-wrap items-center gap-2">
           {editable ? (

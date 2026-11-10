@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 import { getSlotType, isCampSlot, isPitchSlot } from "@/lib/slot-types";
 import type { SlotDTO, TeamDTO } from "@/lib/types";
 import { HEBREW_DAY_LETTERS, formatDayMonth } from "@/lib/week";
@@ -165,13 +165,20 @@ function TeamRow({
               {editable ? "+" : ""}
             </div>
           ) : (
-            daySlots.map((slot) => (
-              <SlotChip
-                key={slot.id}
-                slot={slot}
-                compact={daySlots.length > 1 || team.isComments}
-              />
-            ))
+            <>
+              {daySlots.map((slot) => (
+                <SlotChip
+                  key={slot.id}
+                  slot={slot}
+                  compact={daySlots.length > 1 || team.isComments}
+                />
+              ))}
+              {editable && !team.isComments ? (
+                <span className="text-center text-[11px] font-bold leading-4 text-[#c8102e]/60">
+                  + אימון נוסף
+                </span>
+              ) : null}
+            </>
           )}
         </CellLink>
       </td>,
@@ -181,12 +188,66 @@ function TeamRow({
 
   return (
     <tr className={team.isComments ? "bg-zinc-50" : undefined}>
-      <th className="team-col bg-[#f4e6e8] px-2 py-1 text-right text-[13px] font-bold text-[#5c0814]">
+      <th data-comments={team.isComments ? "1" : undefined} className="team-col bg-[#f4e6e8] px-2 py-1 text-right text-[13px] font-bold text-[#5c0814]">
         {team.name}
       </th>
       {cells}
     </tr>
   );
+}
+
+type PinnedRow = { key: string; top: number; height: number; label: string; head: boolean; comments: boolean };
+type PinnedLayout = { right: number; width: number; rows: PinnedRow[] };
+
+/**
+ * Measures where the team-name cells are, so a plain (non-sticky) copy of the column can be drawn on
+ * top of the table at the right edge. iPhone Safari blanks sticky table cells while the page scrolls,
+ * so the pinned column is an ordinary positioned layer outside the horizontal scroller.
+ */
+function usePinnedColumn(teamsKey: string) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [layout, setLayout] = useState<PinnedLayout | null>(null);
+
+  useLayoutEffect(() => {
+    const wrap = wrapRef.current;
+    const scroller = scrollRef.current;
+    if (!wrap || !scroller) return;
+    const measure = () => {
+      const base = wrap.getBoundingClientRect();
+      const box = scroller.getBoundingClientRect();
+      const cells = Array.from(scroller.querySelectorAll<HTMLTableCellElement>("tr > .team-col"));
+      if (!cells.length) return setLayout(null);
+      const rows = cells.map((cell, index) => {
+        const row = cell.parentElement!.getBoundingClientRect();
+        return {
+          key: `${index}-${cell.textContent}`,
+          top: row.top - base.top,
+          height: row.height,
+          label: cell.textContent ?? "",
+          head: cell.closest("thead") != null,
+          comments: cell.dataset.comments === "1",
+        };
+      });
+      setLayout({
+        right: base.right - (box.left + scroller.clientLeft + scroller.clientWidth),
+        width: cells[0].getBoundingClientRect().width,
+        rows,
+      });
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(scroller);
+    const table = scroller.querySelector("table");
+    if (table) observer.observe(table);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [teamsKey]);
+
+  return { wrapRef, scrollRef, layout };
 }
 
 export function ScheduleGrid({
@@ -196,11 +257,14 @@ export function ScheduleGrid({
   editable,
   weekStart,
 }: ScheduleGridProps) {
+  const { wrapRef, scrollRef, layout } = usePinnedColumn(teams.map((team) => team.id).join(","));
   return (
+    <div ref={wrapRef} className="relative">
     <div
+      ref={scrollRef}
       className={`schedule-scroll print-full rounded-lg border border-[#c8102e] bg-white shadow-sm ${
         editable ? "schedule-editable" : ""
-      }`}
+      } ${layout ? "has-pinned-col" : ""}`}
     >
       <table className="schedule-table">
         <thead>
@@ -234,6 +298,28 @@ export function ScheduleGrid({
           ))}
         </tbody>
       </table>
+    </div>
+      {layout ? (
+        <div
+          aria-hidden
+          className="pinned-team-col no-print pointer-events-none absolute top-0"
+          style={{ right: layout.right, width: layout.width }}
+        >
+          {layout.rows.map((row) => (
+            <div
+              key={row.key}
+              className={`absolute inset-x-0 flex items-center px-2 text-right font-bold ${
+                row.head
+                  ? "rounded-tr-md bg-[#8e0b20] text-sm font-black text-white"
+                  : `${row.comments ? "bg-zinc-100" : "bg-[#f4e6e8]"} text-[13px] text-[#5c0814]`
+              }`}
+              style={{ top: row.top, height: row.height }}
+            >
+              {row.label}
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
