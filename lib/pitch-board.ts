@@ -7,15 +7,13 @@ import {
   footballSchoolScheduleRules,
   pitches as pitchesTable,
   pitchSubdivisions as subdivisionsTable,
-  rotationTemplates,
-  rotationTemplateTimes,
   slotGameDetails,
   slotTrainingDetails,
   slots as slotsTable,
   teamAgeBandSubdivisions,
   teams as teamsTable,
-  trainingSessionDurations,
 } from "@/lib/db";
+import { loadDurations, loadRotations } from "@/lib/rotations";
 
 import {
   DEFAULT_TRAINING_MINUTES,
@@ -30,13 +28,12 @@ export * from "@/lib/pitch-rules";
 import { getCoaches } from "@/lib/coaches-db";
 
 export async function getPitchDay(date: string): Promise<PitchDay> {
-  const [pitchRows, subdivisionRows, durationRows, rotationRows, timeRows, teamRows, bandRows, ruleRows, coaches] =
+  const [pitchRows, subdivisionRows, durationRows, rotationRows, teamRows, bandRows, ruleRows, coaches] =
     await Promise.all([
       db.select().from(pitchesTable).orderBy(asc(pitchesTable.sortOrder)),
       db.select().from(subdivisionsTable).orderBy(asc(subdivisionsTable.sortOrder)),
-      db.select().from(trainingSessionDurations).orderBy(asc(trainingSessionDurations.minutes)),
-      db.select().from(rotationTemplates).orderBy(asc(rotationTemplates.rotationNumber)),
-      db.select().from(rotationTemplateTimes).orderBy(asc(rotationTemplateTimes.sequence)),
+      loadDurations(),
+      loadRotations(),
       db.select().from(teamsTable).orderBy(asc(teamsTable.sortOrder)),
       db.select().from(teamAgeBandSubdivisions),
       db.select().from(footballSchoolScheduleRules),
@@ -117,12 +114,7 @@ export async function getPitchDay(date: string): Promise<PitchDay> {
     pitches: pitchRows,
     subdivisions: subdivisionRows,
     durations: durationRows,
-    rotations: rotationRows.map((rotation) => ({
-      id: rotation.id,
-      number: rotation.rotationNumber,
-      label: rotation.labelHe,
-      times: timeRows.filter((row) => row.rotationTemplateId === rotation.id).map((row) => row.startTime),
-    })),
+    rotations: rotationRows,
     teams: teamRows
       .filter((team) => !team.isComments)
       .map((team) => ({
