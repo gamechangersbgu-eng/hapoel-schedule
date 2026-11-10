@@ -37,7 +37,13 @@ export function PwaSetup() {
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
+      if (process.env.NODE_ENV === "production") {
+        navigator.serviceWorker.register("/sw.js").catch(() => {});
+      } else {
+        // While developing, file names do not change between edits, so a cached copy would hide changes.
+        navigator.serviceWorker.getRegistrations().then((list) => list.forEach((item) => item.unregister()));
+        if ("caches" in window) caches.keys().then((keys) => keys.forEach((key) => caches.delete(key)));
+      }
     }
     if (isStandalone() || readDismissed()) return;
     const onPrompt = (event: Event) => {

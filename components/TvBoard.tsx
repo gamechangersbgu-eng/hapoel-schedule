@@ -3,6 +3,8 @@
 // Club TV screen: the whole week for every team on one screen, readable from across the room.
 // No buttons, no scrolling: rows and text scale with the screen size (vh / vw units).
 import { type ReactNode, useEffect, useState } from "react";
+import { TeamFilter } from "@/components/TeamFilter";
+import { readTeamSelection, saveTeamSelection } from "@/lib/team-selection";
 import {
   HEBREW_DAY_NAMES,
   campCovers,
@@ -208,9 +210,61 @@ function TeamCells({
   return <>{cells}</>;
 }
 
-export function TvBoard({ data, notice }: TvBoardProps) {
+/**
+ * Which teams this screen shows: ?teams=1,4,7 in the address (handy for setting up the club TV),
+ * otherwise the choice saved on this screen, otherwise all teams.
+ */
+function useTvTeams() {
+  const [selected, setSelected] = useState<number[] | null>(null);
+  useEffect(() => {
+    const fromUrl = new URLSearchParams(window.location.search)
+      .get("teams")
+      ?.split(",")
+      .map(Number)
+      .filter((id) => Number.isFinite(id) && id > 0);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time read of browser-only state after mount
+    setSelected(fromUrl?.length ? fromUrl : readTeamSelection("tv"));
+  }, []);
+  const change = (ids: number[] | null) => {
+    setSelected(ids);
+    saveTeamSelection("tv", ids);
+  };
+  return [selected, change] as const;
+}
+
+/** The settings button appears only while the mouse moves, so the TV stays clean. */
+function useMouseActive(ms: number) {
+  const [active, setActive] = useState(false);
+  useEffect(() => {
+    let timer = 0;
+    const wake = () => {
+      setActive(true);
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setActive(false), ms);
+    };
+    window.addEventListener("mousemove", wake);
+    window.addEventListener("touchstart", wake);
+    window.addEventListener("keydown", wake);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("mousemove", wake);
+      window.removeEventListener("touchstart", wake);
+      window.removeEventListener("keydown", wake);
+    };
+  }, [ms]);
+  return active;
+}
+
+export function TvBoard({ data: allData, notice }: TvBoardProps) {
   const now = useNow(15_000);
   useWakeLock();
+  const [selected, setSelected] = useTvTeams();
+  const mouseActive = useMouseActive(5000);
+  const [filterOpenHint, setFilterOpenHint] = useState(false);
+  const regular = allData.teams.filter((team) => !team.isComments);
+  const data = selected
+    ? { ...allData, teams: allData.teams.filter((team) => team.isComments || selected.includes(team.id)) }
+    : allData;
   const today = now ? todayISO() : null;
   const todayIndex = today ? data.dates.indexOf(today) : -1;
 
@@ -223,7 +277,18 @@ export function TvBoard({ data, notice }: TvBoardProps) {
       : formatWeekRange(data.weekStart);
 
   return (
-    <div className="tv-root fixed inset-0 flex cursor-none flex-col overflow-hidden px-[1.2vw] pt-[1.4vh] pb-[1vh] text-white">
+    <div
+      className={`tv-root fixed inset-0 flex flex-col overflow-hidden ${mouseActive || filterOpenHint ? "" : "cursor-none"} px-[1.2vw] pt-[1.4vh] pb-[1vh] text-white`}
+    >
+      {mouseActive || filterOpenHint ? (
+        <div
+          className="fixed start-[1.2vw] bottom-[5vh] z-50"
+          onMouseEnter={() => setFilterOpenHint(true)}
+          onMouseLeave={() => setFilterOpenHint(false)}
+        >
+          <TeamFilter teams={regular} selected={selected} onChange={setSelected} tone="dark" openUp />
+        </div>
+      ) : null}
       <header className="flex shrink-0 items-center justify-between gap-[2vw] pb-[1.2vh]">
         <div className="min-w-0">
           <p className="font-semibold text-white/70" style={{ fontSize: "min(1.8vh, 1vw)" }}>

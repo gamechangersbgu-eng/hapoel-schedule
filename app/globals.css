@@ -54,7 +54,10 @@ body {
 
 .schedule-scroll {
   overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
+  /* Own stacking context: the pinned team column stays inside the table and never paints over
+     menus above it (team picker). */
+  position: relative;
+  isolation: isolate;
 }
 
 .schedule-table {
@@ -116,6 +119,25 @@ body {
   .schedule-editable thead .team-col {
     z-index: 6;
     background-color: #8e0b20;
+  }
+}
+
+/* Once the measured overlay (ScheduleGrid) is drawn, the table's own team cells stop being sticky:
+   the overlay stays on the right while the days scroll underneath it. */
+.has-pinned-col .team-col {
+  position: static !important;
+  box-shadow: none;
+}
+
+.pinned-team-col > div {
+  border-bottom: 1px solid var(--grid-border);
+  border-inline-start: 1px solid var(--grid-border);
+  box-shadow: -6px 0 8px -8px rgba(80, 0, 16, 0.35);
+}
+
+@media print {
+  .has-pinned-col .team-col {
+    position: static !important;
   }
 }
 
