@@ -43,7 +43,7 @@ export function ScheduleView({
   return (
     <div className="mx-auto flex max-w-[1400px] flex-col gap-3 px-3 py-4 sm:px-5">
       <div
-        className={`no-print flex-wrap items-center justify-between gap-3 ${editable ? "flex" : "hidden md:flex"}`}
+        className={`no-print relative z-30 flex-wrap items-center justify-between gap-3 ${editable ? "flex" : "hidden md:flex"}`}
       >
         <div className={`items-center gap-2 ${editable ? "flex" : "hidden md:flex"}`}>
           <TeamFilter
