@@ -10,10 +10,10 @@ import { DurationPicker } from "@/components/DurationPicker";
 import { RecurrenceFields } from "@/components/RecurrenceFields";
 import { SeriesConflictReview } from "@/components/SeriesConflictReview";
 import {
-  DURATION_PRESETS,
   classifyBooking,
-  durationBetween,
-  durationLabelHe,
+  clocksAfterDurationChange,
+  clocksAfterEndChange,
+  clocksAfterStartChange,
   fallbackRotations,
   roundToQuarterHour,
   toMinutes,
@@ -80,46 +80,24 @@ export function BookingForm({
   const team = day.teams.find((item) => item.id === teamId);
   const allowed = team?.allowedSubdivisions ?? [];
   const rotations = day.rotations.length > 0 ? day.rotations : fallbackRotations();
-  const presetMinutes = new Set(DURATION_PRESETS.map((item) => item.minutes));
-  const presetDurations = (day.durations.length > 0 ? day.durations : DURATION_PRESETS).filter((item) =>
-    presetMinutes.has(item.minutes),
-  );
-  const durations =
-    duration > 0 && !presetMinutes.has(duration)
-      ? [...(presetDurations.length > 0 ? presetDurations : DURATION_PRESETS), { minutes: duration, labelHe: durationLabelHe(duration) }]
-      : presetDurations.length > 0
-        ? presetDurations
-        : DURATION_PRESETS;
   const rotation = rotations.find((item) => item.id === rotationId);
 
+  function applyClocks(next: { startTime: string; endTime: string; duration: number }) {
+    setStartTime(next.startTime);
+    setEndTime(next.endTime);
+    setDuration(next.duration);
+  }
+
   function applyStart(value: string) {
-    const next = roundToQuarterHour(value);
-    setStartTime(next);
-    if (!next) return;
-    if (duration > 0) {
-      setEndTime(roundToQuarterHour(toTime(toMinutes(next) + duration)));
-      return;
-    }
-    if (endTime) {
-      const minutes = durationBetween(next, endTime);
-      if (minutes > 0) setDuration(minutes);
-    }
+    applyClocks(clocksAfterStartChange({ startTime, endTime, duration }, value));
   }
 
   function applyEnd(value: string) {
-    const next = roundToQuarterHour(value);
-    setEndTime(next);
-    setDuration(startTime ? durationBetween(startTime, next) : 0);
+    applyClocks(clocksAfterEndChange({ startTime, endTime, duration }, value));
   }
 
   function applyDuration(minutes: number) {
-    if (!startTime) {
-      setDuration(minutes);
-      return;
-    }
-    const nextEnd = roundToQuarterHour(toTime(toMinutes(startTime) + minutes));
-    setEndTime(nextEnd);
-    setDuration(durationBetween(startTime, nextEnd) || minutes);
+    applyClocks(clocksAfterDurationChange({ startTime, endTime, duration }, minutes));
   }
 
   const occurrence = buildOccurrenceDates({
@@ -374,7 +352,7 @@ export function BookingForm({
             <p className="text-sm font-bold text-red-700">שעת הסיום חייבת להיות אחרי שעת ההתחלה</p>
           ) : null}
 
-          <DurationPicker value={duration} onChange={applyDuration} presets={durations} />
+          <DurationPicker value={duration} onChange={applyDuration} />
 
           {initial.slotId ? null : (
             <RecurrenceFields

@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { and, eq, gte, lte, ne, notInArray } from "drizzle-orm";
 import { ensureTrainingDuration, resolveRotationTemplateId } from "@/db/reference-seed";
 import { db, slotTrainingDetails, slots, teams } from "@/lib/db";
-import { durationBetween, roundToQuarterHour, toMinutes } from "@/lib/pitch-rules";
+import { durationAllowedForSave, durationBetween, roundToQuarterHour, toMinutes } from "@/lib/pitch-rules";
 import { parseSeriesChoices } from "@/lib/recurrence";
 import { formatDateHe, logChange } from "@/lib/history";
 import { bumpScheduleRevision } from "@/lib/schedule-revision";
@@ -166,6 +166,25 @@ export async function saveSlotForm(formData: FormData) {
   const durationMinutes = durationBetween(startTime, endTime);
   const rotationRaw = String(formData.get("rotationTemplateId") ?? "").trim();
   const type = String(formData.get("type"));
+  const slotId = idRaw ? Number(idRaw) : 0;
+  const [storedDuration] = slotId
+    ? await db
+        .select({ durationMinutes: slotTrainingDetails.durationMinutes })
+        .from(slotTrainingDetails)
+        .where(eq(slotTrainingDetails.slotId, slotId))
+        .limit(1)
+    : [];
+
+  if (durationMinutes > 0 && !durationAllowedForSave(durationMinutes, storedDuration?.durationMinutes)) {
+    redirect(
+      adminWeekPath(week, {
+        team: String(teamId),
+        date,
+        slot: idRaw || undefined,
+        error: "משך האימון יכול להיות רק שעה, שעה ו־45 דקות או שעתיים",
+      }),
+    );
+  }
 
   if (startTime && endTime && toMinutes(endTime) <= toMinutes(startTime)) {
     redirect(

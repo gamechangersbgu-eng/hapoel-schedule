@@ -118,9 +118,76 @@ export const ROTATION_PRESETS: {
 
 export const DURATION_PRESETS: { minutes: number; labelHe: string }[] = [
   { minutes: 60, labelHe: "שעה" },
-  { minutes: 105, labelHe: "שעה 45 דקות" },
+  { minutes: 105, labelHe: "שעה ו־45 דקות" },
   { minutes: 120, labelHe: "שעתיים" },
 ];
+
+/** True for the three training lengths in the club guidelines: 60, 105, and 120 minutes. */
+export function isOfficialDuration(minutes: number) {
+  return DURATION_PRESETS.some((item) => item.minutes === minutes);
+}
+
+/**
+ * A new length has to be one of the three official options.
+ * Saving an edit may keep a length that was already stored.
+ */
+export function durationAllowedForSave(minutes: number, previous?: number | null) {
+  if (isOfficialDuration(minutes)) return true;
+  return previous != null && previous > 0 && previous === minutes;
+}
+
+export type TrainingClocks = {
+  startTime: string;
+  endTime: string;
+  duration: number;
+};
+
+function endClockFor(start: string, minutes: number) {
+  const endTime = roundToQuarterHour(toTime(toMinutes(start) + minutes));
+  return durationBetween(start, endTime) === minutes ? endTime : "";
+}
+
+/**
+ * Move the start clock. A duration that is already chosen stays put and the end
+ * clock follows it, including a saved length that is not one of the three official options.
+ * With no duration yet, an end clock is kept only when the gap is an official length.
+ */
+export function clocksAfterStartChange(current: TrainingClocks, start: string): TrainingClocks {
+  const startTime = roundToQuarterHour(start);
+  if (!startTime) return { startTime: "", endTime: current.endTime, duration: current.duration };
+  if (current.duration > 0) {
+    return { startTime, endTime: endClockFor(startTime, current.duration), duration: current.duration };
+  }
+  const minutes = durationBetween(startTime, current.endTime);
+  if (isOfficialDuration(minutes)) return { startTime, endTime: current.endTime, duration: minutes };
+  return { startTime, endTime: "", duration: 0 };
+}
+
+/** Accept an end clock only when it lands on one of the three official lengths. */
+export function clocksAfterEndChange(current: TrainingClocks, end: string): TrainingClocks {
+  const endTime = roundToQuarterHour(end);
+  const minutes = durationBetween(current.startTime, endTime);
+  if (isOfficialDuration(minutes)) {
+    return { startTime: current.startTime, endTime, duration: minutes };
+  }
+  if (current.startTime && current.duration > 0) {
+    return {
+      startTime: current.startTime,
+      endTime: endClockFor(current.startTime, current.duration),
+      duration: current.duration,
+    };
+  }
+  return current;
+}
+
+/** Apply one official length. Anything else, including the old custom menu, is ignored. */
+export function clocksAfterDurationChange(current: TrainingClocks, minutes: number): TrainingClocks {
+  if (!isOfficialDuration(minutes)) return current;
+  if (!current.startTime) return { ...current, duration: minutes };
+  const endTime = endClockFor(current.startTime, minutes);
+  if (!endTime) return current;
+  return { startTime: current.startTime, endTime, duration: minutes };
+}
 
 export function fallbackRotations(): BoardRotation[] {
   return ROTATION_PRESETS.map((item) => ({
