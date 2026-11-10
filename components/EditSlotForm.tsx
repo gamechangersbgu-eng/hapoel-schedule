@@ -7,7 +7,16 @@ import { RecurrenceFields } from "@/components/RecurrenceFields";
 import { SeriesConflictReview } from "@/components/SeriesConflictReview";
 import { TypeAndCampFields } from "@/components/TypeAndCampFields";
 import { SLOT_TYPES, isCampSlot } from "@/lib/slot-types";
-import { durationBetween, roundToQuarterHour, toMinutes, toTime, type BoardRotation } from "@/lib/pitch-rules";
+import {
+  clocksAfterDurationChange,
+  clocksAfterEndChange,
+  clocksAfterStartChange,
+  durationBetween,
+  roundToQuarterHour,
+  toMinutes,
+  toTime,
+  type BoardRotation,
+} from "@/lib/pitch-rules";
 import { buildOccurrenceDates, occurrenceDecision, type OccurrencePreview, type SeriesChoice } from "@/lib/recurrence";
 import type { SlotDTO, TeamDTO } from "@/lib/types";
 import { addDaysISO } from "@/lib/week";
@@ -127,35 +136,23 @@ export function EditSlotForm({
     formRef.current?.requestSubmit();
   }
 
+  function applyClocks(next: { startTime: string; endTime: string; duration: number }) {
+    setStartTime(next.startTime);
+    setEndTime(next.endTime);
+    setDuration(next.duration);
+  }
+
   function applyStart(value: string) {
-    const next = roundToQuarterHour(value);
-    setStartTime(next);
+    applyClocks(clocksAfterStartChange({ startTime, endTime, duration }, value));
     setRotationId(null);
-    if (!next) return;
-    if (duration > 0) {
-      setEndTime(roundToQuarterHour(toTime(toMinutes(next) + duration)));
-      return;
-    }
-    if (endTime) {
-      const minutes = durationBetween(next, endTime);
-      if (minutes > 0) setDuration(minutes);
-    }
   }
 
   function applyEnd(value: string) {
-    const next = roundToQuarterHour(value);
-    setEndTime(next);
-    setDuration(startTime ? durationBetween(startTime, next) : 0);
+    applyClocks(clocksAfterEndChange({ startTime, endTime, duration }, value));
   }
 
   function applyDuration(minutes: number) {
-    if (!startTime) {
-      setDuration(minutes);
-      return;
-    }
-    const nextEnd = roundToQuarterHour(toTime(toMinutes(startTime) + minutes));
-    setEndTime(nextEnd);
-    setDuration(durationBetween(startTime, nextEnd) || minutes);
+    applyClocks(clocksAfterDurationChange({ startTime, endTime, duration }, minutes));
   }
 
   function pickRotationTime(id: number, time: string) {

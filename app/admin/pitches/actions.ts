@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { ensureTrainingDuration, resolveRotationTemplateId } from "@/db/reference-seed";
 import { db, pitches, slotTrainingDetails, slots } from "@/lib/db";
-import { checkBooking, durationBetween, getPitchDay, roundToQuarterHour, toMinutes, toTime } from "@/lib/pitch-board";
+import { checkBooking, durationAllowedForSave, durationBetween, getPitchDay, roundToQuarterHour, toMinutes, toTime } from "@/lib/pitch-board";
 import { parseSeriesChoices } from "@/lib/recurrence";
 import { bumpScheduleRevision } from "@/lib/schedule-revision";
 import { deleteTrainingScope, previewSeries, saveTrainingSeries } from "@/lib/training-series";
@@ -68,6 +68,17 @@ export async function saveBoardBooking(formData: FormData) {
   if (!TIME_RE.test(startTime)) back("יש לבחור שעת התחלה");
   if (!TIME_RE.test(endTime) || durationMinutes <= 0) back("יש לבחור שעת סיום שאחרי שעת ההתחלה");
   if (durationMinutes > 12 * 60) back("משך האימון ארוך מדי");
+  const slotId = idRaw ? Number(idRaw) : 0;
+  const [storedDuration] = slotId
+    ? await db
+        .select({ durationMinutes: slotTrainingDetails.durationMinutes })
+        .from(slotTrainingDetails)
+        .where(eq(slotTrainingDetails.slotId, slotId))
+        .limit(1)
+    : [];
+  if (!durationAllowedForSave(durationMinutes, storedDuration?.durationMinutes)) {
+    back("משך האימון יכול להיות רק שעה, שעה ו־45 דקות או שעתיים");
+  }
   if (!cancelled && String(formData.get("series") ?? "") === "1" && !idRaw) {
     await saveBoardSeries(formData, {
       date,
