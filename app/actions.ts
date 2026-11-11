@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { and, eq, gte, lte, ne, notInArray } from "drizzle-orm";
 import { ensureTrainingDuration, resolveRotationTemplateId } from "@/db/reference-seed";
 import { db, slotTrainingDetails, slots, teams } from "@/lib/db";
-import { durationAllowedForSave, durationBetween, roundToQuarterHour, toMinutes } from "@/lib/pitch-rules";
+import { OFFICIAL_DURATION_ERROR_HE, durationAllowedForSave, durationBetween, roundToQuarterHour, toMinutes } from "@/lib/pitch-rules";
 import { parseSeriesChoices } from "@/lib/recurrence";
 import { formatDateHe, logChange } from "@/lib/history";
 import { bumpScheduleRevision } from "@/lib/schedule-revision";
@@ -181,7 +181,7 @@ export async function saveSlotForm(formData: FormData) {
         team: String(teamId),
         date,
         slot: idRaw || undefined,
-        error: "משך האימון יכול להיות רק שעה, שעה ו־45 דקות או שעתיים",
+        error: OFFICIAL_DURATION_ERROR_HE,
       }),
     );
   }

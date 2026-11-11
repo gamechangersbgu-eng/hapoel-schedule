@@ -10,6 +10,7 @@ import { asc, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/neon-http";
 import * as schema from "../db/schema/index";
 import { SUBDIVISION_SHORT } from "../lib/pitch-rules";
+import { applyCoachLabels, coachFullNameByTeam } from "../lib/team-labels";
 
 const url =
   process.env.NETLIFY_DATABASE_URL?.trim() ||
@@ -32,7 +33,7 @@ if (!out) {
 async function main() {
   const db = drizzle(url as string, { schema });
 
-  const [settingsRows, teamRows, slotRows, people] = await Promise.all([
+  const [settingsRows, teamRows, slotRows, people, coachLinks] = await Promise.all([
     db.select().from(schema.settings).where(eq(schema.settings.id, 1)).limit(1),
     db
       .select()
@@ -42,7 +43,21 @@ async function main() {
       .select()
       .from(schema.slots)
       .orderBy(asc(schema.slots.date), asc(schema.slots.startTime), asc(schema.slots.id)),
-    db.select({ id: schema.staff.id, name: schema.staff.displayName }).from(schema.staff),
+    db
+      .select({
+        id: schema.staff.id,
+        name: schema.staff.displayName,
+        receivesAllUpdates: schema.staff.receivesAllUpdates,
+      })
+      .from(schema.staff),
+    db
+      .select({
+        teamId: schema.teamCoaches.teamId,
+        staffId: schema.teamCoaches.staffId,
+        coachName: schema.teamCoaches.coachName,
+        isPrimary: schema.teamCoaches.isPrimary,
+      })
+      .from(schema.teamCoaches),
   ]);
 
   const settings = settingsRows[0];
@@ -51,6 +66,7 @@ async function main() {
   }
 
   const substituteNames = new Map(people.map((person) => [person.id, person.name]));
+  const fieldPeople = people.filter((person) => !person.receivesAllUpdates);
   const ids = slotRows.map((slot) => slot.id);
 
   const trainingRows = ids.length
@@ -77,12 +93,18 @@ async function main() {
     version: 1 as const,
     clubName: settings.clubName,
     seasonStartDate: settings.seasonStartDate,
-    teams: teamRows.map((team) => ({
-      id: team.id,
-      name: team.name,
-      sortOrder: team.sortOrder,
-      isComments: team.isComments,
-    })),
+    teams: applyCoachLabels(
+      teamRows.map((team) => ({
+        id: team.id,
+        name: team.name,
+        sortOrder: team.sortOrder,
+        isComments: team.isComments,
+      })),
+      coachFullNameByTeam(
+        coachLinks.filter((link) => link.staffId == null || fieldPeople.some((person) => person.id === link.staffId)),
+        fieldPeople,
+      ),
+    ),
     slots: slotRows.map((slot) => {
       const game = gameBySlot.get(slot.id);
       return {
@@ -105,7 +127,11 @@ async function main() {
     }),
   };
 
-  writeFileSync(out, `${JSON.stringify(snapshot, null, 2)}\n`);
+  const serialized = JSON.stringify(snapshot, null, 2);
+  if (serialized.includes('"nationalId"') || serialized.includes('"national_id"')) {
+    throw new Error("Public snapshot must not include national id numbers.");
+  }
+  writeFileSync(out, `${serialized}\n`);
   console.log(
     `Postgres snapshot: ${snapshot.teams.length} teams, ${snapshot.slots.length} slots (${gameRows.length} game rows, ${trainingRows.length} training rows) -> ${out}`,
   );

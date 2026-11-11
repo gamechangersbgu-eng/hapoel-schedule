@@ -1,7 +1,7 @@
 import type { PitchCode, PitchSubdivisionCode } from "./pitch";
 import type { TeamAgeBandCode } from "./team";
 
-export const TRAINING_DURATION_MINUTES = [60, 105, 120] as const;
+export const TRAINING_DURATION_MINUTES = [60, 90, 105, 120] as const;
 
 export type TrainingDurationMinutes = (typeof TRAINING_DURATION_MINUTES)[number];
 

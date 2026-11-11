@@ -12,7 +12,7 @@ type Props = { searchParams: Promise<{ error?: string; done?: string; edit?: str
 const input = "rounded-md border border-zinc-300 bg-white px-2.5 py-1.5 text-sm";
 const button = "rounded-md px-3 py-1.5 text-sm font-bold";
 
-type Person = { id: number; name: string; phone: string | null; isActive: boolean };
+type Person = { id: number; name: string; phone: string | null; isActive: boolean; nationalId: string | null };
 
 function PeopleBank({ bank, title, hint, people, phoneRequired }: {
   bank: "medics" | "drivers";
@@ -45,6 +45,20 @@ function PeopleBank({ bank, title, hint, people, phoneRequired }: {
                 className={`${input} w-36`}
                 required={phoneRequired}
               />
+              <input
+                name="nationalId"
+                defaultValue={person.nationalId ?? ""}
+                aria-label="תעודת זהות"
+                dir="ltr"
+                inputMode="numeric"
+                autoComplete="off"
+                maxLength={9}
+                pattern="[0-9]{9}"
+                placeholder="תעודת זהות"
+                title="9 ספרות, אפשר אפסים מובילים"
+                className={`${input} w-32`}
+                required
+              />
               <button type="submit" className={`${button} ring-1 ring-zinc-300 hover:bg-zinc-50`}>
                 שמירה
               </button>
@@ -64,6 +78,7 @@ function PeopleBank({ bank, title, hint, people, phoneRequired }: {
         <input type="hidden" name="bank" value={bank} />
         <input name="name" placeholder="שם מלא" className={`${input} min-w-36 flex-1`} required />
         <input name="phone" placeholder={phoneRequired ? "טלפון" : "טלפון (לא חובה)"} dir="ltr" inputMode="tel" className={`${input} w-40`} required={phoneRequired} />
+        <input name="nationalId" placeholder="תעודת זהות" aria-label="תעודת זהות" dir="ltr" inputMode="numeric" autoComplete="off" maxLength={9} pattern="[0-9]{9}" title="9 ספרות, אפשר אפסים מובילים" className={`${input} w-32`} required />
         <button type="submit" className={`${button} bg-[#c8102e] text-white`}>
           + הוספה
         </button>
@@ -95,18 +110,21 @@ export default async function BanksPage({ searchParams }: Props) {
         <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800 ring-1 ring-emerald-200">{done}</p>
       ) : null}
 
+      <p className="text-sm text-zinc-600">
+        בנק חובשים ונהגים: ת&quot;ז היא 9 ספרות (אפשר אפסים מובילים) ונבדקת גם ספרת ביקורת. היא לא נכנסת ללוח ב-GitHub Pages ולא לקובץ הייצוא הציבורי.
+      </p>
       <div className="grid gap-4 lg:grid-cols-2">
         <PeopleBank
           bank="medics"
           title="בנק חובשים"
-          hint="חובשים שאפשר לשבץ למשחקי בית."
+          hint="חובשים שאפשר לשבץ למשחקי בית. תעודת הזהות נשמרת רק כאן ולא מופיעה בלוח הציבורי."
           people={medicRows}
           phoneRequired={false}
         />
         <PeopleBank
           bank="drivers"
           title="בנק נהגים"
-          hint="נהגים שאפשר לשבץ למשחקי חוץ. הטלפון מוצג לצוות במשחק."
+          hint="נהגים שאפשר לשבץ למשחקי חוץ. הטלפון מוצג לצוות במשחק. תעודת הזהות נשמרת רק כאן ולא מופיעה בלוח הציבורי."
           people={driverRows}
           phoneRequired
         />

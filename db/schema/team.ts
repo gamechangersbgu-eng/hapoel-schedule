@@ -59,6 +59,8 @@ export const staff = pgTable("staff", {
   phone: text(),
   email: text(),
   notes: text(),
+  /** Management: include this person on every team's schedule updates. */
+  receivesAllUpdates: boolean("receives_all_updates").notNull().default(false),
 });
 
 export const staffWorkDays = pgTable(
@@ -111,6 +113,8 @@ export const medics = pgTable("medics", {
   id: serial().primaryKey(),
   name: text().notNull(),
   phone: text(),
+  /** Israeli ID (ת"ז), 9 digits stored as text so leading zeros stay. Admin only. */
+  nationalId: text("national_id"),
   isActive: boolean("is_active").notNull().default(true),
 });
 
@@ -119,5 +123,7 @@ export const drivers = pgTable("drivers", {
   id: serial().primaryKey(),
   name: text().notNull(),
   phone: text().notNull(),
+  /** Israeli ID (ת"ז), 9 digits stored as text so leading zeros stay. Admin only. */
+  nationalId: text("national_id"),
   isActive: boolean("is_active").notNull().default(true),
 });

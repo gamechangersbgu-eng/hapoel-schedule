@@ -66,7 +66,7 @@ async function seedGameBanks(database: Db) {
   ]);
 }
 
-/** Inserts the standard training lengths (60 / 105 / 120) when they are missing. */
+/** Inserts the standard training lengths (60 / 90 / 105 / 120) when they are missing. */
 export async function ensureTrainingDurations(database: Db) {
   const existing = await database
     .select({ minutes: trainingSessionDurations.minutes })
@@ -356,6 +356,7 @@ export const TEAM_AGE_BAND_BY_NAME: Record<string, string | null> = {
   "נערים ג": "noar_through_yeladim_b",
   "ילדים א אדום": "noar_through_yeladim_b",
   "ילדים א לבן": "noar_through_yeladim_b",
+  "ילדים א שחר": "noar_through_yeladim_b",
   "ילדים ב אדום": "noar_through_yeladim_b",
   "ילדים ב לבן": "noar_through_yeladim_b",
   "ילדים ג אדום": "yeladim_g_through_trum_g",
@@ -366,6 +367,7 @@ export const TEAM_AGE_BAND_BY_NAME: Record<string, string | null> = {
   "טרום ב לבן": "yeladim_g_through_trum_g",
   "טרום ג אדום": "yeladim_g_through_trum_g",
   "טרום ג לבן": "yeladim_g_through_trum_g",
+  "טרום ג עבדאללה": "yeladim_g_through_trum_g",
   "ילדות א": "noar_through_yeladim_b",
   "ילדות ב": "noar_through_yeladim_b",
   "בית ספר לכדורגל": "football_school",

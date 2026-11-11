@@ -6,9 +6,11 @@ import {
   slotTrainingDetails,
   slots as slotsTable,
   staff,
+  teamCoaches,
   teams as teamsTable,
 } from "@/lib/db";
 import { SUBDIVISION_SHORT, toMinutes, toTime } from "@/lib/pitch-rules";
+import { applyCoachLabels, coachFullNameByTeam } from "@/lib/team-labels";
 import type { SlotDTO, WeekData } from "@/lib/types";
 import { resolveWeekStart, weekDates, weekNumber } from "@/lib/week";
 
@@ -44,7 +46,7 @@ export async function getWeekData(weekParam?: string | null): Promise<WeekData> 
   const weekStart = resolveWeekStart(weekParam);
   const dates = weekDates(weekStart);
 
-  const [[settings], teams, slots, people] = await Promise.all([
+  const [[settings], teamRows, slots, people, coachLinks] = await Promise.all([
     db.select().from(settingsTable).where(eq(settingsTable.id, 1)).limit(1),
     db.select().from(teamsTable).orderBy(asc(teamsTable.sortOrder)),
     db
@@ -61,8 +63,24 @@ export async function getWeekData(weekParam?: string | null): Promise<WeekData> 
         ),
       )
       .orderBy(asc(slotsTable.startTime), asc(slotsTable.id)),
-    db.select({ id: staff.id, name: staff.displayName }).from(staff),
+    db.select({ id: staff.id, name: staff.displayName, receivesAllUpdates: staff.receivesAllUpdates }).from(staff),
+    db
+      .select({
+        teamId: teamCoaches.teamId,
+        staffId: teamCoaches.staffId,
+        coachName: teamCoaches.coachName,
+        isPrimary: teamCoaches.isPrimary,
+      })
+      .from(teamCoaches),
   ]);
+  const fieldPeople = people.filter((person) => !person.receivesAllUpdates);
+  const teams = applyCoachLabels(
+    teamRows,
+    coachFullNameByTeam(
+      coachLinks.filter((link) => link.staffId == null || fieldPeople.some((person) => person.id === link.staffId)),
+      fieldPeople,
+    ),
+  );
   const substituteNames = new Map(people.map((person) => [person.id, person.name]));
   const ids = slots.map((slot) => slot.id);
   const [trainingRows, gameRows] = ids.length

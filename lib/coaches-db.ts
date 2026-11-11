@@ -14,7 +14,9 @@ export async function getCoaches(): Promise<CoachInfo[]> {
     id: person.id,
     name: person.displayName,
     phone: person.phone,
+    email: person.email,
     roleLabel: person.roleLabel,
+    receivesAllUpdates: person.receivesAllUpdates,
     teamIds: links.filter((link) => link.staffId === person.id).map((link) => link.teamId),
     workDays: days.filter((day) => day.staffId === person.id).map((day) => day.weekday).sort(),
     absences: absences

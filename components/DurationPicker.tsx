@@ -7,7 +7,7 @@ type DurationPickerProps = {
   onChange: (minutes: number) => void;
 };
 
-/** The three training lengths from the club guidelines. No custom duration menu. */
+/** The official training lengths from the club guidelines. No custom duration menu. */
 export function DurationPicker({ value, onChange }: DurationPickerProps) {
   const savedLegacy = value > 0 && !isOfficialDuration(value);
   const chip = (active: boolean) =>
@@ -33,7 +33,7 @@ export function DurationPicker({ value, onChange }: DurationPickerProps) {
       </div>
       {savedLegacy ? (
         <p className="text-xs font-semibold text-amber-800">
-          האימון שמור ל־{durationLabelHe(value)}. זה לא אחד משלושת המשמכים במסמך — בחרו שעה, שעה ו־45 דקות או שעתיים כדי לעדכן.
+          האימון שמור ל־{durationLabelHe(value)}. זה לא אחד מארבעת המשמכים — בחרו שעה, שעה וחצי, שעה ו־45 דקות או שעתיים כדי לעדכן.
         </p>
       ) : (
         <p className="text-xs font-semibold text-zinc-500">בחירת משך מעדכנת את שעת הסיום לפי שעת ההתחלה.</p>

@@ -118,17 +118,21 @@ export const ROTATION_PRESETS: {
 
 export const DURATION_PRESETS: { minutes: number; labelHe: string }[] = [
   { minutes: 60, labelHe: "שעה" },
+  { minutes: 90, labelHe: "שעה וחצי" },
   { minutes: 105, labelHe: "שעה ו־45 דקות" },
   { minutes: 120, labelHe: "שעתיים" },
 ];
 
-/** True for the three training lengths in the club guidelines: 60, 105, and 120 minutes. */
+export const OFFICIAL_DURATION_ERROR_HE =
+  "משך האימון יכול להיות רק שעה, שעה וחצי, שעה ו־45 דקות או שעתיים";
+
+/** True for the official training lengths: 60, 90, 105, and 120 minutes. */
 export function isOfficialDuration(minutes: number) {
   return DURATION_PRESETS.some((item) => item.minutes === minutes);
 }
 
 /**
- * A new length has to be one of the three official options.
+ * A new length has to be one of the official options.
  * Saving an edit may keep a length that was already stored.
  */
 export function durationAllowedForSave(minutes: number, previous?: number | null) {
@@ -149,7 +153,7 @@ function endClockFor(start: string, minutes: number) {
 
 /**
  * Move the start clock. A duration that is already chosen stays put and the end
- * clock follows it, including a saved length that is not one of the three official options.
+ * clock follows it, including a saved length that is not one of the official options.
  * With no duration yet, an end clock is kept only when the gap is an official length.
  */
 export function clocksAfterStartChange(current: TrainingClocks, start: string): TrainingClocks {
@@ -163,7 +167,7 @@ export function clocksAfterStartChange(current: TrainingClocks, start: string): 
   return { startTime, endTime: "", duration: 0 };
 }
 
-/** Accept an end clock only when it lands on one of the three official lengths. */
+/** Accept an end clock only when it lands on one of the official lengths. */
 export function clocksAfterEndChange(current: TrainingClocks, end: string): TrainingClocks {
   const endTime = roundToQuarterHour(end);
   const minutes = durationBetween(current.startTime, endTime);
