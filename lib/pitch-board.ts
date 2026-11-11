@@ -28,6 +28,7 @@ import {
 
 export * from "@/lib/pitch-rules";
 import { getCoaches } from "@/lib/coaches-db";
+import { applyCoachLabels, coachFullNameByTeam } from "@/lib/team-labels";
 
 type PitchCatalog = Omit<PitchDay, "date" | "bookings">;
 type LoadedCatalog = { catalog: PitchCatalog; teamName: Record<number, string> };
@@ -50,13 +51,30 @@ async function loadCatalog(): Promise<LoadedCatalog> {
     allowed.set(row.ageBandCode, [...(allowed.get(row.ageBandCode) ?? []), row.subdivisionCode]);
   }
 
+  const fieldCoaches = coaches.filter((coach) => !coach.receivesAllUpdates);
+  const labeledTeams = applyCoachLabels(
+    teamRows,
+    coachFullNameByTeam(
+      fieldCoaches.flatMap((coach) =>
+        coach.teamIds.map((teamId) => ({
+          teamId,
+          staffId: coach.id,
+          coachName: coach.name,
+          isPrimary: true,
+        })),
+      ),
+      fieldCoaches.map((coach) => ({ id: coach.id, name: coach.name })),
+    ),
+  );
+  const labeledById = new Map(labeledTeams.map((team) => [team.id, team]));
+
   return {
     catalog: {
       pitches: pitchRows,
       subdivisions: subdivisionRows,
       durations: durationRows,
       rotations: rotationRows,
-      teams: teamRows
+      teams: labeledTeams
         .filter((team) => !team.isComments)
         .map((team) => ({
           id: team.id,
@@ -74,9 +92,9 @@ async function loadCatalog(): Promise<LoadedCatalog> {
         biweekly: rule.biweekly,
         noteHe: rule.noteHe,
       })),
-      coaches,
+      coaches: fieldCoaches,
     },
-    teamName: Object.fromEntries(teamRows.map((team) => [team.id, team.name])),
+    teamName: Object.fromEntries(teamRows.map((team) => [team.id, labeledById.get(team.id)?.name ?? team.name])),
   };
 }
 

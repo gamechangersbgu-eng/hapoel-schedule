@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { ensureTrainingDuration, resolveRotationTemplateId } from "@/db/reference-seed";
 import { db, pitches, slotTrainingDetails, slots } from "@/lib/db";
-import { checkBooking, durationAllowedForSave, durationBetween, getPitchDay, roundToQuarterHour, toMinutes, toTime } from "@/lib/pitch-board";
+import { OFFICIAL_DURATION_ERROR_HE, checkBooking, durationAllowedForSave, durationBetween, getPitchDay, roundToQuarterHour, toMinutes, toTime } from "@/lib/pitch-board";
 import { parseSeriesChoices } from "@/lib/recurrence";
 import { bumpScheduleRevision } from "@/lib/schedule-revision";
 import { deleteTrainingScope, previewSeries, saveTrainingSeries } from "@/lib/training-series";
@@ -77,7 +77,7 @@ export async function saveBoardBooking(formData: FormData) {
         .limit(1)
     : [];
   if (!durationAllowedForSave(durationMinutes, storedDuration?.durationMinutes)) {
-    back("משך האימון יכול להיות רק שעה, שעה ו־45 דקות או שעתיים");
+    back(OFFICIAL_DURATION_ERROR_HE);
   }
   if (!cancelled && String(formData.get("series") ?? "") === "1" && !idRaw) {
     await saveBoardSeries(formData, {

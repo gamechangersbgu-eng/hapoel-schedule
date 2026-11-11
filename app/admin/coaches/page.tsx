@@ -2,15 +2,17 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { asc } from "drizzle-orm";
 import { AdminShell } from "@/components/AdminShell";
-import { addAbsence, deleteAbsence, deleteCoach, saveCoach } from "@/app/admin/coaches/actions";
+import { addAbsence, deleteAbsence, deleteCoach, deleteManagement, saveCoach, saveManagement } from "@/app/admin/coaches/actions";
 import { requireAdmin } from "@/lib/auth";
 import { ABSENCE_TYPES, WEEKDAY_LETTERS, absenceLabel, absenceOn } from "@/lib/coaches";
 import { getCoaches } from "@/lib/coaches-db";
 import { db, teams as teamsTable } from "@/lib/db";
+import { applyCoachLabels, coachFullNameByTeam } from "@/lib/team-labels";
+import { MANAGEMENT_ROLES, isManagementRole } from "@/lib/update-recipients";
 import { formatDayMonth, formatISODate } from "@/lib/week";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "מאמנים · מצב מנהל" };
+export const metadata: Metadata = { title: "מאמנים והנהלה · מצב מנהל" };
 
 type Props = { searchParams: Promise<{ edit?: string; new?: string; error?: string; done?: string }> };
 const field = "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-base";
@@ -27,14 +29,31 @@ export default async function CoachesPage({ searchParams }: Props) {
     getCoaches(),
     db.select().from(teamsTable).orderBy(asc(teamsTable.sortOrder)),
   ]);
-  const teams = teamRows.filter((team) => !team.isComments);
+  const storedTeams = teamRows.filter((team) => !team.isComments);
+  const fieldCoaches = coaches.filter((coach) => !coach.receivesAllUpdates);
+  const management = coaches.filter((coach) => coach.receivesAllUpdates);
+  const teams = applyCoachLabels(
+    storedTeams,
+    coachFullNameByTeam(
+      fieldCoaches.flatMap((coach) =>
+        coach.teamIds.map((teamId) => ({
+          teamId,
+          staffId: coach.id,
+          coachName: coach.name,
+          isPrimary: true,
+        })),
+      ),
+      fieldCoaches.map((coach) => ({ id: coach.id, name: coach.name })),
+    ),
+  );
   const today = formatISODate(new Date());
-  const editing = params.edit ? coaches.find((coach) => coach.id === Number(params.edit)) : undefined;
+  const editing = params.edit ? fieldCoaches.find((coach) => coach.id === Number(params.edit)) : undefined;
   const showForm = Boolean(params.new) || Boolean(editing);
-  const uncovered = teams.filter((team) => !coaches.some((coach) => coach.teamIds.includes(team.id)));
+  const uncovered = teams.filter((team) => !fieldCoaches.some((coach) => coach.teamIds.includes(team.id)));
+  const missingRoles = MANAGEMENT_ROLES.filter((role) => !management.some((person) => person.roleLabel === role));
 
   return (
-    <AdminShell user={user} title="מאמנים" current="/admin/coaches">
+    <AdminShell user={user} title="מאמנים והנהלה" current="/admin/coaches">
       {params.done ? (
         <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800 ring-1 ring-emerald-200">{params.done}</p>
       ) : null}
@@ -44,7 +63,7 @@ export default async function CoachesPage({ searchParams }: Props) {
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-zinc-600">
-          מאמנים, הקבוצות שלהם, ימי עבודה והיעדרויות. לוח המגרשים מתריע כשמאמן בהיעדרות, לא עובד באותו יום, או משובץ לשתי קבוצות באותו זמן.
+          מאמנים, הקבוצות שלהם, ימי עבודה והיעדרויות. קבוצות מילדים א עד טרום ג מוצגות לפי השם הפרטי של המאמן (למשל ילדים ב נועם). אם יש כמה מאמנים, מוצג מי שנוסף ראשון. לוח המגרשים מתריע כשמאמן בהיעדרות, לא עובד באותו יום, או משובץ לשתי קבוצות באותו זמן.
         </p>
         <Link href="/admin/coaches?new=1" className="rounded-lg bg-[#c8102e] px-4 py-2 text-sm font-black text-white">+ מאמן חדש</Link>
       </div>
@@ -56,9 +75,9 @@ export default async function CoachesPage({ searchParams }: Props) {
       ) : null}
 
       <section className="rounded-2xl bg-white shadow-sm ring-1 ring-black/5">
-        {coaches.length === 0 ? <p className="px-5 py-6 text-center text-zinc-600">עוד אין מאמנים ברשימה.</p> : null}
+        {fieldCoaches.length === 0 ? <p className="px-5 py-6 text-center text-zinc-600">עוד אין מאמנים ברשימה.</p> : null}
         <ul className="divide-y divide-zinc-100">
-          {coaches.map((coach) => {
+          {fieldCoaches.map((coach) => {
             const away = absenceOn(coach, today);
             const upcoming = coach.absences.filter((item) => (item.endDate ?? item.startDate) >= today);
             return (
@@ -80,6 +99,80 @@ export default async function CoachesPage({ searchParams }: Props) {
             );
           })}
         </ul>
+      </section>
+
+      <section className="rounded-2xl bg-white shadow-sm ring-1 ring-black/5">
+        <div className="border-b border-zinc-100 px-5 py-3">
+          <h2 className="text-lg font-black text-[#8e0b20]">הנהלה — עדכונים מכל הקבוצות</h2>
+          <p className="text-sm text-zinc-600">
+            מנהל מקצועי, מנהל מחלקה, מנהל חטיבה צעירה וראש מערך שוערים מקבלים כל שינוי לוח ואת לוח האימונים, באותו ערוץ כמו המאמנים: הטלפון והאימייל שנשמרים כאן. הם לא משויכים לקבוצה אחת.
+          </p>
+        </div>
+        {missingRoles.length ? (
+          <p className="mx-5 mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900 ring-1 ring-amber-200">
+            תפקידים בלי איש קשר: {missingRoles.join(", ")}
+          </p>
+        ) : (
+          <p className="mx-5 mt-3 text-sm font-bold text-emerald-800">לכל ארבעת תפקידי ההנהלה יש איש קשר.</p>
+        )}
+        <ul className="mt-2 divide-y divide-zinc-100">
+          {management.length === 0 ? <li className="px-5 py-3 text-sm text-zinc-500">עוד אין אנשי הנהלה ברשימה.</li> : null}
+          {management.map((person) => (
+            <li key={person.id} className="px-5 py-3">
+              <form action={saveManagement} className="grid gap-2 sm:grid-cols-2">
+                <input type="hidden" name="id" value={person.id} />
+                <label className={label}>
+                  שם מלא
+                  <input name="name" className={field} defaultValue={person.name} required />
+                </label>
+                <label className={label}>
+                  תפקיד
+                  <select name="roleLabel" className={field} defaultValue={isManagementRole(person.roleLabel ?? "") ? person.roleLabel ?? "" : MANAGEMENT_ROLES[0]}>
+                    {MANAGEMENT_ROLES.map((role) => (
+                      <option key={role} value={role}>{role}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className={label}>
+                  טלפון
+                  <input name="phone" dir="ltr" inputMode="tel" className={field} defaultValue={person.phone ?? ""} />
+                </label>
+                <label className={label}>
+                  אימייל
+                  <input name="email" type="email" dir="ltr" className={field} defaultValue={person.email ?? ""} />
+                </label>
+                <button type="submit" className="min-h-10 rounded-lg text-sm font-black ring-1 ring-zinc-300 sm:col-span-2">שמירה</button>
+              </form>
+              <form action={deleteManagement} className="mt-1">
+                <input type="hidden" name="id" value={person.id} />
+                <button type="submit" className="text-xs font-bold text-red-700 underline">הסרה</button>
+              </form>
+            </li>
+          ))}
+        </ul>
+        <form action={saveManagement} className="grid gap-2 border-t border-zinc-100 bg-zinc-50/60 px-5 py-3 sm:grid-cols-2">
+          <label className={label}>
+            שם מלא
+            <input name="name" className={field} required />
+          </label>
+          <label className={label}>
+            תפקיד
+            <select name="roleLabel" className={field} defaultValue={missingRoles[0] ?? MANAGEMENT_ROLES[0]}>
+              {MANAGEMENT_ROLES.map((role) => (
+                <option key={role} value={role}>{role}</option>
+              ))}
+            </select>
+          </label>
+          <label className={label}>
+            טלפון
+            <input name="phone" dir="ltr" inputMode="tel" className={field} />
+          </label>
+          <label className={label}>
+            אימייל
+            <input name="email" type="email" dir="ltr" className={field} />
+          </label>
+          <button type="submit" className="min-h-11 rounded-lg bg-[#c8102e] text-sm font-black text-white sm:col-span-2">+ הוספה להנהלה</button>
+        </form>
       </section>
 
       {showForm ? (

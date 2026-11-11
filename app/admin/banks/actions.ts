@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { cities, db, drivers, medics } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
 import { logChange } from "@/lib/history";
+import { nationalIdError, normalizeNationalId } from "@/lib/national-id";
 import { saveOpponentMapping } from "@/lib/opponent-cities";
 
 type Bank = "medics" | "drivers" | "cities";
@@ -38,15 +39,21 @@ export async function saveBankItem(formData: FormData) {
     const values = { name, travelMinutesFromBeerSheva: Math.round(minutes), northOfHaderaLine: north };
     if (id) await db.update(cities).set(values).where(eq(cities.id, id));
     else await db.insert(cities).values(values);
-  } else if (bank === "medics") {
-    const values = { name, phone: phone || null };
-    if (id) await db.update(medics).set(values).where(eq(medics.id, id));
-    else await db.insert(medics).values({ ...values, isActive: true });
-  } else {
-    if (!phone) done("לנהג צריך מספר טלפון", true);
-    const values = { name, phone };
-    if (id) await db.update(drivers).set(values).where(eq(drivers.id, id));
-    else await db.insert(drivers).values({ ...values, isActive: true });
+  } else if (bank === "medics" || bank === "drivers") {
+    const idError = nationalIdError(String(formData.get("nationalId") ?? ""));
+    if (idError) done(idError, true);
+    const nationalId = normalizeNationalId(String(formData.get("nationalId") ?? ""));
+    if (!nationalId) done("תעודת זהות חייבת להיות 9 ספרות (אפשר אפסים מובילים)", true);
+    if (bank === "medics") {
+      const values = { name, phone: phone || null, nationalId };
+      if (id) await db.update(medics).set(values).where(eq(medics.id, id));
+      else await db.insert(medics).values({ ...values, isActive: true });
+    } else {
+      if (!phone) done("לנהג צריך מספר טלפון", true);
+      const values = { name, phone, nationalId };
+      if (id) await db.update(drivers).set(values).where(eq(drivers.id, id));
+      else await db.insert(drivers).values({ ...values, isActive: true });
+    }
   }
   await logChange({ action: "bank", summary: `${id ? "עודכן" : "נוסף"} ${LABEL[bank]}: ${name}` });
   done(`${LABEL[bank]} ${name} ${id ? "עודכן" : "נוסף"}`);

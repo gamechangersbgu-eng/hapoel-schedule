@@ -30,6 +30,11 @@ export type StaffMemberRef = {
   displayName: string;
   roleLabel: string | null;
   workWeekdays: number[];
+  /**
+   * Management contacts receive schedule updates for every team, on the same
+   * channels as coaches (phone and email on the staff row). Coaches leave this unset.
+   */
+  receivesAllUpdates?: boolean;
 };
 
 export type StaffUnavailabilityRef = {

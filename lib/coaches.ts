@@ -17,7 +17,10 @@ export type CoachInfo = {
   id: number;
   name: string;
   phone: string | null;
+  email: string | null;
   roleLabel: string | null;
+  /** Management contacts are told about every team, not only the teams they coach. */
+  receivesAllUpdates: boolean;
   teamIds: number[];
   workDays: number[];
   absences: { id: number; type: string; startDate: string; endDate: string | null; note: string | null }[];

@@ -7,6 +7,7 @@ import { db, staff, staffUnavailability, staffWorkDays, teamCoaches, teams } fro
 import { requireAdmin } from "@/lib/auth";
 import { ABSENCE_TYPES, absenceLabel } from "@/lib/coaches";
 import { formatDateHe, logChange } from "@/lib/history";
+import { isManagementRole } from "@/lib/update-recipients";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -29,6 +30,12 @@ export async function saveCoach(formData: FormData) {
 
   let staffId = id;
   if (id) {
+    const [existing] = await db
+      .select({ receivesAllUpdates: staff.receivesAllUpdates })
+      .from(staff)
+      .where(eq(staff.id, id))
+      .limit(1);
+    if (existing?.receivesAllUpdates) back({ error: "איש הנהלה נערך במקטע ההנהלה", edit: String(id) });
     await db.update(staff).set({ displayName: name, phone, roleLabel }).where(eq(staff.id, id));
   } else {
     const [created] = await db.insert(staff).values({ displayName: name, phone, roleLabel }).returning({ id: staff.id });
@@ -52,6 +59,45 @@ export async function saveCoach(formData: FormData) {
     summary: `${id ? "עודכן" : "נוסף"} מאמן ${name}${teamNames.length ? ` (${teamNames.join(", ")})` : ""}`,
   });
   back({ done: `${name} נשמר` });
+}
+
+const EMAIL_RE = /^\S+@\S+\.\S+$/;
+
+/** Add or update a management contact. They are told about every team, and are not linked to one team. */
+export async function saveManagement(formData: FormData) {
+  await requireAdmin();
+  const id = Number(formData.get("id") || 0);
+  const name = String(formData.get("name") ?? "").trim();
+  const phone = String(formData.get("phone") ?? "").trim() || null;
+  const email = String(formData.get("email") ?? "").trim() || null;
+  const roleLabel = String(formData.get("roleLabel") ?? "").trim();
+  if (!name || !isManagementRole(roleLabel)) {
+    back({ error: "יש למלא שם ולבחור תפקיד מהרשימה" });
+  }
+  if (!phone && !email) back({ error: "צריך טלפון או אימייל — זה ערוץ העדכון, כמו אצל המאמנים" });
+  if (email && !EMAIL_RE.test(email)) back({ error: "האימייל לא תקין" });
+
+  if (id) {
+    await db.update(staff).set({ displayName: name, phone, email, roleLabel, receivesAllUpdates: true }).where(eq(staff.id, id));
+    await db.delete(teamCoaches).where(eq(teamCoaches.staffId, id));
+    await db.delete(staffWorkDays).where(eq(staffWorkDays.staffId, id));
+  } else {
+    await db.insert(staff).values({ displayName: name, phone, email, roleLabel, receivesAllUpdates: true });
+  }
+
+  await logChange({
+    action: "coach",
+    summary: `${id ? "עודכן" : "נוסף"} איש הנהלה ${name} (${roleLabel})`,
+  });
+  back({ done: `${name} נשמר ויקבל עדכונים מכל הקבוצות` });
+}
+
+export async function deleteManagement(formData: FormData) {
+  await requireAdmin();
+  const id = Number(formData.get("id"));
+  const [row] = await db.delete(staff).where(and(eq(staff.id, id), eq(staff.receivesAllUpdates, true))).returning();
+  if (row) await logChange({ action: "coach", summary: `הוסר איש הנהלה ${row.displayName}` });
+  back({ done: `${row?.displayName ?? "איש ההנהלה"} הוסר` });
 }
 
 export async function deleteCoach(formData: FormData) {

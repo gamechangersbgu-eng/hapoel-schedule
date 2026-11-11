@@ -10,9 +10,12 @@ import {
   slotGameDetails,
   slotTrainingDetails,
   slots,
+  staff,
+  teamCoaches,
   teams as teamsTable,
 } from "@/lib/db";
 import { HOME_GAME_BLOCK_MINUTES, toMinutes, toTime } from "@/lib/pitch-rules";
+import { applyCoachLabels, coachFullNameByTeam } from "@/lib/team-labels";
 import { weekDates } from "@/lib/week";
 
 export type GameRow = {
@@ -50,11 +53,28 @@ export type GamesWeek = {
 
 export async function getGamesWeek(weekStart: string): Promise<GamesWeek> {
   const dates = weekDates(weekStart);
-  const [teamRows, pitchRows, medicRows, driverRows, cityRows, clubRows, gameRows, trainingRows] = await Promise.all([
+  const [teamRows, pitchRows, medicRows, driverRows, cityRows, clubRows, gameRows, trainingRows, coachLinks, staffNames] =
+    await Promise.all([
     db.select().from(teamsTable).orderBy(asc(teamsTable.sortOrder)),
     db.select().from(pitchesTable).orderBy(asc(pitchesTable.sortOrder)),
-    db.select().from(medicsTable).orderBy(asc(medicsTable.name)),
-    db.select().from(driversTable).orderBy(asc(driversTable.name)),
+    db
+      .select({
+        id: medicsTable.id,
+        name: medicsTable.name,
+        phone: medicsTable.phone,
+        isActive: medicsTable.isActive,
+      })
+      .from(medicsTable)
+      .orderBy(asc(medicsTable.name)),
+    db
+      .select({
+        id: driversTable.id,
+        name: driversTable.name,
+        phone: driversTable.phone,
+        isActive: driversTable.isActive,
+      })
+      .from(driversTable)
+      .orderBy(asc(driversTable.name)),
     db.select().from(citiesTable).orderBy(asc(citiesTable.name)),
     db.select({ name: opponentClubs.name, cityId: opponentClubs.cityId }).from(opponentClubs).orderBy(asc(opponentClubs.name)),
     db
@@ -68,12 +88,29 @@ export async function getGamesWeek(weekStart: string): Promise<GamesWeek> {
       .from(slots)
       .innerJoin(slotTrainingDetails, eq(slotTrainingDetails.slotId, slots.id))
       .where(and(gte(slots.date, dates[0]), lte(slots.date, dates[6]), eq(slots.status, "active"))),
+    db
+      .select({
+        teamId: teamCoaches.teamId,
+        staffId: teamCoaches.staffId,
+        coachName: teamCoaches.coachName,
+        isPrimary: teamCoaches.isPrimary,
+      })
+      .from(teamCoaches),
+    db.select({ id: staff.id, name: staff.displayName, receivesAllUpdates: staff.receivesAllUpdates }).from(staff),
   ]);
-  const teamName = Object.fromEntries(teamRows.map((team) => [team.id, team.name]));
+  const fieldStaff = new Set(staffNames.filter((person) => !person.receivesAllUpdates).map((person) => person.id));
+  const labeledTeams = applyCoachLabels(
+    teamRows,
+    coachFullNameByTeam(
+      coachLinks.filter((link) => link.staffId == null || fieldStaff.has(link.staffId)),
+      staffNames,
+    ),
+  );
+  const teamName = Object.fromEntries(labeledTeams.map((team) => [team.id, team.name]));
 
   return {
     dates,
-    teams: teamRows.filter((team) => !team.isComments).map((team) => ({ id: team.id, name: team.name })),
+    teams: labeledTeams.filter((team) => !team.isComments).map((team) => ({ id: team.id, name: team.name })),
     pitches: pitchRows,
     medics: medicRows,
     drivers: driverRows,
