@@ -8,7 +8,7 @@
 // runs `next build` with `output: "export"` and moves the result to ./out.
 // The Netlify build on main (`npm run build`) is unchanged and reads Postgres live.
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -23,6 +23,14 @@ function run(cmd, args, opts = {}) {
   }
 }
 
+function removeTests(dir) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) removeTests(path);
+    else if (/\.test\.[cm]?[jt]sx?$/.test(entry.name)) rmSync(path);
+  }
+}
+
 rmSync(work, { recursive: true, force: true });
 rmSync(join(root, "out"), { recursive: true, force: true });
 mkdirSync(work);
@@ -32,6 +40,15 @@ for (const item of ["app", "components", "lib", "public", "package.json", "tscon
   cpSync(join(root, item), join(work, item), { recursive: true });
 }
 symlinkSync(join(root, "node_modules"), join(work, "node_modules"), "dir");
+
+// Unit tests are copied with lib/ but are not part of the public site.
+// schedule-rules.test.ts imports ../shared, and this copy does not include shared/.
+// Next type-checks every .ts the tsconfig includes, so exclude tests and delete them.
+const tsconfigPath = join(work, "tsconfig.json");
+const tsconfig = JSON.parse(readFileSync(tsconfigPath, "utf8"));
+tsconfig.exclude = [...new Set([...(tsconfig.exclude ?? []), "**/*.test.ts", "**/*.test.tsx"])];
+writeFileSync(tsconfigPath, `${JSON.stringify(tsconfig, null, 2)}\n`);
+removeTests(join(work, "lib"));
 
 // 2. Strip everything that needs a server or a database.
 for (const item of [
