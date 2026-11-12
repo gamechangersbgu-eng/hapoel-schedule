@@ -16,7 +16,17 @@ import {
   timeLabel,
   todayISO,
 } from "@/components/display-utils";
+import { applyPushChoice, notificationsAreBlocked, resyncPushIfGranted, takeIosPushHint } from "@/lib/push-client";
 import { getSlotType, isCampSlot } from "@/lib/slot-types";
+import {
+  alertingTeamIds,
+  isTeamAlertOn,
+  readTeamAlertPrefs,
+  saveTeamAlertPrefs,
+  withBell,
+  withNewlySelectedTeam,
+  type TeamAlertPrefs,
+} from "@/lib/team-alerts";
 import { readTeamSelection, saveTeamSelection } from "@/lib/team-selection";
 import type { SlotDTO, TeamDTO, WeekData } from "@/lib/types";
 import {
@@ -293,31 +303,102 @@ function DayRow({ day, labels }: { day: Day; labels: TeamLabels }) {
   );
 }
 
+function BellIcon({ filled, className = "h-6 w-6" }: { filled: boolean; className?: string }) {
+  if (filled) {
+    return (
+      <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+        <path
+          fill="currentColor"
+          d="M5.25 9a6.75 6.75 0 0 1 13.5 0v.75c0 2.123.8 4.057 2.118 5.52a.75.75 0 0 1-.297 1.206c-1.544.57-3.16.99-4.831 1.243a3.75 3.75 0 1 1-7.48 0 24.585 24.585 0 0 1-4.831-1.244.75.75 0 0 1-.298-1.205A8.217 8.217 0 0 0 5.25 9.75V9Z"
+        />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0"
+      />
+    </svg>
+  );
+}
+
+function PushNotices({ blocked, iosHint }: { blocked: boolean; iosHint: boolean }) {
+  if (!blocked && !iosHint) return null;
+  return (
+    <div className="flex flex-col gap-2">
+      {blocked ? (
+        <p role="status" className="rounded-xl bg-[#f4e6e8] px-3 py-2 text-sm font-bold leading-relaxed text-[#5c0814] dark:bg-[#3a0710] dark:text-[#f4e6e8]">
+          הדפדפן חסם את ההתראות, ולכן עדכונים על הקבוצות לא יגיעו. אפשר לאפשר התראות בהגדרות הדפדפן לאתר הזה.
+        </p>
+      ) : null}
+      {iosHint ? (
+        <p role="status" className="rounded-xl bg-[#f4e6e8] px-3 py-2 text-sm font-medium leading-relaxed text-[#5c0814] dark:bg-[#3a0710] dark:text-[#f4e6e8]">
+          באייפון ההתראות מגיעות רק אחרי שהאתר נוסף למסך הבית. לחצו על כפתור השיתוף <span aria-hidden>⎋</span>, ואז על{" "}
+          <span className="font-bold">«הוסף למסך הבית»</span>.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function TeamPicker({
   teams,
   current,
+  alerts,
+  pushBlocked,
+  iosHint,
   onSave,
   onCancel,
 }: {
   teams: TeamDTO[];
   current: number[];
-  onSave: (ids: number[]) => void;
+  alerts: TeamAlertPrefs;
+  pushBlocked: boolean;
+  iosHint: boolean;
+  onSave: (ids: number[], alerts: TeamAlertPrefs) => void;
   onCancel?: () => void;
 }) {
   const [chosen, setChosen] = useState<number[]>(current);
-  const toggle = (id: number) =>
+  const [prefs, setPrefs] = useState<TeamAlertPrefs>(alerts);
+  function toggle(id: number) {
+    const selecting = !chosen.includes(id);
     setChosen((list) => (list.includes(id) ? list.filter((item) => item !== id) : [...list, id]));
+    if (selecting) setPrefs((currentPrefs) => withNewlySelectedTeam(currentPrefs, id));
+  }
+  function toggleAll() {
+    if (chosen.length === teams.length) {
+      setChosen([]);
+      return;
+    }
+    setPrefs((currentPrefs) => {
+      let next = currentPrefs;
+      for (const team of teams) {
+        if (!chosen.includes(team.id)) next = withNewlySelectedTeam(next, team.id);
+      }
+      return next;
+    });
+    setChosen(teams.map((team) => team.id));
+  }
+  function toggleBell(id: number) {
+    if (!chosen.includes(id)) return;
+    setPrefs((currentPrefs) => withBell(currentPrefs, id, !isTeamAlertOn(currentPrefs, id, true)));
+  }
   return (
     <section className="flex flex-col gap-3 pb-24">
       <div>
         <h2 className="text-xl font-black text-[#5c0814] dark:text-white">אילו קבוצות לראות?</h2>
         <p className="text-base text-zinc-600 dark:text-zinc-300">
-          אפשר לבחור כמה: למשל שני ילדים בגילאים שונים, או גם הקבוצה שמעל. הבחירה נשמרת בטלפון.
+          אפשר לבחור כמה: למשל שני ילדים בגילאים שונים, או גם הקבוצה שמעל. הבחירה נשמרת בטלפון. פעמון דולק ליד קבוצה
+          אומר שנשלחת התראה כשהלוח שלה משתנה.
         </p>
       </div>
+      <PushNotices blocked={pushBlocked} iosHint={iosHint} />
       <button
         type="button"
-        onClick={() => setChosen(chosen.length === teams.length ? [] : teams.map((team) => team.id))}
+        onClick={toggleAll}
         aria-pressed={chosen.length === teams.length}
         className={`min-h-12 rounded-xl px-3 text-base font-black ring-1 ${
           chosen.length === teams.length
@@ -330,21 +411,37 @@ function TeamPicker({
       <div className="grid grid-cols-2 gap-2" role="group" aria-label="קבוצות">
         {teams.map((item) => {
           const on = chosen.includes(item.id);
+          const bellOn = isTeamAlertOn(prefs, item.id, on);
+          const bellLabel = `${bellOn ? "התראות דולקות לקבוצה זו" : "התראות כבויות לקבוצה זו"}: ${item.name}`;
           return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => toggle(item.id)}
-              aria-pressed={on}
-              className={`flex min-h-14 items-center justify-center gap-2 rounded-xl px-3 py-2 text-lg font-bold shadow-sm ring-1 transition ${
-                on
-                  ? "bg-[#c8102e] text-white ring-[#c8102e]"
-                  : "bg-white text-[#5c0814] ring-[#d7b4b8] active:bg-[#f4e6e8] dark:bg-zinc-900 dark:text-white dark:ring-white/15"
-              }`}
-            >
-              {on ? <span aria-hidden>✓</span> : null}
-              {item.name}
-            </button>
+            <div key={item.id} className="flex items-stretch gap-1">
+              <button
+                type="button"
+                onClick={() => toggle(item.id)}
+                aria-pressed={on}
+                className={`flex min-h-14 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl px-2 py-2 text-center text-base font-bold leading-tight shadow-sm ring-1 transition ${
+                  on
+                    ? "bg-[#c8102e] text-white ring-[#c8102e]"
+                    : "bg-white text-[#5c0814] ring-[#d7b4b8] active:bg-[#f4e6e8] dark:bg-zinc-900 dark:text-white dark:ring-white/15"
+                }`}
+              >
+                {on ? <span aria-hidden>✓</span> : null}
+                {item.name}
+              </button>
+              <button
+                type="button"
+                onClick={() => toggleBell(item.id)}
+                aria-pressed={bellOn}
+                aria-label={bellLabel}
+                className={`flex min-h-11 w-11 shrink-0 items-center justify-center self-stretch rounded-xl ring-1 ${
+                  bellOn
+                    ? "bg-[#f4e6e8] text-[#c8102e] ring-[#c8102e] dark:bg-[#3a0710] dark:text-[#ff8a9a] dark:ring-[#ff8a9a]"
+                    : "bg-white text-zinc-400 ring-[#d7b4b8] dark:bg-zinc-900 dark:text-zinc-500 dark:ring-white/15"
+                }`}
+              >
+                <BellIcon filled={bellOn} />
+              </button>
+            </div>
           );
         })}
       </div>
@@ -353,7 +450,12 @@ function TeamPicker({
           <button
             type="button"
             disabled={chosen.length === 0}
-            onClick={() => onSave(teams.filter((team) => chosen.includes(team.id)).map((team) => team.id))}
+            onClick={() =>
+              onSave(
+                teams.filter((team) => chosen.includes(team.id)).map((team) => team.id),
+                prefs,
+              )
+            }
             className="min-h-12 flex-1 rounded-xl bg-[#c8102e] text-base font-black text-white disabled:bg-zinc-300"
           >
             {chosen.length === 0 ? "בחרו לפחות קבוצה אחת" : chosen.length === 1 ? "הצגת הקבוצה" : `הצגת ${chosen.length} הקבוצות`}
@@ -378,6 +480,9 @@ export function TeamWeek({ data }: { data: WeekData }) {
   const teams = useMemo(() => regularTeams(data.teams), [data.teams]);
   const commentsTeam = data.teams.find((team) => team.isComments);
   const [teamIds, setTeamIds] = useState<number[]>([]);
+  const [alertPrefs, setAlertPrefs] = useState<TeamAlertPrefs>({});
+  const [pushBlocked, setPushBlocked] = useState(false);
+  const [iosHint, setIosHint] = useState(false);
   /** Optional: look at one of the chosen teams only (null = all of them). */
   const [focus, setFocus] = useState<number | null>(null);
   const [picking, setPicking] = useState(false);
@@ -387,9 +492,18 @@ export function TeamWeek({ data }: { data: WeekData }) {
 
   // localStorage and the clock only exist in the browser, so read them after mounting.
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time read of browser-only state after mount
-    setTeamIds(readTeamSelection("public") ?? []);
+    // One-time read of browser-only state after mount (localStorage, permission, clock).
+    /* eslint-disable react-hooks/set-state-in-effect */
+    const ids = readTeamSelection("public") ?? [];
+    const prefs = readTeamAlertPrefs();
+    setTeamIds(ids);
+    setAlertPrefs(prefs);
     setNow(new Date());
+    const alerting = alertingTeamIds(ids, prefs);
+    if (alerting.length > 0 && notificationsAreBlocked()) setPushBlocked(true);
+    if (takeIosPushHint(alerting.length > 0)) setIosHint(true);
+    void resyncPushIfGranted(alerting);
+    /* eslint-enable react-hooks/set-state-in-effect */
     const timer = window.setInterval(() => setNow(new Date()), 60_000);
     return () => window.clearInterval(timer);
   }, []);
@@ -401,12 +515,19 @@ export function TeamWeek({ data }: { data: WeekData }) {
   // Teams that still exist (a saved team may have been renamed or removed).
   const mine = teams.filter((item) => teamIds.includes(item.id));
 
-  function save(ids: number[]) {
+  function save(ids: number[], prefs: TeamAlertPrefs) {
     setTeamIds(ids);
+    setAlertPrefs(prefs);
     saveTeamSelection("public", ids);
+    saveTeamAlertPrefs(prefs);
     setFocus(null);
     setPicking(false);
     window.scrollTo({ top: 0 });
+    const alerting = alertingTeamIds(ids, prefs);
+    void applyPushChoice(alerting).then((result) => {
+      setPushBlocked(result === "denied");
+      if (takeIosPushHint(alerting.length > 0)) setIosHint(true);
+    });
   }
 
   if (mine.length === 0 || picking) {
@@ -414,12 +535,16 @@ export function TeamWeek({ data }: { data: WeekData }) {
       <TeamPicker
         teams={teams}
         current={mine.map((item) => item.id)}
+        alerts={alertPrefs}
+        pushBlocked={pushBlocked}
+        iosHint={iosHint}
         onSave={save}
         onCancel={mine.length ? () => setPicking(false) : undefined}
       />
     );
   }
 
+  const anyAlert = alertingTeamIds(mine.map((item) => item.id), alertPrefs).length > 0;
   const shown = focus && mine.some((item) => item.id === focus) ? mine.filter((item) => item.id === focus) : mine;
   const shownIds = shown.map((item) => item.id);
   const labels: TeamLabels = shown.length > 1 ? Object.fromEntries(shown.map((item) => [item.id, item.name])) : null;
@@ -457,19 +582,29 @@ export function TeamWeek({ data }: { data: WeekData }) {
   return (
     <div className="team-week flex flex-col gap-4 pb-24" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       <div className="flex items-center justify-between gap-2">
-        <button
-          type="button"
-          onClick={() => setPicking(true)}
-          className="flex min-h-11 min-w-0 items-center gap-1.5 rounded-lg text-start text-2xl font-black text-[#5c0814] dark:text-white"
-          aria-label={`הקבוצות שלי: ${mine.map((item) => item.name).join(", ")}. לחצו לשינוי`}
-        >
-          <span className="truncate">{mine.length === 1 ? mine[0].name : "הקבוצות שלי"}</span>
-          <span aria-hidden className="text-sm text-[#c8102e]">▼</span>
-        </button>
+        <div className="flex min-w-0 items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setPicking(true)}
+            className="flex min-h-11 min-w-0 items-center gap-1.5 rounded-lg text-start text-2xl font-black text-[#5c0814] dark:text-white"
+            aria-label={`הקבוצות שלי: ${mine.map((item) => item.name).join(", ")}. לחצו לשינוי`}
+          >
+            <span className="truncate">{mine.length === 1 ? mine[0].name : "הקבוצות שלי"}</span>
+            <span aria-hidden className="text-sm text-[#c8102e]">▼</span>
+          </button>
+          <span
+            role="img"
+            aria-label={anyAlert ? "התראות דולקות לקבוצות שלי" : "התראות כבויות"}
+            className={`shrink-0 ${anyAlert ? "text-[#c8102e]" : "text-zinc-400"}`}
+          >
+            <BellIcon filled={anyAlert} className="h-5 w-5" />
+          </span>
+        </div>
         <p className="text-sm font-semibold text-zinc-600 dark:text-zinc-300">
           שבוע {data.weekNumber} · <bdi>{formatWeekRange(data.weekStart)}</bdi>
         </p>
       </div>
+      <PushNotices blocked={pushBlocked} iosHint={iosHint} />
 
       {mine.length > 1 ? (
         <div className="-mx-3 flex gap-2 overflow-x-auto px-3 pb-1 [scrollbar-width:none]" role="group" aria-label="הצגה לפי קבוצה">

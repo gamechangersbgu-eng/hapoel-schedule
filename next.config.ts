@@ -4,6 +4,8 @@ const isDev = process.env.NODE_ENV !== "production";
 const LAN_HOSTS = ["192.168.*.*", "10.*.*.*", "172.*.*.*", "localhost"];
 
 const nextConfig: NextConfig = {
+  // web-push uses Node crypto. Keep it out of the client bundle.
+  serverExternalPackages: ["web-push"],
   allowedDevOrigins: [
     "127.0.2.2",
     "127.0.0.1",

@@ -2,12 +2,17 @@
 // - Schedule pages work offline: the last version seen is shown when there is no connection.
 // - Push notifications (sent by the server when a team's schedule changes).
 // Management pages, login and API calls are never cached.
+// On GitHub Pages the script lives at /hapoel-schedule/sw.js, so paths stay under that folder.
+const BASE = new URL("./", self.location).pathname.replace(/\/$/, "");
+function rooted(path) {
+  return `${BASE}${path}`;
+}
 const CACHE = "hapoel-schedule-v1";
-const NEVER_CACHE = ["/admin", "/login", "/api/"];
+const NEVER_CACHE = [rooted("/admin"), rooted("/login"), rooted("/api/")];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(["/icons/icon-192.png"])).then(() => self.skipWaiting()),
+    caches.open(CACHE).then((cache) => cache.addAll([rooted("/icons/icon-192.png")])).then(() => self.skipWaiting()),
   );
 });
 
@@ -38,13 +43,13 @@ self.addEventListener("fetch", (event) => {
           }
           return response;
         })
-        .catch(() => caches.match(request).then((hit) => hit || caches.match("/"))),
+        .catch(() => caches.match(request).then((hit) => hit || caches.match(rooted("/")))),
     );
     return;
   }
 
   // Built files and icons: cache first (their names change on every release).
-  if (url.pathname.startsWith("/_next/static/") || url.pathname.startsWith("/icons/")) {
+  if (url.pathname.startsWith(rooted("/_next/static/")) || url.pathname.startsWith(rooted("/icons/"))) {
     event.respondWith(
       caches.match(request).then(
         (hit) =>
@@ -72,12 +77,12 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(title, {
       body: data.body || "",
-      icon: "/icons/icon-192.png",
-      badge: "/icons/icon-192.png",
+      icon: rooted("/icons/icon-192.png"),
+      badge: rooted("/icons/icon-192.png"),
       dir: "rtl",
       lang: "he",
       tag: data.tag,
-      data: { url: data.url || "/" },
+      data: { url: data.url || rooted("/") },
     }),
   );
 });

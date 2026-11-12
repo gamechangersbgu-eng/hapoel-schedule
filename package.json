@@ -8,7 +8,7 @@
     "db:migrate:apply": "tsx db/apply-migrations.ts",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --test lib/club-feedback.test.ts lib/recurrence-fields.test.tsx lib/schedule-rules.test.ts lib/username.test.ts db/cities-opponents-fill.test.ts db/admin-users-seed.test.ts services/scraper/scrape.test.ts",
+    "test": "tsx --test lib/club-feedback.test.ts lib/recurrence-fields.test.tsx lib/schedule-rules.test.ts lib/username.test.ts lib/team-alerts.test.ts lib/push-subscription.test.ts db/cities-opponents-fill.test.ts db/admin-users-seed.test.ts services/scraper/scrape.test.ts",
     "db:seed": "tsx db/seed.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
@@ -22,13 +22,15 @@
     "jose": "^6.2.9",
     "next": "16.3.1",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "web-push": "^4.0.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/web-push": "^3.6.4",
     "drizzle-kit": "^1.0.0-beta.22",
     "eslint": "^9",
     "eslint-config-next": "16.3.1",

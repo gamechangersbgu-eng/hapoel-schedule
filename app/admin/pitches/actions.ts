@@ -8,6 +8,7 @@ import { db, pitches, slotTrainingDetails, slots } from "@/lib/db";
 import { OFFICIAL_DURATION_ERROR_HE, checkBooking, durationAllowedForSave, durationBetween, getPitchDay, roundToQuarterHour, toMinutes, toTime } from "@/lib/pitch-board";
 import { parseSeriesChoices, readSeriesInterval } from "@/lib/recurrence";
 import { bumpScheduleRevision } from "@/lib/schedule-revision";
+import { notifyTeamsScheduleChanged } from "@/lib/web-push";
 import { deleteTrainingScope, previewSeries, saveTrainingSeries } from "@/lib/training-series";
 import { requireAdmin } from "@/lib/auth";
 import { formatDateHe, logChange } from "@/lib/history";
@@ -164,6 +165,7 @@ export async function saveBoardBooking(formData: FormData) {
   });
 
   await refresh();
+  await notifyTeamsScheduleChanged([teamId]);
   redirect(boardPath(date, { saved: "1" }));
 }
 
@@ -232,6 +234,7 @@ async function saveBoardSeries(formData: FormData, ctx: SeriesContext): Promise<
     date: ctx.date,
   });
   await refresh();
+  await notifyTeamsScheduleChanged([ctx.teamId]);
   redirect(boardPath(ctx.date, { saved: "1", skipped: result.skipped.length ? String(result.skipped.length) : undefined }));
 }
 
@@ -274,6 +277,7 @@ export async function deleteBoardBooking(formData: FormData) {
         teamId: result.slot.teamId,
         date: result.slot.date,
       });
+      await notifyTeamsScheduleChanged([result.slot.teamId]);
     }
   }
   await refresh();
