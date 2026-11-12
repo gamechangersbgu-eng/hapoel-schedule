@@ -1,8 +1,11 @@
 /** Apply SQL migrations under netlify/database/migrations (sorted folders). Needs NETLIFY_DATABASE_URL. */
+import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { drizzle } from "drizzle-orm/neon-http";
 import { sql as dsql } from "drizzle-orm";
+import type { SqlExecutor } from "./apply-cities-opponents-seed";
 
 async function main() {
   const url =
@@ -53,6 +56,20 @@ async function main() {
 
     for (const statement of statements) {
       await db.execute(dsql.raw(statement));
+    }
+
+    // Optional TypeScript step (for example the cities seed, which calls departureFor).
+    // Runs before the folder is marked applied, so a failure is retried. The step must
+    // be idempotent: a retry runs the SQL and the step again.
+    const dataStep = join(root, folder, "data.ts");
+    if (existsSync(dataStep)) {
+      const mod = (await import(pathToFileURL(dataStep).href)) as {
+        apply?: (database: SqlExecutor) => Promise<void>;
+      };
+      if (typeof mod.apply === "function") {
+        await mod.apply(db);
+        console.log(`Applied data step: ${folder}`);
+      }
     }
 
     await db.execute(
