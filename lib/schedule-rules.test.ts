@@ -13,7 +13,7 @@ import {
   isQuarterHour,
   roundToQuarterHour,
 } from "./pitch-rules";
-import { buildOccurrenceDates, occurrenceDecision, parseSeriesChoices } from "./recurrence";
+import { buildOccurrenceDates, effectiveInterval, occurrenceDecision, parseSeriesChoices, readSeriesInterval } from "./recurrence";
 
 const cities = [
   { id: 1, name: "תל אביב" },
@@ -93,14 +93,61 @@ test("quarter hours round to 00, 15, 30 or 45", () => {
 });
 
 test("weekly dates include the anchor, chosen weekdays and extra days", () => {
-  const built = buildOccurrenceDates({
+  const input = {
     anchor: "2026-11-10",
     weekdays: [2],
     until: "2026-11-24",
     extraDates: ["2026-12-01"],
-  });
+  };
+  const built = buildOccurrenceDates(input);
   assert.deepEqual(built.dates, ["2026-11-10", "2026-11-17", "2026-11-24", "2026-12-01"]);
   assert.equal(built.truncated, false);
+  assert.deepEqual(buildOccurrenceDates({ ...input, intervalDays: 7 }).dates, built.dates);
+});
+
+test("biweekly dates step 14 days and skip the week in between", () => {
+  const built = buildOccurrenceDates({
+    anchor: "2026-11-12",
+    weekdays: [4],
+    until: "2026-12-24",
+    extraDates: ["2026-12-01"],
+    intervalDays: 14,
+  });
+  assert.deepEqual(built.dates, ["2026-11-12", "2026-11-26", "2026-12-01", "2026-12-10", "2026-12-24"]);
+  assert.equal(built.truncated, false);
+  assert.equal(built.dates.includes("2026-11-19"), false);
+});
+
+test("biweekly weekdays stay on the anchor fortnight, including a weekday before the anchor", () => {
+  assert.deepEqual(
+    buildOccurrenceDates({
+      anchor: "2026-11-12",
+      weekdays: [0, 4],
+      until: "2026-12-10",
+      extraDates: [],
+      intervalDays: 14,
+    }).dates,
+    ["2026-11-12", "2026-11-22", "2026-11-26", "2026-12-06", "2026-12-10"],
+  );
+  assert.deepEqual(
+    buildOccurrenceDates({
+      anchor: "2026-11-12",
+      weekdays: [3],
+      until: "2026-12-09",
+      extraDates: [],
+      intervalDays: 14,
+    }).dates,
+    ["2026-11-12", "2026-11-25", "2026-12-09"],
+  );
+});
+
+test("biweekly is ignored unless the form is allowed to offer it", () => {
+  assert.equal(readSeriesInterval("14"), 14);
+  assert.equal(readSeriesInterval("7"), 7);
+  assert.equal(readSeriesInterval(""), 7);
+  assert.equal(effectiveInterval(true, 14), 14);
+  assert.equal(effectiveInterval(false, 14), 7);
+  assert.equal(effectiveInterval(true, 7), 7);
 });
 
 test("choices ignore anything that is not override or skip", () => {

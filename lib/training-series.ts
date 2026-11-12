@@ -8,7 +8,9 @@ import {
   occurrenceDecision,
   type OccurrencePreview,
   type SeriesChoice,
+  type SeriesIntervalDays,
 } from "@/lib/recurrence";
+import { isFootballSchoolTeam } from "@/lib/team-labels";
 
 export type SeriesSaveInput = {
   anchor: string;
@@ -24,6 +26,8 @@ export type SeriesSaveInput = {
   subdivisionCode: string | null;
   weekdays: number[];
   untilDate: string | null;
+  /** 14 only for בית הספר לכדורגל. Omit or 7 for the existing weekly series. */
+  intervalDays?: SeriesIntervalDays;
   status: string;
   statusNote: string | null;
   substituteStaffId: number | null;
@@ -103,6 +107,17 @@ export async function saveTrainingSeries(input: SeriesSaveInput): Promise<Series
   if (!dates.includes(input.anchor)) dates.unshift(input.anchor);
   const ordered = [...new Set(dates)].sort();
   if (ordered.length < 2) return { created: 0, skipped: [], error: "סדרה צריכה לפחות שני מועדים" };
+
+  if (input.intervalDays === 14) {
+    const [team] = await db
+      .select({ name: teams.name, ageBandCode: teams.ageBandCode })
+      .from(teams)
+      .where(eq(teams.id, input.teamId))
+      .limit(1);
+    if (!isFootballSchoolTeam(team)) {
+      return { created: 0, skipped: [], error: "פעם בשבועיים זמין רק לבית הספר לכדורגל" };
+    }
+  }
 
   const cancelled = input.status === "cancelled";
   const preview = cancelled
