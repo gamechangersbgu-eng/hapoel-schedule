@@ -71,6 +71,35 @@ export function coachFullNameByTeam(
   return result;
 }
 
+/**
+ * Pitch rules recognize בית הספר לכדורגל by `ageBandCode`.
+ * The stored names below are the other identifier: coach labels do not rewrite this row
+ * (נוער / נערים / ילדות / בית הספר keep their stored names; younger groups show age + coach).
+ * "בית ספר" is the short name from the first teams migration, still mapped to this band.
+ */
+const FOOTBALL_SCHOOL_AGE_BAND = "football_school";
+const FOOTBALL_SCHOOL_NAMES = new Set(["בית ספר לכדורגל", "בית הספר לכדורגל", "בית ספר"]);
+
+export type FootballSchoolIdentity = {
+  name?: string | null;
+  ageBandCode?: string | null;
+};
+
+export function isFootballSchoolTeam(team: FootballSchoolIdentity | null | undefined): boolean {
+  if (!team) return false;
+  if (team.ageBandCode === FOOTBALL_SCHOOL_AGE_BAND) return true;
+  const name = (team.name ?? "").trim().replace(/\s+/g, " ");
+  return FOOTBALL_SCHOOL_NAMES.has(name);
+}
+
+/** Every two weeks is offered only when every selected team is the football school. */
+export function biweeklyRepeatAllowed(
+  teams: ReadonlyArray<FootballSchoolIdentity | null | undefined>,
+): boolean {
+  const selected = teams.filter((team) => team && (team.name?.trim() || team.ageBandCode));
+  return selected.length > 0 && selected.every((team) => isFootballSchoolTeam(team));
+}
+
 export function applyCoachLabels<T extends { id: number; name: string }>(
   teams: T[],
   coachByTeam: Map<number, string>,

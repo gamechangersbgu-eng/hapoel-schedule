@@ -32,6 +32,8 @@ export type TeamDTO = {
   name: string;
   sortOrder: number;
   isComments: boolean;
+  /** Pitch-rule band. Football school is `football_school`; absent on older snapshots. */
+  ageBandCode?: string | null;
 };
 
 export type WeekData = {

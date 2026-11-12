@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { weekdayOf } from "@/lib/pitch-rules";
-import { buildOccurrenceDates, MAX_SERIES_OCCURRENCES } from "@/lib/recurrence";
+import { buildOccurrenceDates, effectiveInterval, MAX_SERIES_OCCURRENCES, type SeriesIntervalDays } from "@/lib/recurrence";
 import { HEBREW_DAY_LETTERS, addDaysISO } from "@/lib/week";
 
 const chip = (active: boolean) =>
@@ -20,6 +20,9 @@ export function RecurrenceFields({
   onUntil,
   extraDates,
   onExtraDates,
+  allowBiweekly = false,
+  intervalDays = 7,
+  onIntervalDays,
 }: {
   anchor: string;
   enabled: boolean;
@@ -30,13 +33,19 @@ export function RecurrenceFields({
   onUntil: (value: string) => void;
   extraDates: string[];
   onExtraDates: (dates: string[]) => void;
+  /** Football school only. Other teams keep the weekly checkbox and never see the second option. */
+  allowBiweekly?: boolean;
+  intervalDays?: SeriesIntervalDays;
+  onIntervalDays?: (value: SeriesIntervalDays) => void;
 }) {
   const [draft, setDraft] = useState("");
+  const interval = effectiveInterval(allowBiweekly, intervalDays);
   const built = buildOccurrenceDates({
     anchor,
     weekdays: enabled ? weekdays : [],
     until: enabled ? until : "",
     extraDates: enabled ? extraDates : [],
+    intervalDays: interval,
   });
 
   function enable(checked: boolean) {
@@ -44,6 +53,15 @@ export function RecurrenceFields({
     if (!checked) return;
     if (weekdays.length === 0 && /^\d{4}-\d{2}-\d{2}$/.test(anchor)) onWeekdays([weekdayOf(anchor)]);
     if (!until && /^\d{4}-\d{2}-\d{2}$/.test(anchor)) onUntil(addDaysISO(anchor, 7 * 12));
+  }
+
+  function chooseInterval(next: SeriesIntervalDays) {
+    if (enabled && interval === next) {
+      enable(false);
+      return;
+    }
+    onIntervalDays?.(next);
+    if (!enabled) enable(true);
   }
 
   function addDate() {
@@ -63,10 +81,36 @@ export function RecurrenceFields({
           type="checkbox"
           className="mt-1 h-4 w-4"
           checked={enabled}
-          onChange={(event) => enable(event.target.checked)}
+          onChange={(event) => {
+            if (event.target.checked && allowBiweekly) onIntervalDays?.(7);
+            enable(event.target.checked);
+          }}
         />
         אימון חוזר — אותה שעה בימים ובמועדים שתבחרו
       </label>
+      {allowBiweekly ? (
+        <div className="flex flex-col gap-2">
+          <p className="text-sm font-bold">תדירות</p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              aria-pressed={enabled && interval === 7}
+              onClick={() => chooseInterval(7)}
+              className={chip(enabled && interval === 7)}
+            >
+              לחזור על זה כל שבוע
+            </button>
+            <button
+              type="button"
+              aria-pressed={enabled && interval === 14}
+              onClick={() => chooseInterval(14)}
+              className={chip(enabled && interval === 14)}
+            >
+              לחזור על זה פעם בשבועיים
+            </button>
+          </div>
+        </div>
+      ) : null}
       {enabled ? (
         <>
           <p className="text-sm font-bold">ימים בשבוע</p>
@@ -132,7 +176,9 @@ export function RecurrenceFields({
           </div>
           <p className="text-sm font-bold text-zinc-700">
             {built.dates.length > 1
-              ? `יישמרו ${built.dates.length} מועדים, כולל היום הזה.`
+              ? interval === 14
+                ? `יישמרו ${built.dates.length} מועדים, פעם בשבועיים, כולל היום הזה.`
+                : `יישמרו ${built.dates.length} מועדים, כולל היום הזה.`
               : "עדיין מועד אחד. בחרו ימים עד תאריך, או הוסיפו תאריכים."}
             {built.truncated ? ` אפשר עד ${MAX_SERIES_OCCURRENCES} מועדים, והרשימה קוצרה.` : ""}
           </p>

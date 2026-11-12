@@ -17,7 +17,15 @@ import {
   toTime,
   type BoardRotation,
 } from "@/lib/pitch-rules";
-import { buildOccurrenceDates, occurrenceDecision, type OccurrencePreview, type SeriesChoice } from "@/lib/recurrence";
+import {
+  buildOccurrenceDates,
+  effectiveInterval,
+  occurrenceDecision,
+  type OccurrencePreview,
+  type SeriesChoice,
+  type SeriesIntervalDays,
+} from "@/lib/recurrence";
+import { biweeklyRepeatAllowed } from "@/lib/team-labels";
 import type { SlotDTO, TeamDTO } from "@/lib/types";
 import { addDaysISO } from "@/lib/week";
 
@@ -64,6 +72,7 @@ export function EditSlotForm({
   const [rotationId, setRotationId] = useState<number | null>(editing?.rotationTemplateId ?? null);
   const [slotType, setSlotType] = useState(editing?.type ?? (team.isComments ? "other" : "vasermil_1"));
   const [repeat, setRepeat] = useState(false);
+  const [intervalDays, setIntervalDays] = useState<SeriesIntervalDays>(7);
   const [weekdays, setWeekdays] = useState<number[]>([]);
   const [until, setUntil] = useState("");
   const [extraDates, setExtraDates] = useState<string[]>([]);
@@ -82,18 +91,21 @@ export function EditSlotForm({
     }`;
 
   const repeatable = !editing && !isCampSlot(slotType) && slotType !== "home_game" && slotType !== "away_game";
+  const allowBiweekly = repeatable && biweeklyRepeatAllowed([team]);
+  const interval = effectiveInterval(allowBiweekly, intervalDays);
   const occurrence = buildOccurrenceDates({
     anchor: editing?.date ?? date,
     weekdays: repeat && repeatable ? weekdays : [],
     until: repeat && repeatable ? until : "",
     extraDates: repeat && repeatable ? extraDates : [],
+    intervalDays: interval,
   });
   const seriesOn = repeatable && repeat && occurrence.dates.length > 1;
 
   useEffect(() => {
     setReview(null);
     allowSubmit.current = false;
-  }, [startTime, endTime, slotType, repeat, weekdays, until, extraDates]);
+  }, [startTime, endTime, slotType, repeat, weekdays, until, extraDates, interval]);
 
   function writeSeries(dates: string[], nextChoices: Record<string, SeriesChoice>) {
     if (seriesFlag.current) seriesFlag.current.value = "1";
@@ -225,6 +237,7 @@ export function EditSlotForm({
           <input type="hidden" name="seriesChoices" ref={seriesChoicesRef} defaultValue="" />
           <input type="hidden" name="seriesWeekdays" value={weekdays.join(",")} />
           <input type="hidden" name="seriesUntil" value={until} />
+          <input type="hidden" name="seriesInterval" value={interval} />
           <input type="hidden" name="teamId" value={team.id} />
           <input type="hidden" name="date" value={editing?.date ?? date} />
           {editing ? <input type="hidden" name="id" value={editing.id} /> : null}
@@ -297,6 +310,9 @@ export function EditSlotForm({
               onUntil={setUntil}
               extraDates={extraDates}
               onExtraDates={setExtraDates}
+              allowBiweekly={allowBiweekly}
+              intervalDays={interval}
+              onIntervalDays={setIntervalDays}
             />
           ) : null}
           {review ? (

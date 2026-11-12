@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { israeliIdChecksumOk, nationalIdError, normalizeNationalId } from "./national-id";
-import { applyCoachLabels, coachFullNameByTeam, coachLabeledAgeGroup, teamDisplayName } from "./team-labels";
+import {
+  applyCoachLabels,
+  biweeklyRepeatAllowed,
+  coachFullNameByTeam,
+  coachLabeledAgeGroup,
+  isFootballSchoolTeam,
+  teamDisplayName,
+} from "./team-labels";
 import { MANAGEMENT_ROLES, recipientsForTeams, type UpdateRecipient } from "./update-recipients";
 
 test("ילדים א through טרום ג are labeled by the coach's given name", () => {
@@ -16,6 +23,37 @@ test("ילדים א through טרום ג are labeled by the coach's given name", 
   assert.equal(teamDisplayName("בית ספר לכדורגל", "רן"), "בית ספר לכדורגל");
   assert.equal(coachLabeledAgeGroup("ילדות א"), null);
   assert.equal(coachLabeledAgeGroup("ילדים א"), "ילדים א");
+});
+
+test("biweekly repeat is only for בית הספר לכדורגל, by age band or stored name", () => {
+  assert.equal(isFootballSchoolTeam({ ageBandCode: "football_school", name: "בית ספר לכדורגל" }), true);
+  assert.equal(isFootballSchoolTeam({ name: "בית ספר" }), true);
+  assert.equal(isFootballSchoolTeam({ name: "בית הספר לכדורגל" }), true);
+  assert.equal(isFootballSchoolTeam({ name: "בית ספר לכדורגל", ageBandCode: null }), true);
+  assert.equal(isFootballSchoolTeam({ ageBandCode: "football_school", name: "ילדים א שחר" }), true);
+  assert.equal(isFootballSchoolTeam({ name: "נוער", ageBandCode: "noar_through_yeladim_b" }), false);
+  assert.equal(isFootballSchoolTeam({ name: "ילדים ב נועם", ageBandCode: "noar_through_yeladim_b" }), false);
+  assert.equal(isFootballSchoolTeam({ name: "ילדות א" }), false);
+  assert.equal(isFootballSchoolTeam(null), false);
+
+  assert.equal(biweeklyRepeatAllowed([{ ageBandCode: "football_school", name: "בית ספר לכדורגל" }]), true);
+  assert.equal(
+    biweeklyRepeatAllowed([
+      { name: "בית ספר לכדורגל" },
+      { name: "בית ספר" },
+    ]),
+    true,
+  );
+  assert.equal(
+    biweeklyRepeatAllowed([
+      { ageBandCode: "football_school", name: "בית ספר לכדורגל" },
+      { name: "נוער" },
+    ]),
+    false,
+  );
+  assert.equal(biweeklyRepeatAllowed([]), false);
+  assert.equal(biweeklyRepeatAllowed([null]), false);
+  assert.equal(biweeklyRepeatAllowed([{ name: "  " }]), false);
 });
 
 test("the primary coach with the lowest id supplies the label, and the team id stays", () => {

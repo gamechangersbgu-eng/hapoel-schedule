@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { ensureTrainingDuration, resolveRotationTemplateId } from "@/db/reference-seed";
 import { db, pitches, slotTrainingDetails, slots } from "@/lib/db";
 import { OFFICIAL_DURATION_ERROR_HE, checkBooking, durationAllowedForSave, durationBetween, getPitchDay, roundToQuarterHour, toMinutes, toTime } from "@/lib/pitch-board";
-import { parseSeriesChoices } from "@/lib/recurrence";
+import { parseSeriesChoices, readSeriesInterval } from "@/lib/recurrence";
 import { bumpScheduleRevision } from "@/lib/schedule-revision";
 import { deleteTrainingScope, previewSeries, saveTrainingSeries } from "@/lib/training-series";
 import { requireAdmin } from "@/lib/auth";
@@ -192,6 +192,7 @@ async function saveBoardSeries(formData: FormData, ctx: SeriesContext): Promise<
     .map((item) => Number(item))
     .filter((item) => item >= 0 && item <= 6);
   const until = String(formData.get("seriesUntil") ?? "");
+  const intervalDays = readSeriesInterval(formData.get("seriesInterval"));
   if (ctx.statusChoice === "substitute" && !ctx.substituteStaffId) ctx.back("יש לבחור מאמן מחליף");
 
   const day = await getPitchDay(ctx.date);
@@ -215,6 +216,7 @@ async function saveBoardSeries(formData: FormData, ctx: SeriesContext): Promise<
     subdivisionCode: ctx.subdivisionCode,
     weekdays,
     untilDate: DATE_RE.test(until) ? until : null,
+    intervalDays,
     status: ctx.cancelled ? "cancelled" : "active",
     statusNote: ctx.statusNote,
     substituteStaffId: ctx.substituteStaffId,
@@ -225,7 +227,7 @@ async function saveBoardSeries(formData: FormData, ctx: SeriesContext): Promise<
   const skipped = result.skipped.length ? `, ${result.skipped.length} מועדים דולגו` : "";
   await logChange({
     action: "create",
-    summary: `נוספה סדרת אימונים (${result.created} מועדים${skipped}): ${team.name}, ${pitch.nameHe} ${subdivision}, ${ctx.startTime}`,
+    summary: `נוספה סדרת אימונים${intervalDays === 14 ? " פעם בשבועיים" : ""} (${result.created} מועדים${skipped}): ${team.name}, ${pitch.nameHe} ${subdivision}, ${ctx.startTime}`,
     teamId: ctx.teamId,
     date: ctx.date,
   });

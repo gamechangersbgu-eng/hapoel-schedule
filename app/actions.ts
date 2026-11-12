@@ -6,7 +6,7 @@ import { and, eq, gte, lte, ne, notInArray } from "drizzle-orm";
 import { ensureTrainingDuration, resolveRotationTemplateId } from "@/db/reference-seed";
 import { db, slotTrainingDetails, slots, teams } from "@/lib/db";
 import { OFFICIAL_DURATION_ERROR_HE, durationAllowedForSave, durationBetween, roundToQuarterHour, toMinutes } from "@/lib/pitch-rules";
-import { parseSeriesChoices } from "@/lib/recurrence";
+import { parseSeriesChoices, readSeriesInterval } from "@/lib/recurrence";
 import { formatDateHe, logChange } from "@/lib/history";
 import { bumpScheduleRevision } from "@/lib/schedule-revision";
 import { getSlotsInWeek } from "@/lib/schedule";
@@ -213,6 +213,7 @@ export async function saveSlotForm(formData: FormData) {
       .map((item) => Number(item))
       .filter((item) => item >= 0 && item <= 6);
     const until = String(formData.get("seriesUntil") ?? "");
+    const intervalDays = readSeriesInterval(formData.get("seriesInterval"));
     const pitch = isPitchSlot(type) ? await pitchByCode(type) : null;
     if (isPitchSlot(type) && !pitch) {
       redirect(adminWeekPath(week, { team: String(teamId), date, error: "המגרש לא נמצא" }));
@@ -231,6 +232,7 @@ export async function saveSlotForm(formData: FormData) {
       subdivisionCode: pitch ? "whole" : null,
       weekdays,
       untilDate: /^\d{4}-\d{2}-\d{2}$/.test(until) ? until : null,
+      intervalDays,
       status: "active",
       statusNote: null,
       substituteStaffId: null,
@@ -248,7 +250,7 @@ export async function saveSlotForm(formData: FormData) {
     const skipped = result.skipped.length ? `, ${result.skipped.length} מועדים דולגו` : "";
     await logChange({
       action: "create",
-      summary: `נוספה סדרת אימונים (${result.created} מועדים${skipped}): ${name}, ${getSlotType(type).label}, ${startTime}`,
+      summary: `נוספה סדרת אימונים${intervalDays === 14 ? " פעם בשבועיים" : ""} (${result.created} מועדים${skipped}): ${name}, ${getSlotType(type).label}, ${startTime}`,
       teamId,
       date,
     });

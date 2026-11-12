@@ -20,7 +20,15 @@ import {
   toTime,
   type PitchDay,
 } from "@/lib/pitch-rules";
-import { buildOccurrenceDates, occurrenceDecision, type OccurrencePreview, type SeriesChoice } from "@/lib/recurrence";
+import {
+  buildOccurrenceDates,
+  effectiveInterval,
+  occurrenceDecision,
+  type OccurrencePreview,
+  type SeriesChoice,
+  type SeriesIntervalDays,
+} from "@/lib/recurrence";
+import { biweeklyRepeatAllowed } from "@/lib/team-labels";
 
 type Initial = {
   slotId?: number;
@@ -65,6 +73,7 @@ export function BookingForm({
     initial.status === "cancelled" ? "cancelled" : initial.substituteStaffId ? "substitute" : "active",
   );
   const [repeat, setRepeat] = useState(false);
+  const [intervalDays, setIntervalDays] = useState<SeriesIntervalDays>(7);
   const [weekdays, setWeekdays] = useState<number[]>([]);
   const [until, setUntil] = useState("");
   const [extraDates, setExtraDates] = useState<string[]>([]);
@@ -78,6 +87,8 @@ export function BookingForm({
   const seriesChoicesRef = useRef<HTMLInputElement>(null);
 
   const team = day.teams.find((item) => item.id === teamId);
+  const allowBiweekly = biweeklyRepeatAllowed(team ? [team] : []);
+  const interval = effectiveInterval(allowBiweekly, intervalDays);
   const allowed = team?.allowedSubdivisions ?? [];
   const rotations = day.rotations.length > 0 ? day.rotations : fallbackRotations();
   const rotation = rotations.find((item) => item.id === rotationId);
@@ -105,6 +116,7 @@ export function BookingForm({
     weekdays: repeat ? weekdays : [],
     until: repeat ? until : "",
     extraDates: repeat ? extraDates : [],
+    intervalDays: interval,
   });
   const seriesOn = repeat && !initial.slotId && occurrence.dates.length > 1;
   const classified = useMemo(() => {
@@ -126,7 +138,7 @@ export function BookingForm({
   useEffect(() => {
     setReview(null);
     allowSubmit.current = false;
-  }, [teamId, pitchId, subdivisionCode, startTime, duration, repeat, weekdays, until, extraDates]);
+  }, [teamId, pitchId, subdivisionCode, startTime, duration, repeat, weekdays, until, extraDates, interval]);
 
   function writeSeries(dates: string[], nextChoices: Record<string, SeriesChoice>) {
     if (seriesFlag.current) seriesFlag.current.value = "1";
@@ -216,6 +228,7 @@ export function BookingForm({
           <input type="hidden" name="seriesChoices" ref={seriesChoicesRef} defaultValue="" />
           <input type="hidden" name="seriesWeekdays" value={weekdays.join(",")} />
           <input type="hidden" name="seriesUntil" value={until} />
+          <input type="hidden" name="seriesInterval" value={interval} />
           {initial.slotId ? <input type="hidden" name="id" value={initial.slotId} /> : null}
           <input type="hidden" name="subdivisionCode" value={subdivisionCode} />
           <input type="hidden" name="durationMinutes" value={duration > 0 ? duration : ""} />
@@ -230,8 +243,13 @@ export function BookingForm({
               onChange={(event) => {
                 const next = Number(event.target.value);
                 setTeamId(next);
-                const nextAllowed = day.teams.find((item) => item.id === next)?.allowedSubdivisions ?? [];
+                const nextTeam = day.teams.find((item) => item.id === next);
+                const nextAllowed = nextTeam?.allowedSubdivisions ?? [];
                 if (!nextAllowed.includes(subdivisionCode)) setSubdivisionCode("whole");
+                if (intervalDays === 14 && !biweeklyRepeatAllowed(nextTeam ? [nextTeam] : [])) {
+                  setIntervalDays(7);
+                  setRepeat(false);
+                }
               }}
               required
             >
@@ -365,6 +383,9 @@ export function BookingForm({
               onUntil={setUntil}
               extraDates={extraDates}
               onExtraDates={setExtraDates}
+              allowBiweekly={allowBiweekly}
+              intervalDays={interval}
+              onIntervalDays={setIntervalDays}
             />
           )}
 
