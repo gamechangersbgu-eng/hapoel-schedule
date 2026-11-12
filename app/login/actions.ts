@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { adminUsers, db } from "@/lib/db";
 import { endSession, startSession } from "@/lib/auth";
 import { MIN_PASSWORD_LENGTH, hashPassword, verifyPassword } from "@/lib/password";
+import { isValidUsername, normalizeUsername } from "@/lib/username";
 
 function safeNext(value: FormDataEntryValue | null) {
   const next = String(value ?? "");
@@ -16,17 +17,17 @@ function back(error: string, next: string, extra = ""): never {
 }
 
 export async function loginAction(formData: FormData) {
-  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const username = normalizeUsername(String(formData.get("username") ?? ""));
   const password = String(formData.get("password") ?? "");
   const next = safeNext(formData.get("next"));
 
-  const [user] = email
-    ? await db.select().from(adminUsers).where(eq(adminUsers.email, email)).limit(1)
+  const [user] = isValidUsername(username)
+    ? await db.select().from(adminUsers).where(eq(adminUsers.email, username)).limit(1)
     : [];
   const ok = user && user.isActive && (await verifyPassword(password, user.passwordHash));
   if (!ok || !user) {
     await new Promise((resolve) => setTimeout(resolve, 600)); // slow down password guessing
-    back("אימייל או סיסמה שגויים", next);
+    back("שם משתמש או סיסמה שגויים", next);
   }
 
   await db.update(adminUsers).set({ lastLoginAt: new Date().toISOString() }).where(eq(adminUsers.id, user.id));
@@ -42,17 +43,17 @@ export async function setupOwnerAction(formData: FormData) {
   const expected = process.env.ADMIN_SETUP_CODE;
   const code = String(formData.get("code") ?? "").trim();
   const displayName = String(formData.get("displayName") ?? "").trim();
-  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const username = normalizeUsername(String(formData.get("username") ?? ""));
   const password = String(formData.get("password") ?? "");
 
   if (!expected || code !== expected) back("קוד ההתקנה שגוי", "/admin");
-  if (!displayName || !/^\S+@\S+\.\S+$/.test(email)) back("יש למלא שם ואימייל תקין", "/admin");
+  if (!displayName || !isValidUsername(username)) back("יש למלא שם ושם משתמש תקין", "/admin");
   if (password.length < MIN_PASSWORD_LENGTH) back(`הסיסמה צריכה להיות לפחות ${MIN_PASSWORD_LENGTH} תווים`, "/admin");
 
   const [user] = await db
     .insert(adminUsers)
     .values({
-      email,
+      email: username,
       displayName,
       passwordHash: await hashPassword(password),
       role: "owner",

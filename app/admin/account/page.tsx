@@ -18,7 +18,7 @@ export default async function AccountPage({ searchParams }: Props) {
     <AdminShell user={user} title="החשבון שלי" current="/admin/account">
       <section className="max-w-md rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
         <p className="text-sm text-zinc-600">
-          {user.displayName} · <span dir="ltr">{user.email}</span> · {user.role === "owner" ? "מנהל ראשי" : "מנהל"}
+          {user.displayName} · שם משתמש <span dir="ltr">{user.email}</span> · {user.role === "owner" ? "מנהל ראשי" : "מנהל"}
         </p>
         <h2 className="mt-3 text-lg font-black text-[#8e0b20]">{forced ? "יש לבחור סיסמה אישית" : "החלפת סיסמה"}</h2>
         {forced ? (

@@ -58,7 +58,7 @@ export default async function UsersPage({ searchParams }: Props) {
                   ) : null}
                 </p>
                 <p className="text-sm text-zinc-600">
-                  <span dir="ltr">{user.email}</span> · {when(user.lastLoginAt)}
+                  שם משתמש <span dir="ltr">{user.email}</span> · {when(user.lastLoginAt)}
                 </p>
               </div>
               {user.id === me.id ? null : (
@@ -111,8 +111,18 @@ export default async function UsersPage({ searchParams }: Props) {
             <input name="displayName" className={field} required />
           </label>
           <label className="flex flex-col gap-1 text-sm font-bold">
-            אימייל
-            <input name="email" type="email" dir="ltr" className={field} required />
+            שם משתמש
+            <input
+              name="username"
+              type="text"
+              dir="ltr"
+              className={field}
+              required
+              autoComplete="username"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+            />
           </label>
           <label className="flex flex-col gap-1 text-sm font-bold">
             סיסמה זמנית (לפחות 8 תווים)
