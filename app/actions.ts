@@ -9,6 +9,7 @@ import { OFFICIAL_DURATION_ERROR_HE, durationAllowedForSave, durationBetween, ro
 import { parseSeriesChoices, readSeriesInterval } from "@/lib/recurrence";
 import { formatDateHe, logChange } from "@/lib/history";
 import { bumpScheduleRevision } from "@/lib/schedule-revision";
+import { notifyTeamsScheduleChanged } from "@/lib/web-push";
 import { getSlotsInWeek } from "@/lib/schedule";
 import { getSlotType, isPitchSlot, SLOT_TYPES } from "@/lib/slot-types";
 import { deleteTrainingScope, pitchByCode, previewSeries, saveTrainingSeries, teamName } from "@/lib/training-series";
@@ -124,6 +125,7 @@ export async function saveSlot(input: SlotInput) {
   });
 
   await refreshSchedule();
+  await notifyTeamsScheduleChanged([input.teamId]);
   return { ok: true };
 }
 
@@ -139,6 +141,7 @@ export async function deleteSlot(id: number) {
     });
   }
   await refreshSchedule();
+  if (removed) await notifyTeamsScheduleChanged([removed.teamId]);
   return { ok: true };
 }
 
@@ -255,6 +258,7 @@ export async function saveSlotForm(formData: FormData) {
       date,
     });
     await refreshSchedule();
+    await notifyTeamsScheduleChanged([teamId]);
     redirect(adminWeekPath(week, { saved: "1", skipped: result.skipped.length ? String(result.skipped.length) : undefined }));
   }
 
@@ -303,6 +307,7 @@ export async function deleteSlotForm(formData: FormData) {
         date: result.slot.date,
       });
       await refreshSchedule();
+      await notifyTeamsScheduleChanged([result.slot.teamId]);
     }
   }
   redirect(adminWeekPath(week));
@@ -348,7 +353,7 @@ export async function copyPreviousWeek(weekStart: string) {
   }
 
   const currentDates = weekDates(weekStart);
-  await db
+  const removed = await db
     .delete(slots)
     .where(
       and(
@@ -356,7 +361,8 @@ export async function copyPreviousWeek(weekStart: string) {
         lte(slots.date, currentDates[6]),
         notInArray(slots.type, GAME_TYPES),
       ),
-    );
+    )
+    .returning({ teamId: slots.teamId });
 
   // Copy each item with its pitch part / duration; cancellations and substitutes are not copied.
   const details = await db.select().from(slotTrainingDetails);
@@ -391,6 +397,9 @@ export async function copyPreviousWeek(weekStart: string) {
   });
 
   await refreshSchedule();
+  await notifyTeamsScheduleChanged([
+    ...new Set([...source.map((slot) => slot.teamId), ...removed.map((slot) => slot.teamId)]),
+  ]);
   return { ok: true, count: source.length };
 }
 

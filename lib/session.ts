@@ -1,8 +1,8 @@
 // Signed session cookie for managers (no database access here, so Proxy can use it too).
 import { SignJWT, jwtVerify } from "jose";
 
-// TEMPORARY: admin login is turned off for testing. Set to false to require login again.
-export const AUTH_DISABLED = true;
+// Login is required so only club managers can edit the schedule.
+export const AUTH_DISABLED = false;
 
 export const SESSION_COOKIE = "hapoel_admin_session";
 const SESSION_DAYS = 30;

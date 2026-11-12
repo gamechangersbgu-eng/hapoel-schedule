@@ -26,4 +26,7 @@ jobs:
       - name: Apply database migrations
         env:
           NETLIFY_DATABASE_URL: ${{ secrets.NETLIFY_DATABASE_URL }}
+          # Optional JSON array of { username, displayName, role, password }.
+          # Unset or empty skips the manager seed. Do not echo this value.
+          ADMIN_USERS_SEED: ${{ secrets.ADMIN_USERS_SEED }}
         run: npm run db:migrate:apply

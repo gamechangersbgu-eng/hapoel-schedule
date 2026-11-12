@@ -48,8 +48,18 @@ export default async function LoginPage({ searchParams }: Props) {
               <input name="displayName" className={field} required autoComplete="name" />
             </label>
             <label className={label}>
-              אימייל
-              <input name="email" type="email" dir="ltr" className={field} required autoComplete="email" />
+              שם משתמש
+              <input
+                name="username"
+                type="text"
+                dir="ltr"
+                className={field}
+                required
+                autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+              />
             </label>
             <label className={label}>
               סיסמה (לפחות 8 תווים)
@@ -63,8 +73,19 @@ export default async function LoginPage({ searchParams }: Props) {
           <form action={loginAction} className="mt-4 flex flex-col gap-3">
             <input type="hidden" name="next" value={next ?? "/admin"} />
             <label className={label}>
-              אימייל
-              <input name="email" type="email" dir="ltr" className={field} required autoComplete="username" autoFocus />
+              שם משתמש
+              <input
+                name="username"
+                type="text"
+                dir="ltr"
+                className={field}
+                required
+                autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                autoFocus
+              />
             </label>
             <label className={label}>
               סיסמה

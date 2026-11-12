@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { adminUsers, db } from "@/lib/db";
 import { requireAdmin, requireOwner, startSession } from "@/lib/auth";
 import { MIN_PASSWORD_LENGTH, hashPassword, verifyPassword } from "@/lib/password";
+import { isValidUsername, normalizeUsername } from "@/lib/username";
 
 function usersPage(params: Record<string, string>): never {
   redirect(`/admin/users?${new URLSearchParams(params).toString()}`);
@@ -22,17 +23,17 @@ async function otherActiveOwners(exceptId: number) {
 export async function addUserAction(formData: FormData) {
   await requireOwner();
   const displayName = String(formData.get("displayName") ?? "").trim();
-  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const username = normalizeUsername(String(formData.get("username") ?? ""));
   const role = formData.get("role") === "owner" ? "owner" : "admin";
   const password = String(formData.get("password") ?? "");
 
-  if (!displayName || !/^\S+@\S+\.\S+$/.test(email)) usersPage({ error: "יש למלא שם ואימייל תקין" });
+  if (!displayName || !isValidUsername(username)) usersPage({ error: "יש למלא שם ושם משתמש תקין" });
   if (password.length < MIN_PASSWORD_LENGTH) usersPage({ error: `סיסמה זמנית: לפחות ${MIN_PASSWORD_LENGTH} תווים` });
-  const [exists] = await db.select({ id: adminUsers.id }).from(adminUsers).where(eq(adminUsers.email, email)).limit(1);
-  if (exists) usersPage({ error: "כבר יש משתמש עם האימייל הזה" });
+  const [exists] = await db.select({ id: adminUsers.id }).from(adminUsers).where(eq(adminUsers.email, username)).limit(1);
+  if (exists) usersPage({ error: "כבר יש משתמש עם שם המשתמש הזה" });
 
   await db.insert(adminUsers).values({
-    email,
+    email: username,
     displayName,
     role,
     passwordHash: await hashPassword(password),

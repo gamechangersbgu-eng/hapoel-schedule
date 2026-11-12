@@ -79,6 +79,8 @@ for (const item of [
   "lib/rotations.ts",
   "lib/opponent-cities.ts",
   "lib/training-series.ts",
+  // Parent web push talks to Postgres. The static site calls the Netlify API instead.
+  "lib/web-push.ts",
 ]) {
   rmSync(join(work, item), { recursive: true, force: true });
 }

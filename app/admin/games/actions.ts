@@ -10,6 +10,7 @@ import { cityForOpponent, rememberOpponentCity } from "@/lib/opponent-cities";
 import { roundToQuarterHour } from "@/lib/pitch-rules";
 import { formatDateHe, logChange } from "@/lib/history";
 import { bumpScheduleRevision } from "@/lib/schedule-revision";
+import { notifyTeamsScheduleChanged } from "@/lib/web-push";
 import { GAME_DETAIL_SOURCES } from "@/shared/game";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -113,6 +114,7 @@ export async function saveGame(formData: FormData) {
     date,
   });
   await refresh();
+  await notifyTeamsScheduleChanged([teamId]);
   redirect(`/admin/games?week=${sundayOf(date)}&saved=1`);
 }
 
@@ -131,6 +133,7 @@ export async function deleteGame(formData: FormData) {
       date: slot.date,
     });
     await refresh();
+    await notifyTeamsScheduleChanged([slot.teamId]);
   }
   redirect(`/admin/games?week=${week}`);
 }

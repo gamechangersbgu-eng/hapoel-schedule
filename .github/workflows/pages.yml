@@ -34,6 +34,10 @@ jobs:
       - run: npm run build:pages
         env:
           PAGES_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+          NEXT_PUBLIC_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+          # Public key only. The private key stays on Netlify (VAPID_PRIVATE_KEY).
+          NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${{ vars.NEXT_PUBLIC_VAPID_PUBLIC_KEY }}
+          NEXT_PUBLIC_PUSH_API_ORIGIN: ${{ vars.NEXT_PUBLIC_PUSH_API_ORIGIN }}
           NETLIFY_DATABASE_URL: ${{ secrets.NETLIFY_DATABASE_URL }}
           NETLIFY_DB_URL: ${{ secrets.NETLIFY_DB_URL }}
       - run: touch out/.nojekyll

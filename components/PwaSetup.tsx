@@ -4,6 +4,7 @@
 // Android/desktop Chrome get an install button; iPhone gets short "Add to Home Screen" steps.
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { serviceWorkerScript } from "@/lib/app-base";
 
 type InstallPrompt = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
 
@@ -38,7 +39,8 @@ export function PwaSetup() {
   useEffect(() => {
     if ("serviceWorker" in navigator) {
       if (process.env.NODE_ENV === "production") {
-        navigator.serviceWorker.register("/sw.js").catch(() => {});
+        const script = serviceWorkerScript(window.location.pathname, process.env.NEXT_PUBLIC_BASE_PATH ?? "");
+        navigator.serviceWorker.register(script).catch(() => {});
       } else {
         // While developing, file names do not change between edits, so a cached copy would hide changes.
         navigator.serviceWorker.getRegistrations().then((list) => list.forEach((item) => item.unregister()));
