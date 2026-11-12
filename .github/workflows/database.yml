@@ -23,7 +23,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Apply SQL migrations
+      - name: Apply database migrations
         env:
           NETLIFY_DATABASE_URL: ${{ secrets.NETLIFY_DATABASE_URL }}
         run: npm run db:migrate:apply
