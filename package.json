@@ -8,7 +8,7 @@
     "db:migrate:apply": "tsx db/apply-migrations.ts",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --test lib/club-feedback.test.ts lib/recurrence-fields.test.tsx lib/schedule-rules.test.ts lib/username.test.ts lib/team-alerts.test.ts lib/push-subscription.test.ts db/cities-opponents-fill.test.ts db/admin-users-seed.test.ts services/scraper/scrape.test.ts",
+    "test": "tsx --test lib/coach-clash.test.ts lib/club-feedback.test.ts lib/recurrence-fields.test.tsx lib/schedule-rules.test.ts lib/username.test.ts lib/team-alerts.test.ts lib/push-subscription.test.ts db/cities-opponents-fill.test.ts db/admin-users-seed.test.ts services/scraper/scrape.test.ts",
     "db:seed": "tsx db/seed.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",

@@ -130,8 +130,10 @@ export function BookingForm({
       subdivisionCode,
       start: toMinutes(startTime),
       durationMinutes: duration,
+      // The chosen substitute is checked again on save; here the form's last saved one is used.
+      substituteStaffId: status === "substitute" ? (initial.substituteStaffId ?? null) : null,
     });
-  }, [day, initial.slotId, teamId, pitchId, subdivisionCode, startTime, duration]);
+  }, [day, initial.slotId, initial.substituteStaffId, status, teamId, pitchId, subdivisionCode, startTime, duration]);
   const problems = [...classified.hard, ...classified.conflicts.map((conflict) => conflict.summary)];
   const blocked = classified.hard.length > 0 || (classified.conflicts.length > 0 && !seriesOn);
 

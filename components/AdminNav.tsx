@@ -4,7 +4,7 @@ const ITEMS = [
   { href: "/admin", label: "ניהול תכנית אימונים" },
   { href: "/admin/pitches", label: "לוח שיבוץ מגרשים" },
   { href: "/admin/games", label: "משחקים" },
-  { href: "/admin/coaches", label: "מאמנים והנהלה" },
+  { href: "/admin/coaches", label: "מאמנים" },
   { href: "/admin/banks", label: "חובשים, נהגים וערים" },
   { href: "/admin/history", label: "היסטוריית שינויים" },
 ];

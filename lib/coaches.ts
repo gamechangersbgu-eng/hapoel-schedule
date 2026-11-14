@@ -22,6 +22,8 @@ export type CoachInfo = {
   /** Management contacts are told about every team, not only the teams they coach. */
   receivesAllUpdates: boolean;
   teamIds: number[];
+  /** Teams (also in teamIds) where this person is an assistant coach, not the head coach. */
+  assistantTeamIds?: number[];
   workDays: number[];
   absences: { id: number; type: string; startDate: string; endDate: string | null; note: string | null }[];
 };

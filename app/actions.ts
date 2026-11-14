@@ -5,7 +5,8 @@ import { revalidatePath } from "next/cache";
 import { and, eq, gte, lte, ne, notInArray } from "drizzle-orm";
 import { ensureTrainingDuration, resolveRotationTemplateId } from "@/db/reference-seed";
 import { db, slotTrainingDetails, slots, teams } from "@/lib/db";
-import { OFFICIAL_DURATION_ERROR_HE, durationAllowedForSave, durationBetween, roundToQuarterHour, toMinutes } from "@/lib/pitch-rules";
+import { DEFAULT_TRAINING_MINUTES, OFFICIAL_DURATION_ERROR_HE, coachClashes, durationAllowedForSave, durationBetween, roundToQuarterHour, toMinutes } from "@/lib/pitch-rules";
+import { getPitchDay } from "@/lib/pitch-board";
 import { parseSeriesChoices, readSeriesInterval } from "@/lib/recurrence";
 import { formatDateHe, logChange } from "@/lib/history";
 import { bumpScheduleRevision } from "@/lib/schedule-revision";
@@ -80,6 +81,22 @@ export async function saveSlot(input: SlotInput) {
       return {
         error: `${pitch} כבר תפוס בשעה ${startTime} על ידי ${conflictingSlot.teamName}`,
       };
+    }
+
+    // The same coach cannot run two teams at once (another team's training or game).
+    const day = await getPitchDay(input.date);
+    const saved = input.id ? day.bookings.find((item) => item.slotId === input.id) : undefined;
+    if (saved?.status !== "cancelled") {
+      const start = toMinutes(startTime);
+      const length = input.durationMinutes || saved?.durationMinutes || DEFAULT_TRAINING_MINUTES;
+      const clashes = coachClashes(day, {
+        slotId: input.id,
+        teamId: input.teamId,
+        substituteStaffId: saved?.substituteStaffId ?? null,
+        start,
+        end: start + length,
+      });
+      if (clashes.length) return { error: clashes.join(" | ") };
     }
   }
 
