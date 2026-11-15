@@ -11,6 +11,7 @@ import { type TouchEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   HEBREW_DAY_NAMES,
   kindLabel,
+  practiceGameDetail,
   regularTeams,
   slotsForDay,
   timeLabel,
@@ -90,7 +91,7 @@ function GameBadge({ type }: { type: string }) {
 
 /** Spoken description for screen readers, e.g. "אימון · וסרמיל 1, 17:30". */
 function spoken(slot: SlotDTO) {
-  return [kindLabel(slot), timeLabel(slot), slot.note].filter(Boolean).join(", ");
+  return [kindLabel(slot), timeLabel(slot), practiceGameDetail(slot), slot.note].filter(Boolean).join(", ");
 }
 
 function SlotCard({ slot, teamLabel }: { slot: SlotDTO; teamLabel?: string }) {
@@ -133,6 +134,11 @@ function SlotCard({ slot, teamLabel }: { slot: SlotDTO; teamLabel?: string }) {
               <span className="text-base font-bold leading-snug dark:text-white">{kindLabel(slot)}</span>
             )}
           </div>
+          {practiceGameDetail(slot) ? (
+            <p className="mt-0.5 text-[15px] font-semibold leading-snug text-zinc-700 dark:text-zinc-200">
+              {practiceGameDetail(slot)}
+            </p>
+          ) : null}
           {isGame && (slot.opponent || slot.departureTime) ? (
             <p className="mt-0.5 text-[15px] font-semibold leading-snug text-zinc-700 dark:text-zinc-200">
               {slot.opponent ? `נגד ${slot.opponent}` : ""}

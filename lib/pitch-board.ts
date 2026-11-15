@@ -19,6 +19,7 @@ import {
   DEFAULT_TRAINING_MINUTES,
   HOME_GAME_BLOCK_MINUTES,
   SUBDIVISION_RANGE,
+  allowedSubdivisionsForTeam,
   classifyBooking,
   toMinutes,
   type BoardBooking,
@@ -68,6 +69,7 @@ async function loadCatalog(): Promise<LoadedCatalog> {
     ),
   );
   const labeledById = new Map(labeledTeams.map((team) => [team.id, team]));
+  const storedName = new Map(teamRows.map((team) => [team.id, team.name]));
 
   return {
     catalog: {
@@ -77,14 +79,20 @@ async function loadCatalog(): Promise<LoadedCatalog> {
       rotations: rotationRows,
       teams: labeledTeams
         .filter((team) => !team.isComments)
-        .map((team) => ({
-          id: team.id,
-          name: team.name,
-          ageBandCode: team.ageBandCode,
-          allowedSubdivisions: team.ageBandCode
+        .map((team) => {
+          const fromBand = team.ageBandCode
             ? (allowed.get(team.ageBandCode) ?? Object.keys(SUBDIVISION_RANGE))
-            : Object.keys(SUBDIVISION_RANGE),
-        })),
+            : Object.keys(SUBDIVISION_RANGE);
+          return {
+            id: team.id,
+            name: team.name,
+            ageBandCode: team.ageBandCode,
+            allowedSubdivisions: allowedSubdivisionsForTeam({
+              name: storedName.get(team.id) ?? team.name,
+              allowedSubdivisions: fromBand,
+            }),
+          };
+        }),
       footballSchoolRules: ruleRows.map((rule) => ({
         weekdays: rule.weekdays.split(",").map(Number),
         start: toMinutes(rule.startTime),

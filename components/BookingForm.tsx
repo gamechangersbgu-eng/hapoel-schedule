@@ -10,6 +10,7 @@ import { DurationPicker } from "@/components/DurationPicker";
 import { RecurrenceFields } from "@/components/RecurrenceFields";
 import { SeriesConflictReview } from "@/components/SeriesConflictReview";
 import {
+  allowedSubdivisionsForTeam,
   classifyBooking,
   clocksAfterDurationChange,
   clocksAfterEndChange,
@@ -89,7 +90,9 @@ export function BookingForm({
   const team = day.teams.find((item) => item.id === teamId);
   const allowBiweekly = biweeklyRepeatAllowed(team ? [team] : []);
   const interval = effectiveInterval(allowBiweekly, intervalDays);
-  const allowed = team?.allowedSubdivisions ?? [];
+  const allowed = team
+    ? allowedSubdivisionsForTeam({ name: team.name, allowedSubdivisions: team.allowedSubdivisions })
+    : [];
   const rotations = day.rotations.length > 0 ? day.rotations : fallbackRotations();
   const rotation = rotations.find((item) => item.id === rotationId);
 
@@ -246,7 +249,9 @@ export function BookingForm({
                 const next = Number(event.target.value);
                 setTeamId(next);
                 const nextTeam = day.teams.find((item) => item.id === next);
-                const nextAllowed = nextTeam?.allowedSubdivisions ?? [];
+                const nextAllowed = nextTeam
+                  ? allowedSubdivisionsForTeam({ name: nextTeam.name, allowedSubdivisions: nextTeam.allowedSubdivisions })
+                  : [];
                 if (!nextAllowed.includes(subdivisionCode)) setSubdivisionCode("whole");
                 if (intervalDays === 14 && !biweeklyRepeatAllowed(nextTeam ? [nextTeam] : [])) {
                   setIntervalDays(7);

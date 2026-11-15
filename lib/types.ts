@@ -25,6 +25,8 @@ export type SlotDTO = {
   /** Games: opponent, and for away games the departure time from Beer Sheva. */
   opponent?: string | null;
   departureTime?: string | null;
+  /** Practice game (משחק אימון): free-text medic. League games use the medic bank instead. */
+  medicName?: string | null;
 };
 
 export type TeamDTO = {

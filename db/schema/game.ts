@@ -81,6 +81,8 @@ export const slotGameDetails = pgTable(
     opponent: text(),
     pitchId: integer("pitch_id").references(() => pitches.id),
     medicId: integer("medic_id").references(() => medics.id),
+    /** Free-text medic for a practice game (משחק אימון). League games use medicId. */
+    medicName: text("medic_name"),
     driverId: integer("driver_id").references(() => drivers.id),
     cityId: integer("city_id").references(() => cities.id),
     kickoffTime: text("kickoff_time"),

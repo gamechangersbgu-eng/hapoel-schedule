@@ -86,6 +86,7 @@ export async function saveGame(formData: FormData) {
     kickoffTime: kickoff,
     pitchId: kind === "home_game" ? num("pitchId") : null,
     medicId: kind === "home_game" ? num("medicId") : null,
+    medicName: null,
     cityId,
     driverId: kind === "away_game" ? num("driverId") : null,
     departureTime,

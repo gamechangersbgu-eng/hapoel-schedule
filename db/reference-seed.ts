@@ -286,6 +286,11 @@ async function seedTeamAgeBandData(database: Db) {
       labelHe: "בית ספר לכדורגל",
       sortOrder: 2,
     },
+    {
+      code: "yeladot",
+      labelHe: "ילדות א–ב",
+      sortOrder: 3,
+    },
   ]);
 }
 
@@ -321,6 +326,10 @@ async function seedPracticeData(database: Db) {
       ageBandCode: "football_school",
       subdivisionCode,
     })),
+    ...allSubdivisions.map((subdivisionCode) => ({
+      ageBandCode: "yeladot",
+      subdivisionCode,
+    })),
   ]);
 
   await database.insert(footballSchoolScheduleRules).values([
@@ -348,7 +357,7 @@ async function seedPracticeData(database: Db) {
 }
 
 /** Maps calendar row Hebrew names → `team_age_bands.code` (team domain). Team list per the club spec (Nov 2026). */
-/* ילדות א/ב: the spec does not say which pitch rules apply; assumed like נוער–ילדים ב (whole/half). */
+/* ילדות א/ב: whole, half, third, and quarter. Other נוער–ילדים ב teams stay on whole/half. */
 export const TEAM_AGE_BAND_BY_NAME: Record<string, string | null> = {
   "נוער": "noar_through_yeladim_b",
   "נערים א": "noar_through_yeladim_b",
@@ -368,8 +377,8 @@ export const TEAM_AGE_BAND_BY_NAME: Record<string, string | null> = {
   "טרום ג אדום": "yeladim_g_through_trum_g",
   "טרום ג לבן": "yeladim_g_through_trum_g",
   "טרום ג עבדאללה": "yeladim_g_through_trum_g",
-  "ילדות א": "noar_through_yeladim_b",
-  "ילדות ב": "noar_through_yeladim_b",
+  "ילדות א": "yeladot",
+  "ילדות ב": "yeladot",
   "בית ספר לכדורגל": "football_school",
   הערות: null,
 };

@@ -2,9 +2,9 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { and, eq, gte, lte, ne, notInArray } from "drizzle-orm";
+import { and, eq, gte, isNull, lte, ne, notInArray } from "drizzle-orm";
 import { ensureTrainingDuration, resolveRotationTemplateId } from "@/db/reference-seed";
-import { db, slotTrainingDetails, slots, teams } from "@/lib/db";
+import { db, slotGameDetails, slotTrainingDetails, slots, teams } from "@/lib/db";
 import { DEFAULT_TRAINING_MINUTES, OFFICIAL_DURATION_ERROR_HE, coachClashes, durationAllowedForSave, durationBetween, roundToQuarterHour, toMinutes } from "@/lib/pitch-rules";
 import { getPitchDay } from "@/lib/pitch-board";
 import { parseSeriesChoices, readSeriesInterval } from "@/lib/recurrence";
@@ -12,13 +12,16 @@ import { formatDateHe, logChange } from "@/lib/history";
 import { bumpScheduleRevision } from "@/lib/schedule-revision";
 import { notifyTeamsScheduleChanged } from "@/lib/web-push";
 import { getSlotsInWeek } from "@/lib/schedule";
-import { getSlotType, isPitchSlot, SLOT_TYPES } from "@/lib/slot-types";
+import { cityForOpponent } from "@/lib/opponent-cities";
+import { readPracticeText } from "@/lib/practice-game";
+import { getSlotType, isPitchSlot, isPracticeGame, SLOT_TYPES } from "@/lib/slot-types";
+import { GAME_DETAIL_SOURCES } from "@/shared/game";
 import { deleteTrainingScope, pitchByCode, previewSeries, saveTrainingSeries, teamName } from "@/lib/training-series";
 import { addDaysISO, weekDates } from "@/lib/week";
 import { endSession, requireAdmin } from "@/lib/auth";
 
 const VALID_TYPES: Set<string> = new Set(SLOT_TYPES.map((item) => item.id));
-const GAME_TYPES = ["home_game", "away_game"];
+const GAME_TYPES = ["home_game", "away_game", "practice_game"];
 
 async function refreshSchedule() {
   await bumpScheduleRevision();
@@ -38,6 +41,9 @@ export type SlotInput = {
   rotationTemplateId?: number | null;
   /** null clears a previously saved length. Omitted leaves training details alone. */
   durationMinutes?: number | null;
+  /** Practice game (משחק אימון). Ignored for every other type. */
+  opponent?: string | null;
+  medicName?: string | null;
 };
 
 export async function saveSlot(input: SlotInput) {
@@ -60,6 +66,14 @@ export async function saveSlot(input: SlotInput) {
   if (isPitchSlot(input.type) && !startTime) {
     return { error: "יש לבחור שעה עבור אימון במגרש" };
   }
+  if (isPracticeGame(input.type) && !startTime) {
+    return { error: "יש לבחור שעה עבור משחק אימון" };
+  }
+
+  const opponentText = isPracticeGame(input.type) ? readPracticeText(input.opponent) : { value: null };
+  const medicText = isPracticeGame(input.type) ? readPracticeText(input.medicName) : { value: null };
+  if ("error" in opponentText) return { error: `יריבה: ${opponentText.error}` };
+  if ("error" in medicText) return { error: `חובש: ${medicText.error}` };
 
   if (isPitchSlot(input.type) && startTime) {
     const [conflictingSlot] = await db
@@ -131,11 +145,62 @@ export async function saveSlot(input: SlotInput) {
         set: { rotationTemplateId, durationMinutes },
       });
   }
+  if (slotId && isPracticeGame(input.type)) {
+    const durationMinutes =
+      input.durationMinutes && input.durationMinutes > 0 && durationAllowedForSave(input.durationMinutes)
+        ? input.durationMinutes
+        : null;
+    if (durationMinutes) {
+      await ensureTrainingDuration(db, durationMinutes);
+      await db
+        .insert(slotTrainingDetails)
+        .values({ slotId, pitchId: null, subdivisionCode: null, durationMinutes, rotationTemplateId: null })
+        .onConflictDoUpdate({
+          target: slotTrainingDetails.slotId,
+          set: { pitchId: null, subdivisionCode: null, durationMinutes, rotationTemplateId: null },
+        });
+    } else {
+      await db.delete(slotTrainingDetails).where(eq(slotTrainingDetails.slotId, slotId));
+    }
+    await db
+      .insert(slotGameDetails)
+      .values({
+        slotId,
+        gameKind: "practice_game",
+        opponent: opponentText.value,
+        medicName: medicText.value,
+        kickoffTime: startTime,
+        source: GAME_DETAIL_SOURCES.ADMIN,
+      })
+      .onConflictDoUpdate({
+        target: slotGameDetails.slotId,
+        set: {
+          gameKind: "practice_game",
+          opponent: opponentText.value,
+          medicName: medicText.value,
+          kickoffTime: startTime,
+        },
+      });
+    if (opponentText.value) await cityForOpponent(opponentText.value);
+  } else if (slotId) {
+    await db
+      .delete(slotGameDetails)
+      .where(and(eq(slotGameDetails.slotId, slotId), eq(slotGameDetails.gameKind, "practice_game")));
+    if (!isPitchSlot(input.type)) {
+      await db
+        .delete(slotTrainingDetails)
+        .where(and(eq(slotTrainingDetails.slotId, slotId), isNull(slotTrainingDetails.pitchId)));
+    }
+  }
 
   const [team] = await db.select({ name: teams.name }).from(teams).where(eq(teams.id, input.teamId)).limit(1);
+  const practiceNote =
+    isPracticeGame(input.type) && (opponentText.value || medicText.value)
+      ? `${opponentText.value ? ` נגד ${opponentText.value}` : ""}${medicText.value ? ` · חובש ${medicText.value}` : ""}`
+      : "";
   await logChange({
     action: input.id ? "update" : "create",
-    summary: `${input.id ? "עודכן" : "נוסף"}: ${team?.name ?? ""}, ${getSlotType(input.type).label}, ${formatDateHe(input.date)}${startTime ? ` ${startTime}` : ""}`,
+    summary: `${input.id ? "עודכן" : "נוסף"}: ${team?.name ?? ""}, ${getSlotType(input.type).label}, ${formatDateHe(input.date)}${startTime ? ` ${startTime}` : ""}${practiceNote}`,
     teamId: input.teamId,
     slotId,
     date: input.date,
@@ -289,6 +354,8 @@ export async function saveSlotForm(formData: FormData) {
     note: String(formData.get("note") || ""),
     rotationTemplateId: rotationRaw ? Number(rotationRaw) : null,
     durationMinutes: durationMinutes > 0 ? durationMinutes : null,
+    opponent: isPracticeGame(type) ? String(formData.get("opponent") ?? "") : null,
+    medicName: isPracticeGame(type) ? String(formData.get("medicName") ?? "") : null,
   });
 
   if (result && "error" in result && result.error) {

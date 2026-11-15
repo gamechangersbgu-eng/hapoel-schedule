@@ -22,6 +22,19 @@ export function kindLabel(slot: SlotDTO): string {
   return style.label;
 }
 
+/** Opponent and medic for a practice game, or null when this slot is something else or both are empty. */
+export function practiceGameDetail(slot: {
+  type: string;
+  opponent?: string | null;
+  medicName?: string | null;
+}): string | null {
+  if (slot.type !== "practice_game") return null;
+  const parts: string[] = [];
+  if (slot.opponent?.trim()) parts.push(`נגד ${slot.opponent.trim()}`);
+  if (slot.medicName?.trim()) parts.push(`חובש: ${slot.medicName.trim()}`);
+  return parts.length ? parts.join(" · ") : null;
+}
+
 export function campCovers(slot: SlotDTO, date: string) {
   if (!isCampSlot(slot.type)) return false;
   const end = slot.endDate ?? slot.date;

@@ -15,6 +15,39 @@ export const SUBDIVISION_RANGE: Record<string, [number, number]> = {
   quarter_south_2: [9, 12],
 };
 
+/**
+ * ילדות א and ילדות ב may book a third or a quarter as well as a whole pitch and a half.
+ * Every other team keeps the list from its age band.
+ */
+export const GIRLS_PARTIAL_PITCH_TEAMS = ["ילדות א", "ילדות ב"] as const;
+
+export const GIRLS_EXTRA_SUBDIVISIONS = [
+  "third_north",
+  "third_center",
+  "third_south",
+  "quarter_north_1",
+  "quarter_north_2",
+  "quarter_south_1",
+  "quarter_south_2",
+] as const;
+
+export function canonicalTeamName(name: string) {
+  return name.trim().replace(/\s+/g, " ");
+}
+
+export function isGirlsPartialPitchTeam(name: string) {
+  const canonical = canonicalTeamName(name);
+  return (GIRLS_PARTIAL_PITCH_TEAMS as readonly string[]).includes(canonical);
+}
+
+/** Age-band list, plus a third and a quarter when the team is ילדות א or ילדות ב. */
+export function allowedSubdivisionsForTeam(team: { name: string; allowedSubdivisions: readonly string[] }) {
+  if (!isGirlsPartialPitchTeam(team.name)) return [...team.allowedSubdivisions];
+  const have = new Set(team.allowedSubdivisions);
+  const extra = GIRLS_EXTRA_SUBDIVISIONS.filter((code) => !have.has(code));
+  return extra.length ? [...team.allowedSubdivisions, ...extra] : [...team.allowedSubdivisions];
+}
+
 /** Short labels for boards and screens. Whole pitch has none (nothing to add). */
 export const SUBDIVISION_SHORT: Record<string, string> = {
   whole: "מלא",
@@ -341,9 +374,10 @@ export function classifyBooking(
     hard.push(`${pitch.nameHe} משוריין ונעול לשיבוץ.`);
   }
 
-  if (!team.allowedSubdivisions.includes(booking.subdivisionCode)) {
+  const allowedCodes = allowedSubdivisionsForTeam(team);
+  if (!allowedCodes.includes(booking.subdivisionCode)) {
     const labels = day.subdivisions
-      .filter((item) => team.allowedSubdivisions.includes(item.code))
+      .filter((item) => allowedCodes.includes(item.code))
       .map((item) => item.labelHe);
     hard.push(`${team.name} יכולה להתאמן רק ב: ${labels.join(", ")}.`);
   }

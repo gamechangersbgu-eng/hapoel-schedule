@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { QuarterHourSelect } from "@/components/QuarterHourSelect";
 import { roundToQuarterHour } from "@/lib/pitch-rules";
-import { SLOT_TYPES, isCampSlot, isPitchSlot } from "@/lib/slot-types";
+import { SLOT_TYPES, isCampSlot, isPitchSlot, isPracticeGame } from "@/lib/slot-types";
 
 type TypeAndCampFieldsProps = {
   defaultType: string;
@@ -30,6 +30,7 @@ export function TypeAndCampFields({
 }: TypeAndCampFieldsProps) {
   const [type, setType] = useState(defaultType);
   const pitchSelected = isPitchSlot(type);
+  const timed = pitchSelected || isPracticeGame(type);
   const timeField = "mt-1 w-full rounded-md border border-zinc-300 p-2 tabular-nums";
 
   return (
@@ -56,18 +57,18 @@ export function TypeAndCampFields({
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <div className="block text-sm font-bold">
           <label htmlFor="slot-start">
-            שעת התחלה {pitchSelected ? <span className="text-red-700">*</span> : null}
+            שעת התחלה {timed ? <span className="text-red-700">*</span> : null}
           </label>
           <QuarterHourSelect
             id="slot-start"
             name="startTime"
             value={startTime}
-            required={pitchSelected}
+            required={timed}
             onChange={(value) => onStartTimeChange(roundToQuarterHour(value))}
             className={timeField}
           />
         </div>
-        {pitchSelected ? (
+        {timed ? (
           <div className="block text-sm font-bold">
             <label htmlFor="slot-end">שעת סיום</label>
             <QuarterHourSelect
