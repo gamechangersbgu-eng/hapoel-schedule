@@ -61,6 +61,8 @@ export const staff = pgTable("staff", {
   notes: text(),
   /** Management: include this person on every team's schedule updates. */
   receivesAllUpdates: boolean("receives_all_updates").notNull().default(false),
+  /** Israeli ID (ת"ז), 9 digits stored as text so leading zeros stay. Admin only. */
+  nationalId: text("national_id"),
 });
 
 export const staffWorkDays = pgTable(

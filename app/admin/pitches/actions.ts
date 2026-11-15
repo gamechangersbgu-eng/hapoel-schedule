@@ -105,6 +105,7 @@ export async function saveBoardBooking(formData: FormData) {
     subdivisionCode,
     start: toMinutes(startTime),
     durationMinutes,
+    substituteStaffId,
   });
   // A cancelled session no longer takes the pitch, so it never conflicts.
   if (problems.length && !cancelled) back(problems.join(" | "));

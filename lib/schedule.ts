@@ -116,6 +116,7 @@ export async function getWeekData(weekParam?: string | null): Promise<WeekData> 
         place: placeBySlot.get(slot.id) ?? null,
         opponent: gameBySlot.get(slot.id)?.opponent ?? null,
         departureTime: gameBySlot.get(slot.id)?.departureTime ?? null,
+        medicName: gameBySlot.get(slot.id)?.medicName ?? null,
         durationMinutes,
         rotationTemplateId: training?.rotationTemplateId ?? null,
         endTime:

@@ -14,6 +14,7 @@ import { TEAM_AGE_BAND_BY_NAME } from "./reference-seed";
 /** Demo pitch use per age band: older teams on whole/half pitches, younger ones on smaller parts. */
 const DEMO_TRAINING: Record<string, { subdivisions: string[]; minutes: number }> = {
   noar_through_yeladim_b: { subdivisions: ["whole", "half_north", "half_south"], minutes: 105 },
+  yeladot: { subdivisions: ["third_north", "quarter_north_1", "quarter_south_2", "half_south"], minutes: 60 },
   yeladim_g_through_trum_g: { subdivisions: ["half_north", "third_center", "quarter_south_1", "quarter_south_2"], minutes: 60 },
   football_school: { subdivisions: ["half_south"], minutes: 120 },
 };
@@ -73,6 +74,18 @@ export async function insertDemoTwoWeekSchedule(
         pitchId: trainingPitchId,
         subdivisionCode: demo.subdivisions[inserted.id % demo.subdivisions.length],
         durationMinutes: demo.minutes,
+      });
+    }
+
+    if (spec.type === "practice_game") {
+      await database.insert(slotGameDetails).values({
+        slotId: inserted.id,
+        gameKind: "practice_game",
+        opponent: spec.practice?.opponent ?? null,
+        medicName: spec.practice?.medicName ?? null,
+        kickoffTime: spec.startTime ?? null,
+        source: GAME_DETAIL_SOURCES.ADMIN,
+        externalId: `demo-practice-${spec.teamName}-${spec.dayOffset}`,
       });
     }
 

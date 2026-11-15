@@ -10,6 +10,7 @@ import { DurationPicker } from "@/components/DurationPicker";
 import { RecurrenceFields } from "@/components/RecurrenceFields";
 import { SeriesConflictReview } from "@/components/SeriesConflictReview";
 import {
+  allowedSubdivisionsForTeam,
   classifyBooking,
   clocksAfterDurationChange,
   clocksAfterEndChange,
@@ -89,7 +90,9 @@ export function BookingForm({
   const team = day.teams.find((item) => item.id === teamId);
   const allowBiweekly = biweeklyRepeatAllowed(team ? [team] : []);
   const interval = effectiveInterval(allowBiweekly, intervalDays);
-  const allowed = team?.allowedSubdivisions ?? [];
+  const allowed = team
+    ? allowedSubdivisionsForTeam({ name: team.name, allowedSubdivisions: team.allowedSubdivisions })
+    : [];
   const rotations = day.rotations.length > 0 ? day.rotations : fallbackRotations();
   const rotation = rotations.find((item) => item.id === rotationId);
 
@@ -130,8 +133,10 @@ export function BookingForm({
       subdivisionCode,
       start: toMinutes(startTime),
       durationMinutes: duration,
+      // The chosen substitute is checked again on save; here the form's last saved one is used.
+      substituteStaffId: status === "substitute" ? (initial.substituteStaffId ?? null) : null,
     });
-  }, [day, initial.slotId, teamId, pitchId, subdivisionCode, startTime, duration]);
+  }, [day, initial.slotId, initial.substituteStaffId, status, teamId, pitchId, subdivisionCode, startTime, duration]);
   const problems = [...classified.hard, ...classified.conflicts.map((conflict) => conflict.summary)];
   const blocked = classified.hard.length > 0 || (classified.conflicts.length > 0 && !seriesOn);
 
@@ -244,7 +249,9 @@ export function BookingForm({
                 const next = Number(event.target.value);
                 setTeamId(next);
                 const nextTeam = day.teams.find((item) => item.id === next);
-                const nextAllowed = nextTeam?.allowedSubdivisions ?? [];
+                const nextAllowed = nextTeam
+                  ? allowedSubdivisionsForTeam({ name: nextTeam.name, allowedSubdivisions: nextTeam.allowedSubdivisions })
+                  : [];
                 if (!nextAllowed.includes(subdivisionCode)) setSubdivisionCode("whole");
                 if (intervalDays === 14 && !biweeklyRepeatAllowed(nextTeam ? [nextTeam] : [])) {
                   setIntervalDays(7);

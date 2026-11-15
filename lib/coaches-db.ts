@@ -18,6 +18,7 @@ export async function getCoaches(): Promise<CoachInfo[]> {
     roleLabel: person.roleLabel,
     receivesAllUpdates: person.receivesAllUpdates,
     teamIds: links.filter((link) => link.staffId === person.id).map((link) => link.teamId),
+    assistantTeamIds: links.filter((link) => link.staffId === person.id && !link.isPrimary).map((link) => link.teamId),
     workDays: days.filter((day) => day.staffId === person.id).map((day) => day.weekday).sort(),
     absences: absences
       .filter((item) => item.staffId === person.id)

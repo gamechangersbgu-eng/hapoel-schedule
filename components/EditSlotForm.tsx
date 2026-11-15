@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { deleteSlotForm, previewWeeklySeries, saveSlotForm } from "@/app/actions";
 import { DurationPicker } from "@/components/DurationPicker";
+import { PracticeGameFields } from "@/components/PracticeGameFields";
 import { RecurrenceFields } from "@/components/RecurrenceFields";
 import { SeriesConflictReview } from "@/components/SeriesConflictReview";
 import { TypeAndCampFields } from "@/components/TypeAndCampFields";
-import { SLOT_TYPES, isCampSlot } from "@/lib/slot-types";
+import { SLOT_TYPES, isCampSlot, isPracticeGame } from "@/lib/slot-types";
 import {
   clocksAfterDurationChange,
   clocksAfterEndChange,
@@ -37,6 +38,7 @@ type EditSlotFormProps = {
   slotId?: number;
   error?: string;
   rotations: BoardRotation[];
+  opponentNames?: string[];
 };
 
 export function EditSlotForm({
@@ -47,6 +49,7 @@ export function EditSlotForm({
   slotId,
   error,
   rotations,
+  opponentNames = [],
 }: EditSlotFormProps) {
   const cellSlots = slots.filter((slot) => {
     if (slot.teamId !== team.id) return false;
@@ -90,7 +93,8 @@ export function EditSlotForm({
       active ? "bg-[#c8102e] text-white ring-[#c8102e]" : "bg-white text-zinc-800 ring-zinc-300"
     }`;
 
-  const repeatable = !editing && !isCampSlot(slotType) && slotType !== "home_game" && slotType !== "away_game";
+  const repeatable =
+    !editing && !isCampSlot(slotType) && !isPracticeGame(slotType) && slotType !== "home_game" && slotType !== "away_game";
   const allowBiweekly = repeatable && biweeklyRepeatAllowed([team]);
   const interval = effectiveInterval(allowBiweekly, intervalDays);
   const occurrence = buildOccurrenceDates({
@@ -203,7 +207,10 @@ export function EditSlotForm({
                     className="flex flex-1 items-center justify-between rounded-lg px-3 py-2 text-sm font-bold"
                     style={{ background: style?.bg, color: style?.fg }}
                   >
-                    <span>{style?.label}</span>
+                    <span>
+                      {style?.label}
+                      {slot.opponent ? ` · ${slot.opponent}` : ""}
+                    </span>
                     <span>{slot.startTime || slot.note || "עריכה"}</span>
                   </a>
                   <form action={deleteSlotForm}>
@@ -296,6 +303,14 @@ export function EditSlotForm({
             weekOptions={weekOptions}
             onTypeChange={setSlotType}
           />
+
+          {isPracticeGame(slotType) ? (
+            <PracticeGameFields
+              opponent={editing?.opponent}
+              medicName={editing?.medicName}
+              opponentNames={opponentNames}
+            />
+          ) : null}
 
           <DurationPicker value={duration} onChange={applyDuration} />
 

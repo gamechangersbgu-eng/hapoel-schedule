@@ -72,6 +72,7 @@ function chipLine(slot: SlotDTO) {
   if (SHORT_PITCH[slot.type]) return `${SHORT_PITCH[slot.type]}${slot.place ? ` · ${slot.place}` : ""}`;
   if (slot.type === "home_game") return slot.opponent ? `בית · ${slot.opponent}` : "משחק בית";
   if (slot.type === "away_game") return slot.opponent ? `חוץ · ${slot.opponent}` : "משחק חוץ";
+  if (slot.type === "practice_game") return slot.opponent ? `משחק אימון · ${slot.opponent}` : "משחק אימון";
   if (slot.type === "off") return "חופש";
   return null;
 }
@@ -85,9 +86,11 @@ function Chip({ slot, count }: { slot: SlotDTO; count: number }) {
     ? `בוטל${slot.statusNote ? ` · ${slot.statusNote}` : ""}`
     : slot.substituteName
       ? `מחליף: ${slot.substituteName}`
-      : slot.type === "away_game" && slot.departureTime
-        ? `יציאה ${slot.departureTime}`
-        : slot.note;
+      : slot.type === "practice_game" && slot.medicName
+        ? `חובש: ${slot.medicName}${slot.note ? ` · ${slot.note}` : ""}`
+        : slot.type === "away_game" && slot.departureTime
+          ? `יציאה ${slot.departureTime}`
+          : slot.note;
   const background = cancelled
     ? { background: "repeating-linear-gradient(135deg,#52525b,#52525b 8px,#3f3f46 8px,#3f3f46 16px)", color: "#f4f4f5" }
     : { background: style.bg, color: style.fg };

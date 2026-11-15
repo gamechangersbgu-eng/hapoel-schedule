@@ -3,6 +3,7 @@ import { AppHeader } from "@/components/AppHeader";
 import { EditSlotForm } from "@/components/EditSlotForm";
 import { ScheduleView } from "@/components/ScheduleView";
 import { ScheduleLiveRefresh } from "@/components/ScheduleLiveRefresh";
+import { listOpponentClubs } from "@/lib/opponent-cities";
 import { loadRotations } from "@/lib/rotations";
 import { getWeekData } from "@/lib/schedule";
 import { getScheduleRevision } from "@/lib/schedule-revision";
@@ -30,10 +31,11 @@ type AdminProps = {
 export default async function AdminPage({ searchParams }: AdminProps) {
   const user = await requireAdmin();
   const params = await searchParams;
-  const [data, revision, rotations] = await Promise.all([
+  const [data, revision, rotations, opponents] = await Promise.all([
     getWeekData(params.week),
     getScheduleRevision(),
     loadRotations(),
+    listOpponentClubs(),
   ]);
   const selectedTeam = data.teams.find(
     (team) => String(team.id) === params.team,
@@ -80,6 +82,7 @@ export default async function AdminPage({ searchParams }: AdminProps) {
           slotId={Number.isFinite(slotId) ? slotId : undefined}
           error={params.error}
           rotations={rotations}
+          opponentNames={opponents.map((club) => club.name)}
         />
       ) : null}
     </div>

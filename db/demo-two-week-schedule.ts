@@ -18,6 +18,8 @@ export type DemoSlotSpec = {
     cityName?: string;
     externalId: string;
   };
+  /** Practice game (משחק אימון): opponent from the club bank, medic as free text. */
+  practice?: { opponent: string; medicName: string };
 };
 
 export const DEMO_TWO_WEEK_SLOTS: DemoSlotSpec[] = [
@@ -75,6 +77,15 @@ export const DEMO_TWO_WEEK_SLOTS: DemoSlotSpec[] = [
   { teamName: "נערים ג", dayOffset: 1, startTime: "17:00", type: "vasermil_4" },
   { teamName: "נערים ג", dayOffset: 3, startTime: "17:00", type: "vasermil_4" },
   { teamName: "נערים ג", dayOffset: 5, type: "off", note: "חופש" },
+
+  {
+    teamName: "ילדות א",
+    dayOffset: 2,
+    startTime: "17:15",
+    type: "practice_game",
+    practice: { opponent: "מ.ס. אשדוד", medicName: "יוסי כהן" },
+  },
+  { teamName: "ילדות ב", dayOffset: 1, startTime: "16:00", type: "vasermil_2" },
 
   { teamName: "ילדים א אדום", dayOffset: 0, startTime: "17:00", type: "vasermil_1" },
   { teamName: "ילדים א אדום", dayOffset: 2, startTime: "17:00", type: "vasermil_1" },

@@ -15,6 +15,39 @@ export const SUBDIVISION_RANGE: Record<string, [number, number]> = {
   quarter_south_2: [9, 12],
 };
 
+/**
+ * ילדות א and ילדות ב may book a third or a quarter as well as a whole pitch and a half.
+ * Every other team keeps the list from its age band.
+ */
+export const GIRLS_PARTIAL_PITCH_TEAMS = ["ילדות א", "ילדות ב"] as const;
+
+export const GIRLS_EXTRA_SUBDIVISIONS = [
+  "third_north",
+  "third_center",
+  "third_south",
+  "quarter_north_1",
+  "quarter_north_2",
+  "quarter_south_1",
+  "quarter_south_2",
+] as const;
+
+export function canonicalTeamName(name: string) {
+  return name.trim().replace(/\s+/g, " ");
+}
+
+export function isGirlsPartialPitchTeam(name: string) {
+  const canonical = canonicalTeamName(name);
+  return (GIRLS_PARTIAL_PITCH_TEAMS as readonly string[]).includes(canonical);
+}
+
+/** Age-band list, plus a third and a quarter when the team is ילדות א or ילדות ב. */
+export function allowedSubdivisionsForTeam(team: { name: string; allowedSubdivisions: readonly string[] }) {
+  if (!isGirlsPartialPitchTeam(team.name)) return [...team.allowedSubdivisions];
+  const have = new Set(team.allowedSubdivisions);
+  const extra = GIRLS_EXTRA_SUBDIVISIONS.filter((code) => !have.has(code));
+  return extra.length ? [...team.allowedSubdivisions, ...extra] : [...team.allowedSubdivisions];
+}
+
 /** Short labels for boards and screens. Whole pitch has none (nothing to add). */
 export const SUBDIVISION_SHORT: Record<string, string> = {
   whole: "מלא",
@@ -273,6 +306,21 @@ export type PitchDay = {
   footballSchoolRules: FootballSchoolRule[];
   bookings: BoardBooking[];
   coaches: CoachInfo[];
+  /**
+   * Every game of the day (home and away, with or without a pitch), so a coach of two teams
+   * is not given a training while his other team plays. Optional: older callers leave it out.
+   */
+  games?: TeamGameBlock[];
+};
+
+/** When a team is busy with a game: from departure (away) or kickoff, until two hours after kickoff. */
+export type TeamGameBlock = {
+  slotId: number;
+  teamId: number;
+  teamName: string;
+  away: boolean;
+  start: number;
+  end: number;
 };
 
 function overlaps(a: [number, number], b: [number, number]) {
@@ -293,6 +341,8 @@ export type ProposedBooking = {
   subdivisionCode: string;
   start: number;
   durationMinutes: number;
+  /** A substitute coach runs this session instead of the team's own coaches. */
+  substituteStaffId?: number | null;
 };
 
 export type BookingConflict = {
@@ -324,9 +374,10 @@ export function classifyBooking(
     hard.push(`${pitch.nameHe} משוריין ונעול לשיבוץ.`);
   }
 
-  if (!team.allowedSubdivisions.includes(booking.subdivisionCode)) {
+  const allowedCodes = allowedSubdivisionsForTeam(team);
+  if (!allowedCodes.includes(booking.subdivisionCode)) {
     const labels = day.subdivisions
-      .filter((item) => team.allowedSubdivisions.includes(item.code))
+      .filter((item) => allowedCodes.includes(item.code))
       .map((item) => item.labelHe);
     hard.push(`${team.name} יכולה להתאמן רק ב: ${labels.join(", ")}.`);
   }
@@ -345,6 +396,16 @@ export function classifyBooking(
       );
     }
   }
+
+  hard.push(
+    ...coachClashes(day, {
+      slotId: booking.slotId,
+      teamId: booking.teamId,
+      substituteStaffId: booking.substituteStaffId ?? null,
+      start: booking.start,
+      end,
+    }),
+  );
 
   for (const other of day.bookings) {
     if (other.slotId === booking.slotId || other.status === "cancelled") continue;
@@ -403,6 +464,58 @@ export function dayWarnings(day: PitchDay): string[] {
 export function coachesFor(day: PitchDay, booking: { teamId: number; substituteStaffId: number | null }) {
   if (booking.substituteStaffId) return day.coaches.filter((coach) => coach.id === booking.substituteStaffId);
   return day.coaches.filter((coach) => coach.teamIds.includes(booking.teamId));
+}
+
+/**
+ * A coach cannot be in two places at once: a training is blocked when one of its coaches also
+ * coaches another team that has a training or a game (home or away) overlapping it.
+ * "Coach" is everyone linked to the team in the staff list, head coach or assistant coach
+ * (a person can be head coach of one team and assistant of another).
+ * Cancelled sessions do not count; a substitute coach frees the team's own coach.
+ */
+export function coachClashes(
+  day: PitchDay,
+  booking: { slotId?: number; teamId: number; substituteStaffId: number | null; start: number; end: number },
+): string[] {
+  const mine = new Set(coachesFor(day, booking).map((coach) => coach.id));
+  if (mine.size === 0) return [];
+  const busy = [
+    ...day.bookings
+      .filter((item) => item.status !== "cancelled")
+      .map((item) => ({
+        slotId: item.slotId,
+        teamId: item.teamId,
+        teamName: item.teamName,
+        start: item.start,
+        end: item.end,
+        what: item.kind === "home_game" ? "משחק בית" : "אימון",
+        substituteStaffId: item.kind === "training" ? item.substituteStaffId : null,
+      })),
+    ...(day.games ?? [])
+      .filter((game) => !day.bookings.some((item) => item.slotId === game.slotId))
+      .map((game) => ({
+        slotId: game.slotId,
+        teamId: game.teamId,
+        teamName: game.teamName,
+        start: game.start,
+        end: game.end,
+        what: game.away ? "משחק חוץ" : "משחק בית",
+        substituteStaffId: null,
+      })),
+  ];
+  const messages = new Set<string>();
+  for (const other of busy) {
+    if (other.slotId === booking.slotId || other.teamId === booking.teamId) continue;
+    if (!overlaps([booking.start, booking.end], [other.start, other.end])) continue;
+    for (const coach of coachesFor(day, other)) {
+      if (!mine.has(coach.id)) continue;
+      const role = coach.assistantTeamIds?.includes(other.teamId) ? "עוזר מאמן" : "מאמן";
+      messages.add(
+        `${coach.name} הוא גם ${role} ב${other.teamName}, ויש לה ${other.what} באותו זמן (${toTime(other.start)}–${toTime(other.end)}). אפשר לבחור שעה אחרת או לסמן מאמן מחליף.`,
+      );
+    }
+  }
+  return [...messages];
 }
 
 /** Coach problems on this day: absence, not a work day, or two teams at the same time. Not blocking. */

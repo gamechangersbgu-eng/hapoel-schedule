@@ -8,6 +8,7 @@ import { requireAdmin } from "@/lib/auth";
 import { ABSENCE_TYPES, absenceLabel } from "@/lib/coaches";
 import { formatDateHe, logChange } from "@/lib/history";
 import { isManagementRole } from "@/lib/update-recipients";
+import { nationalIdError, normalizeNationalId } from "@/lib/national-id";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -23,10 +24,21 @@ export async function saveCoach(formData: FormData) {
   const id = Number(formData.get("id") || 0);
   const name = String(formData.get("name") ?? "").trim();
   const phone = String(formData.get("phone") ?? "").trim() || null;
-  const roleLabel = String(formData.get("roleLabel") ?? "").trim() || "מאמן";
-  const teamIds = formData.getAll("teamIds").map(Number).filter(Boolean);
+  // The role is chosen per team below (מאמן / עוזר מאמן); the general title stays "מאמן".
+  const roleLabel = "מאמן";
+  const nationalIdRaw = String(formData.get("nationalId") ?? "").trim();
+  // One choice per team: "head" (מאמן), "assistant" (עוזר מאמן) or empty.
+  const teamRoles = [...formData.entries()]
+    .filter(([key, value]) => key.startsWith("teamRole-") && (value === "head" || value === "assistant"))
+    .map(([key, value]) => ({ teamId: Number(key.slice("teamRole-".length)), isPrimary: value === "head" }))
+    .filter((item) => item.teamId > 0);
+  const teamIds = teamRoles.map((item) => item.teamId);
   const workDays = formData.getAll("workDays").map(Number).filter((d) => d >= 0 && d <= 6);
   if (!name) back({ error: "יש למלא שם", ...(id ? { edit: String(id) } : { new: "1" }) });
+  // The ID is optional; when filled it must be a valid Israeli ID.
+  const idError = nationalIdRaw ? nationalIdError(nationalIdRaw) : null;
+  if (idError) back({ error: idError, ...(id ? { edit: String(id) } : { new: "1" }) });
+  const nationalId = nationalIdRaw ? normalizeNationalId(nationalIdRaw) : null;
 
   let staffId = id;
   if (id) {
@@ -36,15 +48,17 @@ export async function saveCoach(formData: FormData) {
       .where(eq(staff.id, id))
       .limit(1);
     if (existing?.receivesAllUpdates) back({ error: "איש הנהלה נערך במקטע ההנהלה", edit: String(id) });
-    await db.update(staff).set({ displayName: name, phone, roleLabel }).where(eq(staff.id, id));
+    await db.update(staff).set({ displayName: name, phone, nationalId }).where(eq(staff.id, id));
   } else {
-    const [created] = await db.insert(staff).values({ displayName: name, phone, roleLabel }).returning({ id: staff.id });
+    const [created] = await db.insert(staff).values({ displayName: name, phone, roleLabel, nationalId }).returning({ id: staff.id });
     staffId = created.id;
   }
 
   await db.delete(teamCoaches).where(eq(teamCoaches.staffId, staffId));
   if (teamIds.length) {
-    await db.insert(teamCoaches).values(teamIds.map((teamId) => ({ teamId, staffId, coachName: name, isPrimary: true })));
+    await db
+      .insert(teamCoaches)
+      .values(teamRoles.map(({ teamId, isPrimary }) => ({ teamId, staffId, coachName: name, isPrimary })));
   }
   await db.delete(staffWorkDays).where(eq(staffWorkDays.staffId, staffId));
   if (workDays.length) {
@@ -52,7 +66,9 @@ export async function saveCoach(formData: FormData) {
   }
 
   const teamNames = teamIds.length
-    ? (await db.select({ id: teams.id, name: teams.name }).from(teams)).filter((t) => teamIds.includes(t.id)).map((t) => t.name)
+    ? (await db.select({ id: teams.id, name: teams.name }).from(teams))
+        .filter((t) => teamIds.includes(t.id))
+        .map((t) => (teamRoles.find((item) => item.teamId === t.id)?.isPrimary ? t.name : `${t.name} – עוזר`))
     : [];
   await logChange({
     action: "coach",

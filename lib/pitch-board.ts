@@ -19,11 +19,13 @@ import {
   DEFAULT_TRAINING_MINUTES,
   HOME_GAME_BLOCK_MINUTES,
   SUBDIVISION_RANGE,
+  allowedSubdivisionsForTeam,
   classifyBooking,
   toMinutes,
   type BoardBooking,
   type PitchDay,
   type ProposedBooking,
+  type TeamGameBlock,
 } from "@/lib/pitch-rules";
 
 export * from "@/lib/pitch-rules";
@@ -60,13 +62,14 @@ async function loadCatalog(): Promise<LoadedCatalog> {
           teamId,
           staffId: coach.id,
           coachName: coach.name,
-          isPrimary: true,
+          isPrimary: !coach.assistantTeamIds?.includes(teamId),
         })),
       ),
       fieldCoaches.map((coach) => ({ id: coach.id, name: coach.name })),
     ),
   );
   const labeledById = new Map(labeledTeams.map((team) => [team.id, team]));
+  const storedName = new Map(teamRows.map((team) => [team.id, team.name]));
 
   return {
     catalog: {
@@ -76,14 +79,20 @@ async function loadCatalog(): Promise<LoadedCatalog> {
       rotations: rotationRows,
       teams: labeledTeams
         .filter((team) => !team.isComments)
-        .map((team) => ({
-          id: team.id,
-          name: team.name,
-          ageBandCode: team.ageBandCode,
-          allowedSubdivisions: team.ageBandCode
+        .map((team) => {
+          const fromBand = team.ageBandCode
             ? (allowed.get(team.ageBandCode) ?? Object.keys(SUBDIVISION_RANGE))
-            : Object.keys(SUBDIVISION_RANGE),
-        })),
+            : Object.keys(SUBDIVISION_RANGE);
+          return {
+            id: team.id,
+            name: team.name,
+            ageBandCode: team.ageBandCode,
+            allowedSubdivisions: allowedSubdivisionsForTeam({
+              name: storedName.get(team.id) ?? team.name,
+              allowedSubdivisions: fromBand,
+            }),
+          };
+        }),
       footballSchoolRules: ruleRows.map((rule) => ({
         weekdays: rule.weekdays.split(",").map(Number),
         start: toMinutes(rule.startTime),
@@ -174,19 +183,54 @@ async function loadBookings(
   return byDate;
 }
 
+/** Every game on these dates (home and away), as the time its team is busy. Used for coach clashes. */
+async function loadGames(teamName: Record<number, string>, dates: string[]): Promise<Map<string, TeamGameBlock[]>> {
+  const byDate = new Map<string, TeamGameBlock[]>();
+  for (const date of dates) byDate.set(date, []);
+  if (dates.length === 0) return byDate;
+  const rows = await db
+    .select({ slot: slotsTable, game: slotGameDetails })
+    .from(slotsTable)
+    .leftJoin(slotGameDetails, eq(slotGameDetails.slotId, slotsTable.id))
+    .where(and(inArray(slotsTable.date, dates), inArray(slotsTable.type, ["home_game", "away_game"])));
+  for (const { slot, game } of rows) {
+    if (slot.status === "cancelled") continue;
+    const kickoff = game?.kickoffTime || slot.startTime;
+    if (!kickoff) continue;
+    const away = slot.type === "away_game";
+    const kick = toMinutes(kickoff);
+    const departure = away && game?.departureTime ? toMinutes(game.departureTime) : null;
+    byDate.get(slot.date)?.push({
+      slotId: slot.id,
+      teamId: slot.teamId,
+      teamName: teamName[slot.teamId] ?? "",
+      away,
+      start: departure != null && departure < kick ? departure : kick,
+      end: kick + HOME_GAME_BLOCK_MINUTES,
+    });
+  }
+  return byDate;
+}
+
 export async function getPitchDay(date: string): Promise<PitchDay> {
   const { catalog, teamName } = await loadCatalog();
-  const bookings = await loadBookings(catalog, teamName, [date]);
-  return { date, ...catalog, bookings: bookings.get(date) ?? [] };
+  const [bookings, games] = await Promise.all([
+    loadBookings(catalog, teamName, [date]),
+    loadGames(teamName, [date]),
+  ]);
+  return { date, ...catalog, bookings: bookings.get(date) ?? [], games: games.get(date) ?? [] };
 }
 
 /** Same rules as one day on the board, for every date of a recurring training. */
 export async function classifyDates(dates: string[], booking: ProposedBooking) {
   const unique = [...new Set(dates)].sort();
   const { catalog, teamName } = await loadCatalog();
-  const bookings = await loadBookings(catalog, teamName, unique);
+  const [bookings, games] = await Promise.all([
+    loadBookings(catalog, teamName, unique),
+    loadGames(teamName, unique),
+  ]);
   return unique.map((date) => {
-    const day: PitchDay = { date, ...catalog, bookings: bookings.get(date) ?? [] };
+    const day: PitchDay = { date, ...catalog, bookings: bookings.get(date) ?? [], games: games.get(date) ?? [] };
     return { date, ...classifyBooking(day, booking) };
   });
 }

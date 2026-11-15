@@ -1,18 +1,23 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { asc } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { AdminShell } from "@/components/AdminShell";
 import { addAbsence, deleteAbsence, deleteCoach, deleteManagement, saveCoach, saveManagement } from "@/app/admin/coaches/actions";
 import { requireAdmin } from "@/lib/auth";
 import { ABSENCE_TYPES, WEEKDAY_LETTERS, absenceLabel, absenceOn } from "@/lib/coaches";
 import { getCoaches } from "@/lib/coaches-db";
-import { db, teams as teamsTable } from "@/lib/db";
+import { db, staff, teams as teamsTable } from "@/lib/db";
 import { applyCoachLabels, coachFullNameByTeam } from "@/lib/team-labels";
 import { MANAGEMENT_ROLES, isManagementRole } from "@/lib/update-recipients";
 import { formatDayMonth, formatISODate } from "@/lib/week";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "מאמנים והנהלה · מצב מנהל" };
+/** The management section (update recipients) is hidden on this page for now. */
+const SHOW_MANAGEMENT = false;
+/** Coach absences (vacation, sick...) are hidden on this page for now; saved absences stay. */
+const SHOW_ABSENCES = false;
+
+export const metadata: Metadata = { title: "מאמנים · מצב מנהל" };
 
 type Props = { searchParams: Promise<{ edit?: string; new?: string; error?: string; done?: string }> };
 const field = "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-base";
@@ -40,7 +45,7 @@ export default async function CoachesPage({ searchParams }: Props) {
           teamId,
           staffId: coach.id,
           coachName: coach.name,
-          isPrimary: true,
+          isPrimary: !coach.assistantTeamIds?.includes(teamId),
         })),
       ),
       fieldCoaches.map((coach) => ({ id: coach.id, name: coach.name })),
@@ -49,11 +54,15 @@ export default async function CoachesPage({ searchParams }: Props) {
   const today = formatISODate(new Date());
   const editing = params.edit ? fieldCoaches.find((coach) => coach.id === Number(params.edit)) : undefined;
   const showForm = Boolean(params.new) || Boolean(editing);
+  // The ID number is read only for the form being edited; it is never part of CoachInfo.
+  const [editingId] = editing
+    ? await db.select({ nationalId: staff.nationalId }).from(staff).where(eq(staff.id, editing.id)).limit(1)
+    : [];
   const uncovered = teams.filter((team) => !fieldCoaches.some((coach) => coach.teamIds.includes(team.id)));
   const missingRoles = MANAGEMENT_ROLES.filter((role) => !management.some((person) => person.roleLabel === role));
 
   return (
-    <AdminShell user={user} title="מאמנים והנהלה" current="/admin/coaches">
+    <AdminShell user={user} title="מאמנים" current="/admin/coaches">
       {params.done ? (
         <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800 ring-1 ring-emerald-200">{params.done}</p>
       ) : null}
@@ -63,7 +72,7 @@ export default async function CoachesPage({ searchParams }: Props) {
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-zinc-600">
-          מאמנים, הקבוצות שלהם, ימי עבודה והיעדרויות. קבוצות מילדים א עד טרום ג מוצגות לפי השם הפרטי של המאמן (למשל ילדים ב נועם). אם יש כמה מאמנים, מוצג מי שנוסף ראשון. לוח המגרשים מתריע כשמאמן בהיעדרות, לא עובד באותו יום, או משובץ לשתי קבוצות באותו זמן.
+          מאמנים, הקבוצות שלהם וימי עבודה. קבוצות מילדים א עד טרום ג מוצגות לפי השם הפרטי של המאמן (למשל ילדים ב נועם). אם יש כמה מאמנים, מוצג מי שנוסף ראשון. מאמן או עוזר מאמן של כמה קבוצות לא ישובץ לשתיהן באותו זמן.
         </p>
         <Link href="/admin/coaches?new=1" className="rounded-lg bg-[#c8102e] px-4 py-2 text-sm font-black text-white">+ מאמן חדש</Link>
       </div>
@@ -85,15 +94,20 @@ export default async function CoachesPage({ searchParams }: Props) {
                 <Link href={`/admin/coaches?edit=${coach.id}`} className="flex flex-col gap-1 px-5 py-3 hover:bg-zinc-50 sm:flex-row sm:items-center sm:gap-4">
                   <span className="min-w-36 text-base font-black">
                     {coach.name}
-                    {away ? <span className="ms-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-900">היום: {absenceLabel(away.type)}</span> : null}
+                    {SHOW_ABSENCES && away ? <span className="ms-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-900">היום: {absenceLabel(away.type)}</span> : null}
                   </span>
                   <span className="flex-1 text-sm text-zinc-700">
-                    {coach.teamIds.length ? teams.filter((t) => coach.teamIds.includes(t.id)).map((t) => t.name).join(", ") : "אין קבוצות"}
+                    {coach.teamIds.length
+                      ? teams
+                          .filter((t) => coach.teamIds.includes(t.id))
+                          .map((t) => (coach.assistantTeamIds?.includes(t.id) ? `${t.name} (עוזר)` : t.name))
+                          .join(", ")
+                      : "אין קבוצות"}
                   </span>
                   <span className="text-sm text-zinc-600">
                     ימים: {coach.workDays.length ? coach.workDays.map((d) => WEEKDAY_LETTERS[d]).join(" ") : "לא הוגדרו"}
                   </span>
-                  {upcoming.length ? <span className="text-xs font-bold text-amber-800">{upcoming.length} היעדרויות קרובות</span> : null}
+                  {SHOW_ABSENCES && upcoming.length ? <span className="text-xs font-bold text-amber-800">{upcoming.length} היעדרויות קרובות</span> : null}
                 </Link>
               </li>
             );
@@ -101,6 +115,9 @@ export default async function CoachesPage({ searchParams }: Props) {
         </ul>
       </section>
 
+      {/* Management contacts are hidden for now (club request); the data and actions stay. */}
+      {SHOW_MANAGEMENT ? (
+        <>
       <section className="rounded-2xl bg-white shadow-sm ring-1 ring-black/5">
         <div className="border-b border-zinc-100 px-5 py-3">
           <h2 className="text-lg font-black text-[#8e0b20]">הנהלה — עדכונים מכל הקבוצות</h2>
@@ -174,6 +191,8 @@ export default async function CoachesPage({ searchParams }: Props) {
           <button type="submit" className="min-h-11 rounded-lg bg-[#c8102e] text-sm font-black text-white sm:col-span-2">+ הוספה להנהלה</button>
         </form>
       </section>
+        </>
+      ) : null}
 
       {showForm ? (
         <div className="fixed inset-0 z-[300] flex items-end justify-center bg-black/55 sm:items-center sm:p-3">
@@ -199,18 +218,46 @@ export default async function CoachesPage({ searchParams }: Props) {
                 </label>
               </div>
               <label className={label}>
-                תפקיד
-                <input name="roleLabel" className={field} defaultValue={editing?.roleLabel ?? "מאמן"} />
+                תעודת זהות
+                <input
+                  name="nationalId"
+                  dir="ltr"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={9}
+                  pattern="[0-9]{9}"
+                  title="9 ספרות, אפשר אפסים מובילים"
+                  placeholder="9 ספרות"
+                  className={`${field} sm:w-48`}
+                  defaultValue={editingId?.nationalId ?? ""}
+                />
               </label>
               <fieldset>
-                <legend className="mb-1.5 text-sm font-bold">קבוצות</legend>
-                <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-                  {teams.map((team) => (
-                    <label key={team.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm ring-1 ring-zinc-200 has-[:checked]:bg-[#fbe9ec] has-[:checked]:ring-[#c8102e]">
-                      <input type="checkbox" name="teamIds" value={team.id} defaultChecked={editing?.teamIds.includes(team.id)} className="h-4 w-4" />
-                      {team.name}
-                    </label>
-                  ))}
+                <legend className="mb-0.5 text-sm font-bold">קבוצות ותפקיד בכל קבוצה</legend>
+                <p className="mb-1.5 text-xs text-zinc-500">
+                  אפשר להיות מאמן בקבוצה אחת ועוזר מאמן באחרת. מי שמשויך לכמה קבוצות לא ישובץ לשתיהן באותו זמן.
+                </p>
+                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                  {teams.map((team) => {
+                    const role = editing?.assistantTeamIds?.includes(team.id)
+                      ? "assistant"
+                      : editing?.teamIds.includes(team.id)
+                        ? "head"
+                        : "";
+                    return (
+                      <label
+                        key={team.id}
+                        className="flex items-center justify-between gap-2 rounded-md px-2 py-1 text-sm ring-1 ring-zinc-200"
+                      >
+                        <span className="font-semibold">{team.name}</span>
+                        <select name={`teamRole-${team.id}`} defaultValue={role} className="rounded-md border border-zinc-300 bg-white px-1.5 py-1 text-sm">
+                          <option value="">—</option>
+                          <option value="head">מאמן</option>
+                          <option value="assistant">עוזר מאמן</option>
+                        </select>
+                      </label>
+                    );
+                  })}
                 </div>
               </fieldset>
               <fieldset>
@@ -229,6 +276,8 @@ export default async function CoachesPage({ searchParams }: Props) {
 
             {editing ? (
               <section className="mt-5 border-t border-zinc-200 pt-4">
+                {SHOW_ABSENCES ? (
+                <>
                 <h3 className="text-base font-black text-[#8e0b20]">היעדרויות</h3>
                 {editing.absences.length ? (
                   <ul className="mt-2 flex flex-col gap-1.5">
@@ -273,7 +322,9 @@ export default async function CoachesPage({ searchParams }: Props) {
                   </label>
                   <button type="submit" className="min-h-10 rounded-lg text-sm font-black ring-1 ring-[#c8102e] text-[#8e0b20] sm:col-span-2">+ הוספת היעדרות</button>
                 </form>
-                <form action={deleteCoach} className="mt-4 border-t border-zinc-200 pt-3">
+                </>
+                ) : null}
+                <form action={deleteCoach} className={SHOW_ABSENCES ? "mt-4 border-t border-zinc-200 pt-3" : ""}>
                   <input type="hidden" name="id" value={editing.id} />
                   <button type="submit" className="text-sm font-bold text-red-700 underline">הסרת המאמן מהמערכת</button>
                 </form>
