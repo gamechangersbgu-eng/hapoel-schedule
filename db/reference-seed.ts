@@ -357,7 +357,7 @@ async function seedPracticeData(database: Db) {
 }
 
 /** Maps calendar row Hebrew names → `team_age_bands.code` (team domain). Team list per the club spec (Nov 2026). */
-/* ילדות א/ב: whole, half, third, and quarter. Other נוער–ילדים ב teams stay on whole/half. */
+/* ילדות א/ב and טרומיות: whole, half, third, and quarter. Other נוער–ילדים ב teams stay on whole/half. */
 export const TEAM_AGE_BAND_BY_NAME: Record<string, string | null> = {
   "נוער": "noar_through_yeladim_b",
   "נערים א": "noar_through_yeladim_b",
@@ -379,6 +379,7 @@ export const TEAM_AGE_BAND_BY_NAME: Record<string, string | null> = {
   "טרום ג עבדאללה": "yeladim_g_through_trum_g",
   "ילדות א": "yeladot",
   "ילדות ב": "yeladot",
+  "טרומיות": "yeladot",
   "בית ספר לכדורגל": "football_school",
   הערות: null,
 };

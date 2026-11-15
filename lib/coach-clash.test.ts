@@ -48,6 +48,30 @@ test("head coach of one team and assistant of another: both count", () => {
   assert.match(clashes[0], /דני הוא גם עוזר מאמן בקבוצה 4/);
 });
 
+test("the same person is blocked in every head and assistant direction", () => {
+  const overlap = training(5, 2, "קבוצה 2", 17 * 60, 18 * 60);
+  const cases = [
+    { label: "head vs head", coaches: [coach(1, "נועה", [1, 2])], role: "מאמן" },
+    { label: "head vs assistant", coaches: [coach(1, "נועה", [1, 2], [2])], role: "עוזר מאמן" },
+    { label: "assistant vs head", coaches: [coach(1, "נועה", [1, 2], [1])], role: "מאמן" },
+    { label: "assistant vs assistant", coaches: [coach(1, "נועה", [1, 2], [1, 2])], role: "עוזר מאמן" },
+  ];
+  for (const item of cases) {
+    const clashes = coachClashes({ ...day([overlap]), coaches: item.coaches }, at17);
+    assert.equal(clashes.length, 1, item.label);
+    assert.match(clashes[0], new RegExp(`נועה הוא גם ${item.role} בקבוצה 2`), item.label);
+    const blocked = classifyBooking({ ...day([overlap]), coaches: item.coaches }, {
+      teamId: 1,
+      pitchId: 1,
+      subdivisionCode: "whole",
+      start: 17 * 60,
+      durationMinutes: 90,
+    });
+    assert.equal(blocked.hard.length, 1, item.label);
+    assert.match(blocked.hard[0], /נועה/, item.label);
+  }
+});
+
 test("back-to-back trainings of the same coach are fine", () => {
   assert.deepEqual(coachClashes(day([training(5, 2, "קבוצה 2", 18 * 60 + 30, 20 * 60)]), at17), []);
 });

@@ -29,6 +29,7 @@ import {
   type SeriesChoice,
   type SeriesIntervalDays,
 } from "@/lib/recurrence";
+import { teamCoachSummary } from "@/lib/coaches";
 import { biweeklyRepeatAllowed } from "@/lib/team-labels";
 
 type Initial = {
@@ -192,7 +193,6 @@ export function BookingForm({
   }
 
   const ready = teamId && pitchId && subdivisionCode && startTime && endTime && duration > 0;
-  const teamCoaches = day.coaches.filter((coach) => coach.teamIds.includes(teamId));
   const endBeforeStart = Boolean(startTime && endTime && duration <= 0);
 
   const field = "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-base";
@@ -413,8 +413,8 @@ export function BookingForm({
             <legend className="sr-only">סטטוס האימון</legend>
             <p className="text-sm font-bold">
               סטטוס
-              {teamCoaches.length ? (
-                <span className="ms-2 font-semibold text-zinc-500">מאמן הקבוצה: {teamCoaches.map((coach) => coach.name).join(", ")}</span>
+              {teamCoachSummary(day.coaches, teamId) ? (
+                <span className="ms-2 font-semibold text-zinc-500">{teamCoachSummary(day.coaches, teamId)}</span>
               ) : null}
             </p>
             <div className="flex flex-wrap gap-2">

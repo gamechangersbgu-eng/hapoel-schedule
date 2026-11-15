@@ -141,8 +141,8 @@ test("a practice game keeps opponent and medic text, and shows both", () => {
   assert.match(html, /חובש/);
 });
 
-test("only ילדות א and ילדות ב gain a third and a quarter", () => {
-  for (const name of ["ילדות א", "ילדות ב", "  ילדות א  "]) {
+test("ילדות א, ילדות ב, and טרומיות gain a third and a quarter", () => {
+  for (const name of ["ילדות א", "ילדות ב", "טרומיות", "  טרומיות  "]) {
     const allowed = allowedSubdivisionsForTeam({ name, allowedSubdivisions: OLDER });
     for (const code of GIRLS_EXTRA_SUBDIVISIONS) assert.equal(allowed.includes(code), true, name);
     assert.equal(allowed.filter((code) => code === "third_north").length, 1);
@@ -164,6 +164,26 @@ test("only ילדות א and ילדות ב gain a third and a quarter", () => {
     allowedSubdivisions: [...OLDER, ...GIRLS_EXTRA_SUBDIVISIONS],
   });
   assert.equal(already.length, OLDER.length + GIRLS_EXTRA_SUBDIVISIONS.length);
+});
+
+test("טרומיות can book a quarter beside a non-overlapping third", () => {
+  const tromiyot = { id: 7, name: "טרומיות", ageBandCode: "yeladot", allowedSubdivisions: OLDER };
+  const other = { id: 2, name: "נוער", ageBandCode: "noar_through_yeladim_b", allowedSubdivisions: OLDER };
+  const allowed = classifyBooking(
+    day([tromiyot, other], [booking({ slotId: 3, teamId: 2, teamName: "נוער", subdivisionCode: "third_south" })]),
+    { teamId: 7, pitchId: 1, subdivisionCode: "quarter_north_1", start: 16 * 60, durationMinutes: 60 },
+  );
+  assert.deepEqual(allowed.hard, []);
+  assert.deepEqual(allowed.conflicts, []);
+
+  const third = classifyBooking(day([tromiyot]), {
+    teamId: 7,
+    pitchId: 1,
+    subdivisionCode: "third_center",
+    start: 16 * 60,
+    durationMinutes: 60,
+  });
+  assert.deepEqual(third.hard, []);
 });
 
 test("a girls' quarter shares the pitch with a part that does not overlap", () => {
