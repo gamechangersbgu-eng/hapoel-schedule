@@ -1,6 +1,6 @@
 // Pure rules for pitch mowing + marking tasks (no database access). See MAINTENANCE.md.
 
-/** Pitches the grounds team mows and marks. Vasermil 4 is not included. */
+/** Pitches the grounds team mows and marks. Vasermil 4 is the football school's pitch: no reminders. */
 export const MAINTAINED_PITCH_CODES = ["vasermil_1", "vasermil_2", "vasermil_3"] as const;
 export type MaintainedPitchCode = (typeof MAINTAINED_PITCH_CODES)[number];
 

@@ -325,7 +325,7 @@ const OVERRIDE_LABEL: Record<string, string> = {
   vasermil_1: "וסרמיל 1",
   vasermil_2: "וסרמיל 2",
   vasermil_3: "וסרמיל 3",
-  vasermil_4: "וסרמיל 4",
+  vasermil_4: "וסרמיל 4 (בית הספר לכדורגל · בלי כיסוח)",
   other: "מגרש אחר (לא וסרמיל)",
 };
 
