@@ -13,7 +13,7 @@ const ITEMS = [
 
 /** Tabs between the management screens. `current` is the active screen's path. */
 export async function AdminNav({ current }: { current: string }) {
-  const maintenanceCount = await getVisibleMaintenanceCount();
+  const { open: maintenanceCount, overdue } = await getVisibleMaintenanceCount();
   return (
     <>
     <nav aria-label="מסכי ניהול" className="no-print border-b border-black/10 bg-white">
@@ -33,7 +33,11 @@ export async function AdminNav({ current }: { current: string }) {
             >
               {item.label}
               {item.href === "/admin/maintenance" && maintenanceCount > 0 ? (
-                <span className="ms-1.5 rounded-full bg-[#c8102e] px-1.5 py-0.5 text-[11px] font-black text-white">
+                <span
+                  className={`ms-1.5 rounded-full px-1.5 py-0.5 text-[11px] font-black ${
+                    overdue > 0 ? "bg-red-600 text-white" : "bg-lime-600 text-white"
+                  }`}
+                >
                   {maintenanceCount}
                 </span>
               ) : null}
@@ -46,9 +50,14 @@ export async function AdminNav({ current }: { current: string }) {
       <Link
         href="/admin/maintenance"
         role="status"
-        className="no-print block bg-lime-50 px-4 py-2 text-center text-sm font-black text-lime-900 ring-1 ring-lime-200 hover:bg-lime-100"
+        className={`no-print block px-4 py-2 text-center text-sm font-black ring-1 ${
+          overdue > 0
+            ? "bg-red-600 text-white ring-red-700 hover:bg-red-700"
+            : "bg-lime-50 text-lime-900 ring-lime-200 hover:bg-lime-100"
+        }`}
       >
-        {maintenanceCount === 1 ? "מגרש אחד דורש" : `${maintenanceCount} מגרשים דורשים`} כיסוח וסימון ←
+        {maintenanceCount === 1 ? "מגרש אחד דורש" : `${maintenanceCount} מגרשים דורשים`} כיסוח וסימון
+        {overdue > 0 ? ` · ${overdue === 1 ? "משימה אחת" : `${overdue} משימות`} באיחור` : ""} ←
       </Link>
     ) : null}
     </>

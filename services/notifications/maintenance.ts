@@ -1,7 +1,7 @@
 import "server-only";
 
 // Database side of the mowing + marking tasks. Rules live in maintenance-rules.ts (tested without a DB).
-import { and, asc, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, lte, or } from "drizzle-orm";
 import {
   db,
   maintenanceTasks,
@@ -20,6 +20,7 @@ import {
   WEEKLY_PITCH_CODE,
   WEEKLY_WEEKDAYS,
   addDays,
+  isOverdue,
   israelToday,
   planGamePrepTasks,
   planWeeklyTask,
@@ -151,6 +152,7 @@ export async function syncMaintenanceTasks(options?: { today?: string; force?: b
         pitchId: maintenanceTasks.pitchId,
         kind: maintenanceTasks.kind,
         periodKey: maintenanceTasks.periodKey,
+        date: maintenanceTasks.date,
         status: maintenanceTasks.status,
       })
       .from(maintenanceTasks)
@@ -199,14 +201,14 @@ export async function syncMaintenanceTasks(options?: { today?: string; force?: b
   }
 }
 
-/** Tasks from the start of this week on, for the maintenance page. */
+/** Every open task (overdue ones too) plus everything from the last week, for the maintenance page. */
 export async function getMaintenanceTasks(today = israelToday()): Promise<MaintenanceTaskView[]> {
   await syncMaintenanceTasks({ today, force: true });
   const rows = await db
     .select({ task: maintenanceTasks, pitchName: pitches.nameHe })
     .from(maintenanceTasks)
     .innerJoin(pitches, eq(pitches.id, maintenanceTasks.pitchId))
-    .where(gte(maintenanceTasks.date, addDays(today, -7)))
+    .where(or(eq(maintenanceTasks.status, "open"), gte(maintenanceTasks.date, addDays(today, -7))))
     .orderBy(asc(maintenanceTasks.date), asc(pitches.sortOrder));
   return rows.map(({ task, pitchName }) => ({
     id: task.id,
@@ -223,19 +225,22 @@ export async function getMaintenanceTasks(today = israelToday()): Promise<Mainte
   }));
 }
 
-/** Open tasks that should be flagged today (banner + tab count). Never throws. */
-export async function getVisibleMaintenanceCount(today = israelToday()): Promise<number> {
+export type MaintenanceAlertCount = { open: number; overdue: number };
+
+/** Open tasks to flag today (banner + tab count), and how many of them are overdue. Never throws. */
+export async function getVisibleMaintenanceCount(today = israelToday()): Promise<MaintenanceAlertCount> {
   try {
     await syncMaintenanceTasks({ today });
     const rows = await db
       .select({ status: maintenanceTasks.status, showFrom: maintenanceTasks.showFrom, date: maintenanceTasks.date })
       .from(maintenanceTasks)
-      .where(and(eq(maintenanceTasks.status, "open"), lte(maintenanceTasks.showFrom, today), gte(maintenanceTasks.date, today)));
-    return visibleOpenTasks(rows, today).length;
+      .where(and(eq(maintenanceTasks.status, "open"), lte(maintenanceTasks.showFrom, today)));
+    const visible = visibleOpenTasks(rows, today);
+    return { open: visible.length, overdue: visible.filter((task) => isOverdue(task, today)).length };
   } catch (error) {
     // Table missing (migration not applied yet) or DB hiccup: the admin page must still load.
     console.error("[maintenance] could not load tasks", error);
-    return 0;
+    return { open: 0, overdue: 0 };
   }
 }
 

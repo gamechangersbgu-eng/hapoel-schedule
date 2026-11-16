@@ -4,7 +4,7 @@ import { HEBREW_DAY_NAMES } from "@/components/display-utils";
 import { requireAdmin } from "@/lib/auth";
 import { formatDayMonth } from "@/lib/week";
 import { getMaintenanceTasks, type MaintenanceTaskView } from "@/services/notifications/maintenance";
-import { israelToday, visibleOpenTasks, weekdayOfISO } from "@/services/notifications/maintenance-rules";
+import { isOverdue, israelToday, visibleOpenTasks, weekdayOfISO } from "@/services/notifications/maintenance-rules";
 import { markMaintenanceDoneAction, reopenMaintenanceAction } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -34,11 +34,18 @@ function doneLabel(task: MaintenanceTaskView) {
   return `${task.doneBy ?? ""} · ${when}`;
 }
 
-function TaskCard({ task, tone }: { task: MaintenanceTaskView; tone: "now" | "soon" | "done" }) {
+type Tone = "overdue" | "now" | "soon" | "done";
+
+function TaskCard({ task, tone }: { task: MaintenanceTaskView; tone: Tone }) {
   const time = timeLabel(task);
-  const ring = tone === "now" ? "ring-2 ring-[#c8102e]" : "ring-1 ring-zinc-200";
+  const ring =
+    tone === "overdue"
+      ? "bg-red-50 ring-2 ring-red-600"
+      : tone === "now"
+        ? "bg-white ring-2 ring-[#c8102e]"
+        : "bg-white ring-1 ring-zinc-200";
   return (
-    <li className={`flex flex-wrap items-start justify-between gap-3 rounded-xl bg-white p-3 ${ring}`}>
+    <li className={`flex flex-wrap items-start justify-between gap-3 rounded-xl p-3 ${ring}`}>
       <div className="flex min-w-0 flex-col gap-1">
         <p className="text-base font-black">
           {task.pitchName} · {dayLabel(task.date)}
@@ -46,6 +53,9 @@ function TaskCard({ task, tone }: { task: MaintenanceTaskView; tone: "now" | "so
             <span className="ms-2 rounded-full bg-lime-100 px-2 py-0.5 text-xs font-black text-lime-900">שבועי</span>
           ) : null}
         </p>
+        {tone === "overdue" ? (
+          <p className="w-fit rounded-full bg-red-600 px-2 py-0.5 text-xs font-black text-white">באיחור · לא סומן כבוצע</p>
+        ) : null}
         {time ? <p className="text-sm font-bold text-zinc-700">{time}</p> : null}
         <p className="text-sm text-zinc-600">{task.summary}</p>
         {tone === "soon" ? (
@@ -72,11 +82,11 @@ function TaskCard({ task, tone }: { task: MaintenanceTaskView; tone: "now" | "so
   );
 }
 
-function Section({ title, tasks, tone, empty }: { title: string; tasks: MaintenanceTaskView[]; tone: "now" | "soon" | "done"; empty?: string }) {
+function Section({ title, tasks, tone, empty }: { title: string; tasks: MaintenanceTaskView[]; tone: Tone; empty?: string }) {
   if (tasks.length === 0 && !empty) return null;
   return (
     <section className="flex flex-col gap-2">
-      <h2 className="text-lg font-black">{title}</h2>
+      <h2 className={`text-lg font-black ${tone === "overdue" ? "text-red-700" : ""}`}>{title}</h2>
       {tasks.length === 0 ? (
         <p className="rounded-xl border border-dashed border-zinc-300 bg-white px-4 py-4 text-center text-sm text-zinc-600">{empty}</p>
       ) : (
@@ -95,7 +105,9 @@ export default async function MaintenancePage() {
   const today = israelToday();
   const tasks = await getMaintenanceTasks(today);
 
-  const now = visibleOpenTasks(tasks, today);
+  const visible = visibleOpenTasks(tasks, today);
+  const overdue = visible.filter((task) => isOverdue(task, today));
+  const now = visible.filter((task) => !isOverdue(task, today));
   const soon = tasks.filter((task) => task.status === "open" && task.showFrom > today);
   const done = tasks.filter((task) => task.status === "done").reverse();
 
@@ -105,6 +117,7 @@ export default async function MaintenancePage() {
         משימה נפתחת יומיים לפני משחק ליגה בבית על וסרמיל 1–3, ופעם בשבוע לוסרמיל 2 בחלון בלי אימונים.
         המגרש נלקח מהשיבוץ במסך המשחקים, ואם אין — משם המגרש שמגיע מההתאחדות.
       </p>
+      <Section title="באיחור" tasks={overdue} tone="overdue" />
       <Section title="לטיפול עכשיו" tasks={now} tone="now" empty="אין משימות פתוחות להיום." />
       <Section title="בקרוב" tasks={soon} tone="soon" />
       <Section title="בוצע לאחרונה" tasks={done} tone="done" />

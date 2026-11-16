@@ -205,6 +205,7 @@ export type StoredTask = {
   pitchCode: string;
   kind: string;
   periodKey: string;
+  date: string;
   status: string;
 };
 
@@ -217,14 +218,20 @@ export type TaskChanges = {
 
 /**
  * Compares the plan with stored tasks from `today` on.
- * Done tasks are never moved or reopened; open ones follow the plan.
+ * Done tasks are never moved or reopened. Overdue open tasks (their day passed) stay
+ * where they are, in red, until an admin marks them done. Other open tasks follow the plan.
  */
 export function reconcileTasks(planned: PlannedTask[], stored: StoredTask[], today: string): TaskChanges {
   const keyOf = (t: { pitchCode: string; kind: string; periodKey: string }) => `${t.pitchCode}|${t.kind}|${t.periodKey}`;
   const storedByKey = new Map(stored.map((task) => [keyOf(task), task]));
   const plannedKeys = new Set(planned.map(keyOf));
 
-  const upserts = planned.filter((task) => storedByKey.get(keyOf(task))?.status !== "done");
+  const upserts = planned.filter((task) => {
+    const existing = storedByKey.get(keyOf(task));
+    if (!existing) return true;
+    if (existing.status === "done") return false;
+    return !(existing.status === "open" && existing.date < today);
+  });
   const obsoleteIds = stored
     .filter(
       (task) =>
@@ -237,9 +244,14 @@ export function reconcileTasks(planned: PlannedTask[], stored: StoredTask[], tod
   return { upserts, obsoleteIds };
 }
 
-/** Open tasks that should be on screen today (shown from `showFrom` until the day itself). */
+/** Open task whose day already passed: shown in red until an admin marks it done. */
+export function isOverdue(task: { status: string; date: string }, today: string): boolean {
+  return task.status === "open" && task.date < today;
+}
+
+/** Open tasks that should be on screen today: from `showFrom` on, overdue ones included, oldest first. */
 export function visibleOpenTasks<T extends { status: string; showFrom: string; date: string }>(tasks: T[], today: string): T[] {
   return tasks
-    .filter((task) => task.status === "open" && task.showFrom <= today && task.date >= today)
+    .filter((task) => task.status === "open" && task.showFrom <= today)
     .sort((a, b) => a.date.localeCompare(b.date));
 }

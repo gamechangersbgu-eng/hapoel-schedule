@@ -8,6 +8,7 @@ import {
   planWeeklyTask,
   reconcileTasks,
   visibleOpenTasks,
+  isOverdue,
   type GameForMaintenance,
 } from "./maintenance-rules";
 
@@ -103,9 +104,9 @@ test("reconcile: done tasks stay, open tasks without games become obsolete", () 
   const changes = reconcileTasks(
     planned,
     [
-      { id: 1, pitchCode: "vasermil_1", kind: "game_prep", periodKey: "2026-11-22", status: "done" },
-      { id: 2, pitchCode: "vasermil_3", kind: "game_prep", periodKey: "2026-11-23", status: "open" },
-      { id: 3, pitchCode: "vasermil_3", kind: "game_prep", periodKey: "2026-11-01", status: "open" },
+      { id: 1, pitchCode: "vasermil_1", kind: "game_prep", periodKey: "2026-11-22", date: "2026-11-22", status: "done" },
+      { id: 2, pitchCode: "vasermil_3", kind: "game_prep", periodKey: "2026-11-23", date: "2026-11-23", status: "open" },
+      { id: 3, pitchCode: "vasermil_3", kind: "game_prep", periodKey: "2026-11-01", date: "2026-11-01", status: "open" },
     ],
     "2026-11-16",
   );
@@ -114,7 +115,7 @@ test("reconcile: done tasks stay, open tasks without games become obsolete", () 
 
   const reopened = reconcileTasks(
     planned,
-    [{ id: 1, pitchCode: "vasermil_1", kind: "game_prep", periodKey: "2026-11-22", status: "obsolete" }],
+    [{ id: 1, pitchCode: "vasermil_1", kind: "game_prep", periodKey: "2026-11-22", date: "2026-11-22", status: "obsolete" }],
     "2026-11-16",
   );
   assert.equal(reopened.upserts.length, 1);
@@ -127,7 +128,21 @@ test("only open tasks from show date through the day are visible", () => {
     { id: 3, status: "done", showFrom: "2026-11-14", date: "2026-11-16" },
     { id: 4, status: "open", showFrom: "2026-11-10", date: "2026-11-12" },
   ];
-  assert.deepEqual(visibleOpenTasks(tasks, "2026-11-16").map((t) => t.id), [1]);
+  assert.deepEqual(visibleOpenTasks(tasks, "2026-11-16").map((t) => t.id), [4, 1]);
+});
+
+test("a task whose day passed stays open, overdue, and is not moved by the plan", () => {
+  assert.equal(isOverdue({ status: "open", date: "2026-11-15" }, "2026-11-16"), true);
+  assert.equal(isOverdue({ status: "open", date: "2026-11-16" }, "2026-11-16"), false);
+  assert.equal(isOverdue({ status: "done", date: "2026-11-15" }, "2026-11-16"), false);
+
+  const replanned = planWeeklyTask("2026-11-15", new Map(), "2026-11-17")!;
+  const changes = reconcileTasks(
+    [replanned],
+    [{ id: 5, pitchCode: "vasermil_2", kind: "weekly", periodKey: "2026-11-15", date: "2026-11-16", status: "open" }],
+    "2026-11-17",
+  );
+  assert.deepEqual(changes.upserts, []);
 });
 
 test("today is the Israel date, not the server's UTC date", () => {
