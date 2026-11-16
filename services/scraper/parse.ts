@@ -120,6 +120,10 @@ const AGE_PATTERNS: [RegExp, string][] = [
     new RegExp(`נערים ${letter}${NOT_A_LETTER}`),
     `נערים ${letter}`,
   ]),
+  ...["א", "ב"].map((letter): [RegExp, string] => [
+    new RegExp(`ילדות ${letter}${NOT_A_LETTER}`),
+    `ילדות ${letter}`,
+  ]),
   [/נוער/, "נוער"],
 ];
 

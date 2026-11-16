@@ -9,7 +9,7 @@ import { toCsv } from "./csv";
 import { parseClubGames, parseDate, parseTeamGames, parseTime } from "./parse";
 import { saveResults } from "./save";
 import { curlFetch, scrapeAll, teamGamesUrl, weeksBetween } from "./scrape";
-import { DB_TEAM_BY_IFA_TEAM } from "./db-teams";
+import { calendarTeamId, DB_TEAM_BY_IFA_TEAM } from "./db-teams";
 import { planWrites, writeRows } from "./write";
 import { TEAMS } from "./teams";
 
@@ -193,6 +193,31 @@ test("takes only the cup games of a real week and assigns each to its team", () 
   });
 });
 
+test("a girls cup is assigned by its age group and the match-row name", () => {
+  const text = JSON.stringify({
+    d: {
+      RoundTitle: "01/11/2026 - 07/11/2026",
+      Games: [
+        {
+          Id: -1,
+          GameDate: "07/11/26",
+          LeagueName: `גביע המדינה לילדות א' ע"ש יהל שרעבי ז"ל`,
+          Round: 1,
+          GameName: `הפועל בנות הבית האדום ב''ש - מכבי בנות אשקלון`,
+          FieldName: "",
+          GameTime: "19:30",
+          Result: "",
+        },
+      ],
+    },
+  });
+  const { games, unmatched } = parseClubGames(text, "01/11/2026", TEAMS, 28);
+  assert.deepEqual(unmatched, []);
+  assert.deepEqual(games.map((game) => game.teamId), [8310]);
+  assert.equal(games[0].isHome, true);
+  assert.equal(games[0].ageGroup, "ילדות א");
+});
+
 test("a cup with no age group and a name shared by teams is reported, not guessed", () => {
   const text = JSON.stringify({
     d: {
@@ -329,8 +354,104 @@ test("a cup game is labelled in its note", () => {
 
 test("a team without a calendar row is skipped, not guessed", () => {
   const { games } = parseClubGames(clubWeek, "01/11/2026", TEAMS, 28);
-  const { skipped } = planWrites(games, calendar, []);
-  assert.deepEqual(skipped.map((game) => game.reason), ["no calendar row for team 6485"]);
+  const alien = { ...games[0], teamId: 9999, key: "alien" };
+  const { rows, skipped } = planWrites([alien], calendar, []);
+  assert.deepEqual(rows, []);
+  assert.deepEqual(skipped, [{ key: "alien", reason: "no calendar row for team 9999" }]);
+});
+
+test("the week of cup games is written, including the Dan ילדים א side", () => {
+  const { games } = parseClubGames(clubWeek, "01/11/2026", TEAMS, 28);
+  const { rows, skipped } = planWrites(games, calendar, []);
+  assert.deepEqual(skipped, []);
+  assert.equal(rows.filter((row) => row.teamId === calendar.get("ילדים א שחר")).length, 1);
+});
+
+test("a coach label is accepted when the short calendar name is not stored", () => {
+  const { games } = parseTeamGames(fixture, youth, 28);
+  const labeled = new Map<string, number>([["נוער", 4]]);
+  assert.equal(calendarTeamId("נוער", labeled), 4);
+  const onlyCoachLabel = new Map<string, number>([["ילדים א רמי", 9]]);
+  assert.equal(calendarTeamId("ילדים א", onlyCoachLabel), 9);
+  const { rows } = planWrites(
+    games.map((game) => ({ ...game, teamId: 2756 })),
+    onlyCoachLabel,
+    [],
+  );
+  assert.ok(rows.length > 0);
+  assert.ok(rows.every((row) => row.teamId === 9));
+});
+
+test("name and league together identify one association team, mapped to one calendar row", () => {
+  const keys = TEAMS.map((team) => `${team.league}\0${team.name}`);
+  assert.equal(new Set(keys).size, TEAMS.length);
+  assert.deepEqual(
+    TEAMS.map((team) => team.id).sort((a, b) => a - b),
+    Object.keys(DB_TEAM_BY_IFA_TEAM).map(Number).sort((a, b) => a - b),
+  );
+  const rows = TEAMS.map((team) => DB_TEAM_BY_IFA_TEAM[team.id]);
+  assert.ok(rows.every((row) => row));
+  assert.equal(new Set(rows).size, rows.length);
+
+  const row = (id: number) => {
+    const team = TEAMS.find((item) => item.id === id);
+    assert.ok(team);
+    return { league: team.league, name: team.name, row: DB_TEAM_BY_IFA_TEAM[id] };
+  };
+  assert.deepEqual(row(2373), { league: "ליגת העל לנוער", name: `הפ' ב"ש השלושה`, row: "נוער" });
+  assert.deepEqual(row(2294), { league: "נערים א' על", name: `הפועל ב"ש`, row: "נערים א" });
+  assert.deepEqual(row(2085), { league: "נערים ב' על", name: `הפועל ב"ש`, row: "נערים ב" });
+  assert.deepEqual(row(2181), { league: "נערים ג' על", name: "הפועל באר שבע", row: "נערים ג" });
+  assert.deepEqual(row(2756), { league: "ליגת ילדים א' מרכז", name: `הפועל ב"ש`, row: "ילדים א" });
+  assert.deepEqual(row(6485), {
+    league: "ליגת ילדים א' דן",
+    name: `הפ' באר שבע אדום "צו פיוס"`,
+    row: "ילדים א שחר",
+  });
+  assert.deepEqual(row(6248), { league: "ליגת ילדים ב' מרכז", name: `הפועל ב"ש לבן`, row: "ילדים ב" });
+  assert.deepEqual(row(2755), {
+    league: "ליגת ילדים ב' דן",
+    name: `הפועל ב"ש אדום "צו פיוס"`,
+    row: "ילדים ב ל",
+  });
+  assert.deepEqual(row(2014), { league: "ליגת ילדים ג' מרכז", name: `הפועל ב"ש "לבן"`, row: "ילדים ג" });
+  assert.deepEqual(row(2143), {
+    league: "ליגת ילדים ג' דן",
+    name: `הפועל ב"ש 2 "צו פיוס"`,
+    row: "ילדים ג ל",
+  });
+  assert.deepEqual(row(1440), { league: "ליגת ילדים טרום א' מרכז", name: "הפועל באר שבע", row: "טרום א" });
+  assert.deepEqual(row(7327), {
+    league: "ליגת ילדים טרום א' דן",
+    name: `הפועל ב"ש 2 "צו פיוס"`,
+    row: "טרום א ל",
+  });
+  assert.deepEqual(row(1443), { league: "ליגת ילדים טרום ב' מרכז", name: "הפועל באר שבע", row: "טרום ב" });
+  assert.deepEqual(row(7449), {
+    league: "ליגת ילדים טרום ב' שפלה",
+    name: `הפועל ב"ש 2 "צו פיוס"`,
+    row: "טרום ב ל",
+  });
+  assert.deepEqual(row(1444), {
+    league: "ליגת ילדים טרום ג' מרכז",
+    name: `הפועל באר שבע "צו פיוס"`,
+    row: "טרום ג",
+  });
+  assert.deepEqual(row(7450), {
+    league: "ליגת ילדים טרום ג' מרכז",
+    name: `הפועל ב"ש אדום "צו פיוס"`,
+    row: "טרום ג עבדאללה",
+  });
+  assert.deepEqual(row(8310), {
+    league: "ליגת ילדות א' דרום",
+    name: `הפועל בנות הבית האדום ב''ש`,
+    row: "ילדות א",
+  });
+  assert.deepEqual(row(4479), {
+    league: "ליגת ילדות ב' דרום",
+    name: "הפועל בנות הבית האדום באר שבע",
+    row: "ילדות ב",
+  });
 });
 
 test("a calendar row missing from the database stops before any write", () => {
