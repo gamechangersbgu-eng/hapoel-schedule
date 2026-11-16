@@ -1,0 +1,245 @@
+// Pure rules for pitch mowing + marking tasks (no database access). See MAINTENANCE.md.
+
+/** Pitches the grounds team mows and marks. Vasermil 4 is not included. */
+export const MAINTAINED_PITCH_CODES = ["vasermil_1", "vasermil_2", "vasermil_3"] as const;
+export type MaintainedPitchCode = (typeof MAINTAINED_PITCH_CODES)[number];
+
+/** The weekly task is only for Vasermil 2, which does not host home games. */
+export const WEEKLY_PITCH_CODE: MaintainedPitchCode = "vasermil_2";
+
+/** Calendar days before the game that the task shows up (game on Sunday -> Thursday). */
+export const DAYS_BEFORE_GAME = 2;
+
+/** Weekly Vasermil 2 window: 120 minutes between 08:00 and 15:00, Sunday to Thursday. */
+export const WEEKLY_TASK_MINUTES = 120;
+export const WORKDAY_START = 8 * 60;
+export const WORKDAY_END = 15 * 60;
+export const WEEKLY_WEEKDAYS = [0, 1, 2, 3, 4] as const;
+
+/** Training without a stored duration counts as this long (same as the pitch board). */
+export const DEFAULT_TRAINING_MINUTES = 90;
+
+/** How far ahead games are scanned on each sync. */
+export const HORIZON_DAYS = 16;
+
+const ISO = /^\d{4}-\d{2}-\d{2}$/;
+
+export function isMaintainedPitch(code: string | null | undefined): code is MaintainedPitchCode {
+  return (MAINTAINED_PITCH_CODES as readonly string[]).includes(code ?? "");
+}
+
+/** UTC-safe date arithmetic on YYYY-MM-DD strings. */
+export function addDays(iso: string, days: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d + days));
+  return date.toISOString().slice(0, 10);
+}
+
+export function weekdayOfISO(iso: string): number {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+}
+
+export function sundayOfISO(iso: string): string {
+  return addDays(iso, -weekdayOfISO(iso));
+}
+
+/** Today's date in Israel, whatever the server's time zone is (Netlify runs in UTC). */
+export function israelToday(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jerusalem",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+}
+
+export function toMinutes(time: string): number {
+  const [h, m] = time.split(":").map(Number);
+  return h * 60 + m;
+}
+
+export function toClock(minutes: number): string {
+  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+}
+
+/**
+ * The scraper writes the association's venue into the note, e.g. "יריב · באר שבע וסרמיל 1".
+ * Returns "vasermil_<n>" when the note names a Vasermil pitch.
+ */
+export function pitchCodeFromNote(note: string | null | undefined): string | null {
+  const match = note?.match(/וסרמיל\s*([1-4])(?!\d)/);
+  return match ? `vasermil_${match[1]}` : null;
+}
+
+/** A pitch set by an admin wins over the venue text from the scraper. */
+export function resolveGamePitch(game: { pitchCode: string | null; note: string | null }): string | null {
+  return game.pitchCode ?? pitchCodeFromNote(game.note);
+}
+
+export type GameForMaintenance = {
+  slotId: number;
+  date: string;
+  type: string;
+  status: string;
+  kickoff: string | null;
+  teamName: string;
+  ageBandLabel: string | null;
+  opponent: string | null;
+  /** Code of `slot_game_details.pitch_id`, when an admin set one. */
+  pitchCode: string | null;
+  note: string | null;
+};
+
+export type PlannedTask = {
+  pitchCode: MaintainedPitchCode;
+  kind: "game_prep" | "weekly";
+  /** Game date for game_prep, the week's Sunday for weekly. Unique with pitch + kind. */
+  periodKey: string;
+  date: string;
+  startTime: string | null;
+  endTime: string | null;
+  showFrom: string;
+  slotIds: number[];
+  summary: string;
+};
+
+function gameLine(game: GameForMaintenance): string {
+  const parts = [game.kickoff ?? "שעה לא ידועה", game.teamName];
+  if (game.ageBandLabel) parts.push(`(${game.ageBandLabel})`);
+  if (game.opponent) parts.push(`נגד ${game.opponent}`);
+  return parts.join(" ");
+}
+
+/** One task per pitch and date for active league home games on Vasermil 1-3. */
+export function planGamePrepTasks(games: GameForMaintenance[]): PlannedTask[] {
+  const groups = new Map<string, { pitchCode: MaintainedPitchCode; date: string; games: GameForMaintenance[] }>();
+  for (const game of games) {
+    if (game.type !== "home_game" || game.status !== "active" || !ISO.test(game.date)) continue;
+    const pitchCode = resolveGamePitch(game);
+    if (!isMaintainedPitch(pitchCode)) continue;
+    const key = `${pitchCode}|${game.date}`;
+    const group = groups.get(key) ?? { pitchCode, date: game.date, games: [] };
+    group.games.push(game);
+    groups.set(key, group);
+  }
+
+  return [...groups.values()]
+    .map((group) => {
+      const sorted = [...group.games].sort(
+        (a, b) => (a.kickoff ?? "99:99").localeCompare(b.kickoff ?? "99:99") || a.slotId - b.slotId,
+      );
+      return {
+        pitchCode: group.pitchCode,
+        kind: "game_prep" as const,
+        periodKey: group.date,
+        date: group.date,
+        startTime: sorted[0].kickoff,
+        endTime: null,
+        showFrom: addDays(group.date, -DAYS_BEFORE_GAME),
+        slotIds: sorted.map((game) => game.slotId),
+        summary: sorted.map(gameLine).join(" · "),
+      };
+    })
+    .sort((a, b) => a.date.localeCompare(b.date) || a.pitchCode.localeCompare(b.pitchCode));
+}
+
+export type BusyRange = { start: number; end: number };
+
+/** First start of a free `minutes` window inside [dayStart, dayEnd], on a quarter hour. */
+export function findFreeWindow(
+  busy: BusyRange[],
+  minutes = WEEKLY_TASK_MINUTES,
+  dayStart = WORKDAY_START,
+  dayEnd = WORKDAY_END,
+): number | null {
+  const sorted = [...busy].filter((r) => r.end > r.start).sort((a, b) => a.start - b.start);
+  for (let start = dayStart; start + minutes <= dayEnd; start += 15) {
+    const end = start + minutes;
+    if (!sorted.some((r) => r.start < end && start < r.end)) return start;
+  }
+  return null;
+}
+
+/**
+ * Weekly Vasermil 2 task: the first Sunday-Thursday from `fromDate` on with a free window.
+ * Null when every working day of that week is already past (nothing left to plan).
+ */
+export function planWeeklyTask(
+  weekStart: string,
+  busyByDate: Map<string, BusyRange[]>,
+  fromDate: string = weekStart,
+): PlannedTask | null {
+  const days = WEEKLY_WEEKDAYS.map((weekday) => addDays(weekStart, weekday)).filter((date) => date >= fromDate);
+  if (days.length === 0) return null;
+  for (const date of days) {
+    const start = findFreeWindow(busyByDate.get(date) ?? []);
+    if (start == null) continue;
+    return {
+      pitchCode: WEEKLY_PITCH_CODE,
+      kind: "weekly",
+      periodKey: weekStart,
+      date,
+      startTime: toClock(start),
+      endTime: toClock(start + WEEKLY_TASK_MINUTES),
+      showFrom: addDays(date, -DAYS_BEFORE_GAME),
+      slotIds: [],
+      summary: "כיסוח וסימון שבועי",
+    };
+  }
+  return {
+    pitchCode: WEEKLY_PITCH_CODE,
+    kind: "weekly",
+    periodKey: weekStart,
+    date: days[0],
+    startTime: null,
+    endTime: null,
+    showFrom: addDays(days[0], -DAYS_BEFORE_GAME),
+    slotIds: [],
+    summary: "כיסוח וסימון שבועי · לא נמצא חלון פנוי השבוע",
+  };
+}
+
+export type StoredTask = {
+  id: number;
+  pitchCode: string;
+  kind: string;
+  periodKey: string;
+  status: string;
+};
+
+export type TaskChanges = {
+  /** Planned tasks to insert or update (an obsolete one comes back as open). */
+  upserts: PlannedTask[];
+  /** Ids of open game tasks whose games are gone. */
+  obsoleteIds: number[];
+};
+
+/**
+ * Compares the plan with stored tasks from `today` on.
+ * Done tasks are never moved or reopened; open ones follow the plan.
+ */
+export function reconcileTasks(planned: PlannedTask[], stored: StoredTask[], today: string): TaskChanges {
+  const keyOf = (t: { pitchCode: string; kind: string; periodKey: string }) => `${t.pitchCode}|${t.kind}|${t.periodKey}`;
+  const storedByKey = new Map(stored.map((task) => [keyOf(task), task]));
+  const plannedKeys = new Set(planned.map(keyOf));
+
+  const upserts = planned.filter((task) => storedByKey.get(keyOf(task))?.status !== "done");
+  const obsoleteIds = stored
+    .filter(
+      (task) =>
+        task.kind === "game_prep" &&
+        task.status === "open" &&
+        task.periodKey >= today &&
+        !plannedKeys.has(keyOf(task)),
+    )
+    .map((task) => task.id);
+  return { upserts, obsoleteIds };
+}
+
+/** Open tasks that should be on screen today (shown from `showFrom` until the day itself). */
+export function visibleOpenTasks<T extends { status: string; showFrom: string; date: string }>(tasks: T[], today: string): T[] {
+  return tasks
+    .filter((task) => task.status === "open" && task.showFrom <= today && task.date >= today)
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
