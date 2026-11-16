@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { parseClubGames, parseTeamGames } from "./parse";
 import {
-  CLUB_ID,
+  CLUB_IDS,
   SEASON_FIRST_WEEK,
   SEASON_ID,
   SEASON_LAST_WEEK,
@@ -28,6 +28,8 @@ export type ScrapeOptions = {
   /** DD/MM/YYYY Sundays of the club's weekly list. */
   weeks?: string[];
   teams?: IfaTeam[];
+  /** Association clubs whose weekly cup list is read. Ignored when `fetchWeekFn` is set. */
+  clubIds?: number[];
   seasonId?: number;
   /** Pause between requests. One request at a time, to stay gentle on the site. */
   delayMs?: number;
@@ -76,13 +78,15 @@ function curlRequest(url: string, extraArgs: string[]): Promise<Response> {
 
 export const curlFetch: FetchPage = (url) => curlRequest(url, []);
 
-const clubGamesRequest: FetchWeek = (week) =>
-  curlRequest(`${BASE_URL}/__svws__/SvService.asmx/GetClubGames`, [
-    "--header",
-    "Content-Type: application/json; charset=utf-8",
-    "--data-binary",
-    JSON.stringify({ clubGamesSearcher: { ClubId: CLUB_ID, Week: week } }),
-  ]);
+function clubGamesFetcher(clubId: number): FetchWeek {
+  return (week) =>
+    curlRequest(`${BASE_URL}/__svws__/SvService.asmx/GetClubGames`, [
+      "--header",
+      "Content-Type: application/json; charset=utf-8",
+      "--data-binary",
+      JSON.stringify({ clubGamesSearcher: { ClubId: clubId, Week: week } }),
+    ]);
+}
 
 /** Every Sunday between two YYYY-MM-DD dates, as DD/MM/YYYY. */
 export function weeksBetween(first: string, last: string): string[] {
@@ -115,9 +119,10 @@ async function fetchPage(url: string, fetchFn: FetchPage, delayMs: number): Prom
 export async function scrapeAll(options: ScrapeOptions = {}): Promise<ScrapeOutput> {
   const {
     fetchFn = curlFetch,
-    fetchWeekFn = clubGamesRequest,
+    fetchWeekFn,
     weeks = weeksBetween(SEASON_FIRST_WEEK, SEASON_LAST_WEEK),
     teams = TEAMS,
+    clubIds = CLUB_IDS,
     seasonId = SEASON_ID,
     delayMs = 1000,
     now = () => new Date(),
@@ -149,22 +154,26 @@ export async function scrapeAll(options: ScrapeOptions = {}): Promise<ScrapeOutp
     output.teams.push(status);
   }
 
-  // Cup games are only in the club's weekly list, so walk the whole season.
+  // Cup games are only in each club's weekly list, so walk the whole season.
+  // A caller-supplied fetchWeekFn is one club (the tests). The default reads every club.
+  const weekFetchers = fetchWeekFn ? [fetchWeekFn] : clubIds.map((clubId) => clubGamesFetcher(clubId));
   const seen = new Set<string>();
-  for (const week of weeks) {
-    await sleep(delayMs);
-    try {
-      const text = await fetchPage(week, fetchWeekFn, delayMs);
-      const parsed = parseClubGames(text, week, teams, seasonId);
-      for (const game of parsed.games) {
-        if (seen.has(game.key)) continue;
-        seen.add(game.key);
-        output.games.push(game);
+  for (const fetchWeek of weekFetchers) {
+    for (const week of weeks) {
+      await sleep(delayMs);
+      try {
+        const text = await fetchPage(week, fetchWeek, delayMs);
+        const parsed = parseClubGames(text, week, teams, seasonId);
+        for (const game of parsed.games) {
+          if (seen.has(game.key)) continue;
+          seen.add(game.key);
+          output.games.push(game);
+        }
+        output.unmatched.push(...parsed.unmatched);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        output.failedWeeks.push({ week, error: message });
       }
-      output.unmatched.push(...parsed.unmatched);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      output.failedWeeks.push({ week, error: message });
     }
   }
   return output;

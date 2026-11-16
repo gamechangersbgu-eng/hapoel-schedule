@@ -1,5 +1,5 @@
 import type { IfaGameUpsert } from "@/shared/game";
-import { DB_TEAM_BY_IFA_TEAM } from "./db-teams";
+import { calendarTeamId, DB_TEAM_BY_IFA_TEAM } from "./db-teams";
 import type { ScrapedGame } from "./types";
 
 export type SkippedGame = { key: string; reason: string };
@@ -30,7 +30,7 @@ export function planWrites(
       plan.skipped.push({ key: game.key, reason: `no calendar row for team ${game.teamId}` });
       continue;
     }
-    const teamId = teamIds.get(row);
+    const teamId = calendarTeamId(row, teamIds);
     if (teamId === undefined) throw new Error(`calendar row "${row}" is not in the database`);
     if (game.isHome === null) {
       plan.skipped.push({ key: game.key, reason: "unknown home or away" });
