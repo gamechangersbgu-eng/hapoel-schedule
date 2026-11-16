@@ -45,7 +45,8 @@ export async function RoomSchedule({ kind, params }: { kind: RoomKind; params: P
       {saved > 0 ? (
         <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800 ring-1 ring-emerald-200">
           {saved === 1 ? "השיבוץ נשמר." : `נשמרו ${saved} מועדים.`}
-          {skipped > 0 ? ` ${skipped} מועדים דולגו כי החדר היה תפוס או סגור.` : ""}
+          {skipped === 1 ? " מועד אחד דולג כי החדר היה תפוס או סגור." : ""}
+          {skipped > 1 ? ` ${skipped} מועדים דולגו כי החדר היה תפוס או סגור.` : ""}
         </p>
       ) : null}
 

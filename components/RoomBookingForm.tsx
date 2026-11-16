@@ -192,6 +192,7 @@ export function RoomBookingForm({
 
       {editing ? null : (
         <RecurrenceFields
+          title="שיבוץ חוזר — אותה שעה בימים ובמועדים שתבחרו"
           anchor={date}
           enabled={repeat}
           onEnabled={(value) => {
