@@ -16,7 +16,8 @@ function dayLabel(date: string) {
 
 function timeLabel(task: MaintenanceTaskView) {
   if (task.kind === "weekly") {
-    return task.startTime && task.endTime ? `חלון פנוי ${task.startTime}–${task.endTime}` : null;
+    // Left-to-right isolate keeps "08:00–10:00" in order inside the Hebrew line.
+    return task.startTime && task.endTime ? `חלון פנוי \u2066${task.startTime}–${task.endTime}\u2069` : null;
   }
   return task.startTime ? `משחק ראשון ${task.startTime}` : null;
 }
