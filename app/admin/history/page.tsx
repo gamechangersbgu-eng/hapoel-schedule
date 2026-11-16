@@ -21,6 +21,7 @@ const ACTION: Record<string, { label: string; tone: string }> = {
   bank: { label: "רשימות", tone: "bg-zinc-100 text-zinc-800" },
   coach: { label: "מאמנים", tone: "bg-zinc-100 text-zinc-800" },
   maintenance: { label: "כיסוח וסימון", tone: "bg-lime-100 text-lime-900" },
+  room: { label: "חדרים", tone: "bg-indigo-100 text-indigo-900" },
 };
 
 function when(iso: string) {

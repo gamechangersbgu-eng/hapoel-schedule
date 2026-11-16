@@ -1,0 +1,284 @@
+import "server-only";
+
+// Database side of the internal room schedules (gym, video room). Rules: lib/rooms/room-rules.ts.
+import { randomUUID } from "node:crypto";
+import { and, asc, eq, gte, inArray, lte } from "drizzle-orm";
+import { db, gymBookings, slotGameDetails, slotTrainingDetails, slots, teams, videoRoomBookings } from "@/lib/db";
+import { formatDateHe, logChange } from "@/lib/history";
+import { getSlotType, isPitchSlot } from "@/lib/slot-types";
+import {
+  ROOMS,
+  datesToSave,
+  formatRange,
+  reviewOccurrences,
+  validateBooking,
+  type ExistingBooking,
+  type OccurrenceReview,
+  type RoomKind,
+  type TeamEvent,
+} from "./room-rules";
+
+const DEFAULT_TRAINING_MINUTES = 90;
+const GAME_BLOCK_MINUTES = 120;
+
+/** Both tables have the same columns; the gym table's type stands for either. */
+function tableFor(kind: RoomKind): typeof gymBookings {
+  return kind === "gym" ? gymBookings : (videoRoomBookings as unknown as typeof gymBookings);
+}
+
+export type RoomBookingView = ExistingBooking & { note: string | null; seriesId: string | null };
+export type TeamOption = { id: number; name: string };
+
+function toMinutes(time: string) {
+  const [h, m] = time.split(":").map(Number);
+  return h * 60 + m;
+}
+
+async function loadBookings(kind: RoomKind, from: string, to: string): Promise<RoomBookingView[]> {
+  const table = tableFor(kind);
+  const rows = await db
+    .select({ booking: table, teamName: teams.name })
+    .from(table)
+    .innerJoin(teams, eq(teams.id, table.teamId))
+    .where(and(gte(table.date, from), lte(table.date, to)))
+    .orderBy(asc(table.date), asc(table.startMin));
+  return rows.map(({ booking, teamName }) => ({
+    id: booking.id,
+    teamId: booking.teamId,
+    teamName,
+    date: booking.date,
+    start: booking.startMin,
+    end: booking.endMin,
+    note: booking.note,
+    seriesId: booking.seriesId,
+  }));
+}
+
+export async function loadTeamOptions(): Promise<TeamOption[]> {
+  return db
+    .select({ id: teams.id, name: teams.name })
+    .from(teams)
+    .where(eq(teams.isComments, false))
+    .orderBy(asc(teams.sortOrder));
+}
+
+export async function getRoomWeek(kind: RoomKind, from: string, to: string) {
+  const [bookings, teamOptions] = await Promise.all([loadBookings(kind, from, to), loadTeamOptions()]);
+  return { bookings, teams: teamOptions };
+}
+
+/** What else the team does on these dates: trainings, games, and the other room. */
+async function loadTeamEvents(kind: RoomKind, teamId: number, dates: string[]): Promise<TeamEvent[]> {
+  if (dates.length === 0) return [];
+  const otherKind: RoomKind = kind === "gym" ? "video" : "gym";
+  const otherTable = tableFor(otherKind);
+  const [slotRows, otherRows] = await Promise.all([
+    db
+      .select({ slot: slots, training: slotTrainingDetails, game: slotGameDetails })
+      .from(slots)
+      .leftJoin(slotTrainingDetails, eq(slotTrainingDetails.slotId, slots.id))
+      .leftJoin(slotGameDetails, eq(slotGameDetails.slotId, slots.id))
+      .where(and(eq(slots.teamId, teamId), inArray(slots.date, dates))),
+    db
+      .select()
+      .from(otherTable)
+      .where(and(eq(otherTable.teamId, teamId), inArray(otherTable.date, dates))),
+  ]);
+
+  const events: TeamEvent[] = [];
+  for (const { slot, training, game } of slotRows) {
+    if (slot.status === "cancelled") continue;
+    if (isPitchSlot(slot.type) && slot.startTime) {
+      const start = toMinutes(slot.startTime);
+      events.push({
+        teamId,
+        date: slot.date,
+        start,
+        end: start + (training?.durationMinutes ?? DEFAULT_TRAINING_MINUTES),
+        label: `אימון ב${getSlotType(slot.type).label}`,
+      });
+      continue;
+    }
+    if (["home_game", "away_game", "practice_game"].includes(slot.type)) {
+      const kickoff = game?.kickoffTime || slot.startTime;
+      if (!kickoff) continue;
+      const kick = toMinutes(kickoff);
+      const departure = slot.type === "away_game" && game?.departureTime ? toMinutes(game.departureTime) : null;
+      events.push({
+        teamId,
+        date: slot.date,
+        start: departure != null && departure < kick ? departure : kick,
+        end: kick + GAME_BLOCK_MINUTES,
+        label: getSlotType(slot.type).label,
+      });
+    }
+  }
+  for (const row of otherRows) {
+    events.push({ teamId, date: row.date, start: row.startMin, end: row.endMin, label: ROOMS[otherKind].label });
+  }
+  return events;
+}
+
+export type RoomBookingRequest = {
+  teamId: number;
+  startTime: string;
+  durationMinutes: number;
+  /** One date, or every date of a recurring booking. */
+  dates: string[];
+  note?: string | null;
+  /** Editing this booking (single date only). */
+  id?: number;
+};
+
+export async function previewRoomBooking(kind: RoomKind, request: RoomBookingRequest) {
+  const dates = [...new Set(request.dates)].sort();
+  if (dates.length === 0) return { items: [] as OccurrenceReview[], error: "יש לבחור תאריך" };
+  const [existing, events] = await Promise.all([
+    loadBookings(kind, dates[0], dates[dates.length - 1]),
+    loadTeamEvents(kind, request.teamId, dates),
+  ]);
+  return reviewOccurrences(
+    ROOMS[kind],
+    dates,
+    { teamId: request.teamId, startTime: request.startTime, durationMinutes: request.durationMinutes },
+    existing,
+    events,
+    request.id,
+  );
+}
+
+function isOverlapError(error: unknown): boolean {
+  const code = (error as { code?: string; cause?: { code?: string } })?.cause?.code ?? (error as { code?: string })?.code;
+  return code === "23P01";
+}
+
+export type SaveRoomResult = { ok: true; saved: string[]; skipped: string[] } | { ok: false; error: string };
+
+/**
+ * Saves the dates the review allows. Taken dates are skipped. The database's exclusion
+ * constraint is the last word: a date another admin took a moment ago is skipped too.
+ */
+export async function saveRoomBooking(kind: RoomKind, request: RoomBookingRequest, adminName: string): Promise<SaveRoomResult> {
+  const room = ROOMS[kind];
+  const table = tableFor(kind);
+  const review = await previewRoomBooking(kind, request);
+  if (review.error) return { ok: false, error: review.error };
+  const allowed = datesToSave(review.items);
+  const skipped = review.items.filter((item) => item.blockedBy).map((item) => item.date);
+  const note = request.note?.trim() || null;
+  const stamp = new Date().toISOString();
+  const [team] = await db.select({ name: teams.name }).from(teams).where(eq(teams.id, request.teamId)).limit(1);
+
+  if (request.id) {
+    if (allowed.length !== 1) return { ok: false, error: review.items[0]?.blockedBy ?? "לא ניתן לשמור" };
+    const checked = validateBooking(room, { ...request, date: allowed[0] });
+    if ("error" in checked) return { ok: false, error: checked.error };
+    try {
+      await db
+        .update(table)
+        .set({
+          teamId: request.teamId,
+          date: allowed[0],
+          startMin: checked.booking.start,
+          endMin: checked.booking.end,
+          note,
+          updatedAt: stamp,
+        })
+        .where(eq(table.id, request.id));
+    } catch (error) {
+      if (isOverlapError(error)) return { ok: false, error: `${room.label} ${room.feminine ? "נתפסה" : "נתפס"} הרגע בשעות האלה` };
+      throw error;
+    }
+    await logChange({
+      action: "room",
+      summary: `${room.label}: עודכן שיבוץ של ${team?.name ?? ""} ב-${formatDateHe(allowed[0])} ${formatRange(checked.booking.start, checked.booking.end)}`,
+      teamId: request.teamId,
+      date: allowed[0],
+    });
+    return { ok: true, saved: allowed, skipped };
+  }
+
+  if (allowed.length === 0) return { ok: false, error: review.items[0]?.blockedBy ?? "אין תאריך פנוי לשמירה" };
+  const seriesId = allowed.length > 1 ? randomUUID() : null;
+  const saved: string[] = [];
+  for (const date of allowed) {
+    const checked = validateBooking(room, { ...request, date });
+    if ("error" in checked) {
+      skipped.push(date);
+      continue;
+    }
+    try {
+      await db.insert(table).values({
+        teamId: request.teamId,
+        date,
+        startMin: checked.booking.start,
+        endMin: checked.booking.end,
+        note,
+        seriesId,
+        createdBy: adminName,
+        createdAt: stamp,
+        updatedAt: stamp,
+      });
+      saved.push(date);
+    } catch (error) {
+      if (!isOverlapError(error)) throw error;
+      skipped.push(date);
+    }
+  }
+  if (saved.length > 0) {
+    const first = validateBooking(room, { ...request, date: saved[0] });
+    const range = "booking" in first ? formatRange(first.booking.start, first.booking.end) : request.startTime;
+    await logChange({
+      action: "room",
+      summary:
+        saved.length === 1
+          ? `${room.label}: שובצה ${team?.name ?? ""} ב-${formatDateHe(saved[0])} ${range}`
+          : `${room.label}: שיבוץ חוזר ל-${team?.name ?? ""} ${range}, ${saved.length} מועדים מ-${formatDateHe(saved[0])} עד ${formatDateHe(saved[saved.length - 1])}`,
+      teamId: request.teamId,
+      date: saved[0],
+    });
+  }
+  return { ok: true, saved, skipped: [...new Set(skipped)].sort() };
+}
+
+/** Deletes one booking, or it and every later date of its recurring series. */
+export async function deleteRoomBooking(kind: RoomKind, id: number, scope: "one" | "following") {
+  const room = ROOMS[kind];
+  const table = tableFor(kind);
+  const [booking] = await db.select().from(table).where(eq(table.id, id)).limit(1);
+  if (!booking) return;
+  const [team] = await db.select({ name: teams.name }).from(teams).where(eq(teams.id, booking.teamId)).limit(1);
+  let count = 1;
+  if (scope === "following" && booking.seriesId) {
+    const removed = await db
+      .delete(table)
+      .where(and(eq(table.seriesId, booking.seriesId), gte(table.date, booking.date)))
+      .returning({ id: table.id });
+    count = removed.length;
+  } else {
+    await db.delete(table).where(eq(table.id, id));
+  }
+  await logChange({
+    action: "room",
+    summary:
+      count > 1
+        ? `${room.label}: נמחקו ${count} מועדים של ${team?.name ?? ""} מ-${formatDateHe(booking.date)}`
+        : `${room.label}: נמחק שיבוץ של ${team?.name ?? ""} ב-${formatDateHe(booking.date)}`,
+    teamId: booking.teamId,
+    date: booking.date,
+  });
+}
+
+/** Today's bookings in both rooms, for the club TV. Never throws. */
+export async function getTodayRooms(today: string): Promise<{ kind: RoomKind; label: string; bookings: RoomBookingView[] }[]> {
+  try {
+    const [gym, video] = await Promise.all([loadBookings("gym", today, today), loadBookings("video", today, today)]);
+    return [
+      { kind: "gym", label: ROOMS.gym.label, bookings: gym },
+      { kind: "video", label: ROOMS.video.label, bookings: video },
+    ];
+  } catch (error) {
+    console.error("[rooms] could not load today's bookings", error);
+    return [];
+  }
+}

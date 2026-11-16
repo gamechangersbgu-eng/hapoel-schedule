@@ -12,7 +12,8 @@ export type ChangeAction =
   | "bank"
   | "coach"
   | "game"
-  | "maintenance";
+  | "maintenance"
+  | "room";
 
 /** Records a change with the signed-in manager's name. Never blocks the change itself. */
 export async function logChange(entry: {

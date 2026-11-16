@@ -6,6 +6,8 @@ const ITEMS = [
   { href: "/admin/pitches", label: "לוח שיבוץ מגרשים" },
   { href: "/admin/games", label: "משחקים" },
   { href: "/admin/coaches", label: "מאמנים" },
+  { href: "/admin/gym", label: "חדר כושר" },
+  { href: "/admin/video", label: "כיתת וידאו" },
   { href: "/admin/banks", label: "חובשים, נהגים וערים" },
   { href: "/admin/history", label: "היסטוריית שינויים" },
   { href: "/admin/maintenance", label: "כיסוח וסימון" },
