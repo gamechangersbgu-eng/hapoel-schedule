@@ -4,6 +4,7 @@ import "server-only";
 import { and, asc, eq, gte, inArray, lte, or } from "drizzle-orm";
 import {
   db,
+  maintenancePitchOverrides,
   maintenanceTasks,
   pitches,
   slotGameDetails,
@@ -21,7 +22,11 @@ import {
   WEEKLY_WEEKDAYS,
   addDays,
   isOverdue,
+  isOverrideCode,
   israelToday,
+  overridesToClear,
+  unknownVenueGames,
+  urgentUnknownCount,
   planGamePrepTasks,
   planWeeklyTask,
   reconcileTasks,
@@ -76,11 +81,14 @@ async function loadGames(from: string, to: string, codeOfPitch: (id: number | nu
       kickoff: slotGameDetails.kickoffTime,
       opponent: slotGameDetails.opponent,
       pitchId: slotGameDetails.pitchId,
+      source: slotGameDetails.source,
+      overrideCode: maintenancePitchOverrides.pitchCode,
     })
     .from(slots)
     .innerJoin(teams, eq(teams.id, slots.teamId))
     .leftJoin(teamAgeBands, eq(teamAgeBands.code, teams.ageBandCode))
     .leftJoin(slotGameDetails, eq(slotGameDetails.slotId, slots.id))
+    .leftJoin(maintenancePitchOverrides, eq(maintenancePitchOverrides.slotId, slots.id))
     .where(and(eq(slots.type, "home_game"), gte(slots.date, from), lte(slots.date, to)));
 
   return rows.map(
@@ -95,6 +103,8 @@ async function loadGames(from: string, to: string, codeOfPitch: (id: number | nu
       opponent: row.opponent,
       pitchCode: codeOfPitch(row.pitchId),
       note: row.note,
+      source: row.source,
+      overrideCode: row.overrideCode,
     }),
   );
 }
@@ -158,6 +168,20 @@ export async function syncMaintenanceTasks(options?: { today?: string; force?: b
       .from(maintenanceTasks)
       .where(gte(maintenanceTasks.periodKey, thisWeek)),
   ]);
+
+  // The association (or an admin on the games screen) gave the place: drop the temporary pick.
+  const cleared = overridesToClear(games);
+  if (cleared.length > 0) {
+    await db.delete(maintenancePitchOverrides).where(inArray(maintenancePitchOverrides.slotId, cleared));
+    for (const game of games.filter((g) => cleared.includes(g.slotId))) {
+      game.overrideCode = null;
+      await logChange({
+        action: "maintenance",
+        summary: `שיבוץ מגרש זמני הוסר: ההתאחדות עדכנה מגרש למשחק של ${game.teamName} ב-${formatDateHe(game.date)}`,
+        date: game.date,
+      });
+    }
+  }
 
   const planned: PlannedTask[] = [
     ...planGamePrepTasks(games),
@@ -225,7 +249,7 @@ export async function getMaintenanceTasks(today = israelToday()): Promise<Mainte
   }));
 }
 
-export type MaintenanceAlertCount = { open: number; overdue: number };
+export type MaintenanceAlertCount = { open: number; overdue: number; unknown: number };
 
 /** Open tasks to flag today (banner + tab count), and how many of them are overdue. Never throws. */
 export async function getVisibleMaintenanceCount(today = israelToday()): Promise<MaintenanceAlertCount> {
@@ -236,11 +260,17 @@ export async function getVisibleMaintenanceCount(today = israelToday()): Promise
       .from(maintenanceTasks)
       .where(and(eq(maintenanceTasks.status, "open"), lte(maintenanceTasks.showFrom, today)));
     const visible = visibleOpenTasks(rows, today);
-    return { open: visible.length, overdue: visible.filter((task) => isOverdue(task, today)).length };
+    // Only "is a pitch set?" matters here, not which one.
+    const games = await loadGames(today, addDays(today, HORIZON_DAYS), (id) => (id == null ? null : `pitch_${id}`));
+    return {
+      open: visible.length,
+      overdue: visible.filter((task) => isOverdue(task, today)).length,
+      unknown: urgentUnknownCount(games, today),
+    };
   } catch (error) {
     // Table missing (migration not applied yet) or DB hiccup: the admin page must still load.
     console.error("[maintenance] could not load tasks", error);
-    return { open: 0, overdue: 0 };
+    return { open: 0, overdue: 0, unknown: 0 };
   }
 }
 
@@ -266,4 +296,77 @@ export async function reopenMaintenanceTask(taskId: number) {
     .update(maintenanceTasks)
     .set({ status: "open", doneBy: null, doneAt: null, updatedAt: new Date().toISOString() })
     .where(and(eq(maintenanceTasks.id, taskId), eq(maintenanceTasks.status, "done")));
+}
+
+export type UnknownVenueGame = {
+  slotId: number;
+  date: string;
+  kickoff: string | null;
+  teamName: string;
+  opponent: string | null;
+  overrideCode: string | null;
+};
+
+/** Home games in the coming HORIZON_DAYS with no venue from the association or an admin (the temporary column). */
+export async function getUnknownVenueGames(today = israelToday()): Promise<UnknownVenueGame[]> {
+  // Only "is a pitch set?" matters here, not which one.
+  const games = await loadGames(today, addDays(today, HORIZON_DAYS), (id) => (id == null ? null : `pitch_${id}`));
+  return unknownVenueGames(games).map((game) => ({
+    slotId: game.slotId,
+    date: game.date,
+    kickoff: game.kickoff,
+    teamName: game.teamName,
+    opponent: game.opponent,
+    overrideCode: game.overrideCode ?? null,
+  }));
+}
+
+const OVERRIDE_LABEL: Record<string, string> = {
+  vasermil_1: "וסרמיל 1",
+  vasermil_2: "וסרמיל 2",
+  vasermil_3: "וסרמיל 3",
+  vasermil_4: "וסרמיל 4",
+  other: "מגרש אחר (לא וסרמיל)",
+};
+
+export function overrideLabel(code: string) {
+  return OVERRIDE_LABEL[code] ?? code;
+}
+
+/** Sets (or clears, with null) the temporary pitch of a home game that still has no venue. */
+export async function setPitchOverride(slotId: number, code: string | null, adminName: string) {
+  const [slot] = await db
+    .select({ date: slots.date, teamName: teams.name })
+    .from(slots)
+    .innerJoin(teams, eq(teams.id, slots.teamId))
+    .where(and(eq(slots.id, slotId), eq(slots.type, "home_game")))
+    .limit(1);
+  if (!slot) return { ok: false as const, error: "המשחק לא נמצא" };
+
+  if (code === null) {
+    await db.delete(maintenancePitchOverrides).where(eq(maintenancePitchOverrides.slotId, slotId));
+    await logChange({
+      action: "maintenance",
+      summary: `הוסר שיבוץ מגרש זמני למשחק של ${slot.teamName} ב-${formatDateHe(slot.date)}`,
+      date: slot.date,
+    });
+  } else {
+    if (!isOverrideCode(code)) return { ok: false as const, error: "מגרש לא חוקי" };
+    const unknown = await getUnknownVenueGames();
+    if (!unknown.some((game) => game.slotId === slotId)) {
+      return { ok: false as const, error: "למשחק כבר יש מגרש מההתאחדות או ממסך המשחקים" };
+    }
+    const values = { pitchCode: code, setBy: adminName, setAt: new Date().toISOString() };
+    await db
+      .insert(maintenancePitchOverrides)
+      .values({ slotId, ...values })
+      .onConflictDoUpdate({ target: maintenancePitchOverrides.slotId, set: values });
+    await logChange({
+      action: "maintenance",
+      summary: `שיבוץ מגרש זמני: ${overrideLabel(code)} למשחק של ${slot.teamName} ב-${formatDateHe(slot.date)}`,
+      date: slot.date,
+    });
+  }
+  await syncMaintenanceTasks({ force: true });
+  return { ok: true as const };
 }

@@ -72,9 +72,56 @@ export function pitchCodeFromNote(note: string | null | undefined): string | nul
   return match ? `vasermil_${match[1]}` : null;
 }
 
-/** A pitch set by an admin wins over the venue text from the scraper. */
-export function resolveGamePitch(game: { pitchCode: string | null; note: string | null }): string | null {
-  return game.pitchCode ?? pitchCodeFromNote(game.note);
+/** Temporary manual pitch for a home game the association gave no venue for. "other" = not on Vasermil. */
+export const OVERRIDE_CODES = ["vasermil_1", "vasermil_2", "vasermil_3", "vasermil_4", "other"] as const;
+export type OverrideCode = (typeof OVERRIDE_CODES)[number];
+
+export function isOverrideCode(value: unknown): value is OverrideCode {
+  return (OVERRIDE_CODES as readonly unknown[]).includes(value);
+}
+
+export const IFA_SOURCE = "ifa_scraper";
+
+/**
+ * The venue the scraper appended to the note: "[גביע · ]<opponent>[ · <venue>]".
+ * Null when the association gave no venue.
+ */
+export function venueFromNote(note: string | null | undefined, opponent: string | null | undefined): string | null {
+  const parts = (note ?? "").split(" · ").map((part) => part.trim()).filter(Boolean);
+  if (parts[0] === "גביע") parts.shift();
+  if (parts.length < 2) return null;
+  if (opponent && parts[0] !== opponent.trim()) return null;
+  return parts.slice(1).join(" · ");
+}
+
+type PitchSources = {
+  /** Pitch an admin set on the game (`slot_game_details.pitch_id`). */
+  pitchCode: string | null;
+  note: string | null;
+  opponent?: string | null;
+  /** `slot_game_details.source`, e.g. "ifa_scraper". */
+  source?: string | null;
+  /** Temporary manual pitch from the maintenance screen. */
+  overrideCode?: string | null;
+};
+
+/** The game's place is known from the admin's pitch or the association's venue (not from a temporary pick). */
+export function officialVenueKnown(game: PitchSources): boolean {
+  if (game.pitchCode) return true;
+  if (pitchCodeFromNote(game.note)) return true;
+  return game.source === IFA_SOURCE && venueFromNote(game.note, game.opponent) !== null;
+}
+
+/**
+ * Admin's pitch, else the association's venue, else the temporary manual pick.
+ * A known venue that is not Vasermil returns null (no task), whatever the temporary pick says.
+ */
+export function resolveGamePitch(game: PitchSources): string | null {
+  if (game.pitchCode) return game.pitchCode;
+  const fromNote = pitchCodeFromNote(game.note);
+  if (fromNote) return fromNote;
+  if (officialVenueKnown(game)) return null;
+  return game.overrideCode && game.overrideCode !== "other" ? game.overrideCode : null;
 }
 
 export type GameForMaintenance = {
@@ -89,7 +136,32 @@ export type GameForMaintenance = {
   /** Code of `slot_game_details.pitch_id`, when an admin set one. */
   pitchCode: string | null;
   note: string | null;
+  source?: string | null;
+  overrideCode?: string | null;
 };
+
+function isActiveHomeGame(game: GameForMaintenance) {
+  return game.type === "home_game" && game.status === "active" && ISO.test(game.date);
+}
+
+/** Active home games whose place nobody official has given yet (the temporary column). */
+export function unknownVenueGames(games: GameForMaintenance[]): GameForMaintenance[] {
+  return games
+    .filter((game) => isActiveHomeGame(game) && !officialVenueKnown(game))
+    .sort((a, b) => a.date.localeCompare(b.date) || (a.kickoff ?? "").localeCompare(b.kickoff ?? ""));
+}
+
+/** Temporary picks to drop: the association (or an admin on the games screen) has now given the place. */
+export function overridesToClear(games: GameForMaintenance[]): number[] {
+  return games.filter((game) => game.overrideCode && officialVenueKnown(game)).map((game) => game.slotId);
+}
+
+/** Unknown-venue games with no temporary pick whose task would already be showing. */
+export function urgentUnknownCount(games: GameForMaintenance[], today: string): number {
+  return unknownVenueGames(games).filter(
+    (game) => !game.overrideCode && addDays(game.date, -DAYS_BEFORE_GAME) <= today && game.date >= today,
+  ).length;
+}
 
 export type PlannedTask = {
   pitchCode: MaintainedPitchCode;
@@ -115,7 +187,7 @@ function gameLine(game: GameForMaintenance): string {
 export function planGamePrepTasks(games: GameForMaintenance[]): PlannedTask[] {
   const groups = new Map<string, { pitchCode: MaintainedPitchCode; date: string; games: GameForMaintenance[] }>();
   for (const game of games) {
-    if (game.type !== "home_game" || game.status !== "active" || !ISO.test(game.date)) continue;
+    if (!isActiveHomeGame(game)) continue;
     const pitchCode = resolveGamePitch(game);
     if (!isMaintainedPitch(pitchCode)) continue;
     const key = `${pitchCode}|${game.date}`;

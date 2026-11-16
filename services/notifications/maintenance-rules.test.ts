@@ -9,6 +9,11 @@ import {
   reconcileTasks,
   visibleOpenTasks,
   isOverdue,
+  officialVenueKnown,
+  overridesToClear,
+  unknownVenueGames,
+  urgentUnknownCount,
+  venueFromNote,
   type GameForMaintenance,
 } from "./maintenance-rules";
 
@@ -148,4 +153,52 @@ test("a task whose day passed stays open, overdue, and is not moved by the plan"
 test("today is the Israel date, not the server's UTC date", () => {
   assert.equal(israelToday(new Date("2026-11-16T22:30:00Z")), "2026-11-17");
   assert.equal(israelToday(new Date("2026-07-01T21:30:00Z")), "2026-07-02");
+});
+
+test("venue in a scraper note: after the opponent, cup prefix skipped", () => {
+  assert.equal(venueFromNote("יריב · באר שבע וסרמיל 1", "יריב"), "באר שבע וסרמיל 1");
+  assert.equal(venueFromNote("גביע · יריב · באר שבע טאובל", "יריב"), "באר שבע טאובל");
+  assert.equal(venueFromNote("יריב", "יריב"), null);
+  assert.equal(venueFromNote("גביע · יריב", "יריב"), null);
+  assert.equal(venueFromNote(null, "יריב"), null);
+});
+
+const ifa = (overrides: Partial<GameForMaintenance>) =>
+  game({ source: "ifa_scraper", opponent: "יריב", note: "יריב", ...overrides });
+
+test("no venue from the association: listed as unknown, a temporary pick makes the task", () => {
+  const noVenue = ifa({ slotId: 9, date: "2026-11-22" });
+  assert.equal(officialVenueKnown(noVenue), false);
+  assert.deepEqual(unknownVenueGames([noVenue]).map((g) => g.slotId), [9]);
+  assert.deepEqual(planGamePrepTasks([noVenue]), []);
+
+  const picked = { ...noVenue, overrideCode: "vasermil_3" };
+  const [task] = planGamePrepTasks([picked]);
+  assert.equal(task.pitchCode, "vasermil_3");
+  assert.deepEqual(unknownVenueGames([picked]).map((g) => g.slotId), [9], "stays in the temporary column");
+  assert.deepEqual(planGamePrepTasks([{ ...noVenue, overrideCode: "other" }]), [], "'other' makes no task");
+});
+
+test("once the association gives a venue, it wins and the temporary pick is cleared", () => {
+  const updated = ifa({ slotId: 9, note: "יריב · באר שבע וסרמיל 1", overrideCode: "vasermil_3" });
+  assert.equal(planGamePrepTasks([updated])[0].pitchCode, "vasermil_1");
+  assert.deepEqual(overridesToClear([updated]), [9]);
+  assert.deepEqual(unknownVenueGames([updated]), []);
+
+  const elsewhere = ifa({ slotId: 10, note: "יריב · באר שבע טאובל", overrideCode: "vasermil_3" });
+  assert.deepEqual(planGamePrepTasks([elsewhere]), [], "known venue off Vasermil: no task");
+  assert.deepEqual(overridesToClear([elsewhere]), [10]);
+
+  const adminPitch = ifa({ slotId: 11, pitchCode: "vasermil_2", overrideCode: "vasermil_3" });
+  assert.deepEqual(overridesToClear([adminPitch]), [11], "an admin's pitch on the games screen also clears it");
+  assert.deepEqual(overridesToClear([ifa({ slotId: 12, overrideCode: "vasermil_3" })]), []);
+});
+
+test("urgent unknown: no pick and the task would already be showing", () => {
+  const games = [
+    ifa({ slotId: 1, date: "2026-11-18" }),
+    ifa({ slotId: 2, date: "2026-11-25" }),
+    ifa({ slotId: 3, date: "2026-11-17", overrideCode: "vasermil_1" }),
+  ];
+  assert.equal(urgentUnknownCount(games, "2026-11-16"), 1);
 });

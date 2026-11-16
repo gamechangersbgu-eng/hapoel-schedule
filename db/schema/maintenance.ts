@@ -1,4 +1,5 @@
 import { index, integer, pgTable, serial, text, uniqueIndex } from "drizzle-orm/pg-core";
+import { slots } from "./game";
 import { pitches } from "./pitch";
 
 /**
@@ -33,3 +34,17 @@ export const maintenanceTasks = pgTable(
     index("maintenance_tasks_date_idx").on(table.date),
   ],
 );
+
+/**
+ * Temporary manual pitch for a home game with no venue from the association.
+ * pitch_code: vasermil_1..4, or "other" (not on Vasermil). Cleared by the maintenance sync
+ * as soon as the association's venue or an admin's pitch on the game is known.
+ */
+export const maintenancePitchOverrides = pgTable("maintenance_pitch_overrides", {
+  slotId: integer("slot_id")
+    .primaryKey()
+    .references(() => slots.id, { onDelete: "cascade" }),
+  pitchCode: text("pitch_code").notNull(),
+  setBy: text("set_by"),
+  setAt: text("set_at").notNull(),
+});

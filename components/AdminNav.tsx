@@ -15,7 +15,8 @@ const ITEMS = [
 
 /** Tabs between the management screens. `current` is the active screen's path. */
 export async function AdminNav({ current }: { current: string }) {
-  const { open: maintenanceCount, overdue } = await getVisibleMaintenanceCount();
+  const { open: taskCount, overdue, unknown } = await getVisibleMaintenanceCount();
+  const maintenanceCount = taskCount + unknown;
   return (
     <>
     <nav aria-label="מסכי ניהול" className="no-print border-b border-black/10 bg-white">
@@ -58,8 +59,9 @@ export async function AdminNav({ current }: { current: string }) {
             : "bg-lime-50 text-lime-900 ring-lime-200 hover:bg-lime-100"
         }`}
       >
-        {maintenanceCount === 1 ? "מגרש אחד דורש" : `${maintenanceCount} מגרשים דורשים`} כיסוח וסימון
-        {overdue > 0 ? ` · ${overdue === 1 ? "משימה אחת" : `${overdue} משימות`} באיחור` : ""} ←
+        {taskCount > 0 ? `${taskCount === 1 ? "מגרש אחד דורש" : `${taskCount} מגרשים דורשים`} כיסוח וסימון` : ""}
+        {overdue > 0 ? ` · ${overdue === 1 ? "משימה אחת" : `${overdue} משימות`} באיחור` : ""}
+        {unknown > 0 ? `${taskCount > 0 ? " · " : ""}${unknown === 1 ? "משחק בית אחד" : `${unknown} משחקי בית`} בלי מגרש ידוע` : ""} ←
       </Link>
     ) : null}
     </>
