@@ -3,7 +3,6 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { previewRoomBookingAction, saveRoomBookingAction } from "@/app/admin/rooms/actions";
-import { QuarterHourSelect } from "@/components/QuarterHourSelect";
 import { RecurrenceFields } from "@/components/RecurrenceFields";
 import { buildOccurrenceDates } from "@/lib/recurrence";
 import {
@@ -12,6 +11,7 @@ import {
   clockToMinutes,
   minutesToClock,
   needsConfirmation,
+  startHours,
   type OccurrenceReview,
   type RoomKind,
 } from "@/lib/rooms/room-rules";
@@ -150,16 +150,46 @@ export function RoomBookingForm({
         </label>
         <div className="flex flex-col gap-1 text-sm font-bold">
           <label htmlFor="room-start">שעת התחלה</label>
-          <QuarterHourSelect
-            id="room-start"
-            name="startTime"
-            value={startTime}
-            onChange={(value) => {
-              setStartTime(value);
-              resetReview();
-            }}
-            required
-          />
+          {/* Own hour list: the gym is open around the clock, while the trainings' picker starts at 06:00. */}
+          <div className="flex items-center gap-1" dir="ltr">
+            <select
+              id="room-start"
+              aria-label="שעה"
+              value={startTime.slice(0, 2)}
+              onChange={(event) => {
+                setStartTime(`${event.target.value}:${startTime.slice(3, 5) || "00"}`);
+                resetReview();
+              }}
+              className="min-h-11 min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-2 py-2 text-base"
+            >
+              {startHours(room).map((hour) => {
+                const value = String(hour).padStart(2, "0");
+                return (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                );
+              })}
+            </select>
+            <span className="font-black text-zinc-400" aria-hidden>
+              :
+            </span>
+            <select
+              aria-label="דקות"
+              value={startTime.slice(3, 5)}
+              onChange={(event) => {
+                setStartTime(`${startTime.slice(0, 2) || "16"}:${event.target.value}`);
+                resetReview();
+              }}
+              className="min-h-11 min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-2 py-2 text-base"
+            >
+              {["00", "15", "30", "45"].map((minute) => (
+                <option key={minute} value={minute}>
+                  {minute}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
         <label className="flex flex-col gap-1 text-sm font-bold">
           משך {endLabel ? <span className="font-medium text-zinc-500">(עד {endLabel})</span> : null}

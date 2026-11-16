@@ -11,11 +11,32 @@ export type RoomConfig = {
   weekdays: readonly number[];
   /** Hebrew agreement: "תפוס"/"תפוסה", "פתוח"/"פתוחה". */
   feminine: boolean;
+  /** Opening hours in minutes from midnight; a session must fit inside them (no overnight sessions). */
+  openFrom: number;
+  openUntil: number;
 };
 
 export const ROOMS: Record<RoomKind, RoomConfig> = {
-  gym: { kind: "gym", label: "חדר כושר", path: "/admin/gym", weekdays: [0, 1, 2, 3, 4, 5, 6], feminine: false },
-  video: { kind: "video", label: "כיתת וידאו", path: "/admin/video", weekdays: [0, 1, 2, 3, 4, 5], feminine: true },
+  // Gym: open around the clock, every day.
+  gym: {
+    kind: "gym",
+    label: "חדר כושר",
+    path: "/admin/gym",
+    weekdays: [0, 1, 2, 3, 4, 5, 6],
+    feminine: false,
+    openFrom: 0,
+    openUntil: 24 * 60,
+  },
+  // Video room: Sunday to Friday, the same hours as trainings (06:00–23:45).
+  video: {
+    kind: "video",
+    label: "כיתת וידאו",
+    path: "/admin/video",
+    weekdays: [0, 1, 2, 3, 4, 5],
+    feminine: true,
+    openFrom: 6 * 60,
+    openUntil: 23 * 60 + 45,
+  },
 };
 
 export function readRoomKind(raw: unknown): RoomKind | null {
@@ -25,8 +46,6 @@ export function readRoomKind(raw: unknown): RoomKind | null {
 /** Session lengths offered in the form (minutes). */
 export const ROOM_DURATIONS = [30, 45, 60, 75, 90, 105, 120, 150, 180] as const;
 export const DEFAULT_ROOM_MINUTES = 60;
-/** Latest end of a session: 23:45. */
-export const DAY_END_MINUTES = 23 * 60 + 45;
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -79,7 +98,15 @@ export function validateBooking(room: RoomConfig, input: RoomBookingInput): { bo
   if (start % 15 !== 0) return { error: "השעה צריכה להיות ברבעי שעה" };
   if (!(ROOM_DURATIONS as readonly number[]).includes(input.durationMinutes)) return { error: "משך לא חוקי" };
   const end = start + input.durationMinutes;
-  if (end > DAY_END_MINUTES) return { error: "השיבוץ חייב להסתיים עד 23:45" };
+  if (start < room.openFrom) return { error: `${room.label} ${room.feminine ? "פתוחה" : "פתוח"} מ-${minutesToClock(room.openFrom)}` };
+  if (end > room.openUntil) {
+    return {
+      error:
+        room.openUntil >= 24 * 60
+          ? "השיבוץ חייב להסתיים עד חצות"
+          : `השיבוץ חייב להסתיים עד ${minutesToClock(room.openUntil)}`,
+    };
+  }
   return { booking: { teamId: input.teamId, date: input.date, start, end } };
 }
 
@@ -158,4 +185,11 @@ export function needsConfirmation(items: OccurrenceReview[]): boolean {
 
 export function datesToSave(items: OccurrenceReview[]): string[] {
   return items.filter((item) => !item.blockedBy).map((item) => item.date);
+}
+
+/** Start hours (00–23) the form offers for this room. */
+export function startHours(room: RoomConfig): number[] {
+  const first = Math.floor(room.openFrom / 60);
+  const last = Math.floor((room.openUntil - 15) / 60);
+  return Array.from({ length: last - first + 1 }, (_, i) => first + i);
 }

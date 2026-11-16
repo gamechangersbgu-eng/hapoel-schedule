@@ -30,7 +30,11 @@ test("validation: team, quarter hours, allowed day, listed duration, ends by 23:
   assert.ok("error" in validateBooking(gym, { ...ok, teamId: 0 }));
   assert.ok("error" in validateBooking(gym, { ...ok, startTime: "16:10" }));
   assert.ok("error" in validateBooking(gym, { ...ok, durationMinutes: 50 }));
-  assert.ok("error" in validateBooking(gym, { ...ok, startTime: "23:00" }));
+  assert.ok("booking" in validateBooking(gym, { ...ok, startTime: "23:00" }), "gym is open until midnight");
+  assert.ok("booking" in validateBooking(gym, { ...ok, startTime: "00:00" }), "gym is open from midnight");
+  assert.ok("error" in validateBooking(gym, { ...ok, startTime: "23:30" }), "no session past midnight");
+  assert.ok("error" in validateBooking(video, { ...ok, startTime: "23:00" }), "video room ends by 23:45");
+  assert.ok("error" in validateBooking(video, { ...ok, startTime: "05:00" }), "video room opens at 06:00");
   assert.ok("booking" in validateBooking(gym, { ...ok, date: saturday }));
   assert.ok("error" in validateBooking(video, { ...ok, date: saturday }), "video room is open Sunday to Friday");
 });
