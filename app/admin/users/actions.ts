@@ -3,9 +3,10 @@
 import { and, count, eq, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { adminUsers, db } from "@/lib/db";
-import { requireAdmin, requireOwner, startSession } from "@/lib/auth";
+import { adminUsers, db, staff } from "@/lib/db";
+import { requireOwner, requireUser, startSession } from "@/lib/auth";
 import { MIN_PASSWORD_LENGTH, hashPassword, verifyPassword } from "@/lib/password";
+import { homePathForRole, isManager, isUserRole, normalizeRole } from "@/lib/roles";
 import { isValidUsername, normalizeUsername } from "@/lib/username";
 
 function usersPage(params: Record<string, string>): never {
@@ -24,11 +25,19 @@ export async function addUserAction(formData: FormData) {
   await requireOwner();
   const displayName = String(formData.get("displayName") ?? "").trim();
   const username = normalizeUsername(String(formData.get("username") ?? ""));
-  const role = formData.get("role") === "owner" ? "owner" : "admin";
+  const rawRole = formData.get("role");
+  const role = isUserRole(rawRole) ? rawRole : "admin";
   const password = String(formData.get("password") ?? "");
+  const staffValue = Number(formData.get("staffId"));
+  const staffId = Number.isInteger(staffValue) && staffValue > 0 ? staffValue : null;
 
   if (!displayName || !isValidUsername(username)) usersPage({ error: "יש למלא שם ושם משתמש תקין" });
   if (password.length < MIN_PASSWORD_LENGTH) usersPage({ error: `סיסמה זמנית: לפחות ${MIN_PASSWORD_LENGTH} תווים` });
+  if (role === "coach" && staffId == null) usersPage({ error: "למשתמש מאמן צריך לבחור את המאמן מרשימת המאמנים" });
+  if (staffId != null) {
+    const [person] = await db.select({ id: staff.id }).from(staff).where(eq(staff.id, staffId)).limit(1);
+    if (!person) usersPage({ error: "איש הצוות לא נמצא" });
+  }
   const [exists] = await db.select({ id: adminUsers.id }).from(adminUsers).where(eq(adminUsers.email, username)).limit(1);
   if (exists) usersPage({ error: "כבר יש משתמש עם שם המשתמש הזה" });
 
@@ -36,6 +45,8 @@ export async function addUserAction(formData: FormData) {
     email: username,
     displayName,
     role,
+    // Managers are not tied to a staff row.
+    staffId: isManager(role) ? null : staffId,
     passwordHash: await hashPassword(password),
     mustChangePassword: true,
     createdAt: new Date().toISOString(),
@@ -81,10 +92,14 @@ export async function setActiveAction(formData: FormData) {
   usersPage({ done: active ? `${user.displayName} הופעל/ה מחדש` : `${user.displayName} הושבת/ה ולא יוכל/תוכל להיכנס` });
 }
 
+/** Owner ↔ admin only. Coach and physio logins keep their role (add a new user for a different role). */
 export async function setRoleAction(formData: FormData) {
   const me = await requireOwner();
   const id = Number(formData.get("id"));
   const role = formData.get("role") === "owner" ? "owner" : "admin";
+  const [user] = await db.select({ role: adminUsers.role }).from(adminUsers).where(eq(adminUsers.id, id)).limit(1);
+  if (!user) usersPage({ error: "המשתמש לא נמצא" });
+  if (!isManager(normalizeRole(user.role))) usersPage({ error: "אפשר לשנות הרשאה רק בין מנהל למנהל ראשי" });
   if (id === me.id && role !== "owner" && (await otherActiveOwners(id)) === 0) {
     usersPage({ error: "חייב להישאר לפחות מנהל ראשי אחד פעיל" });
   }
@@ -93,9 +108,9 @@ export async function setRoleAction(formData: FormData) {
   usersPage({ done: "ההרשאה עודכנה" });
 }
 
-/** Any manager: change own password (also the forced change after a temporary password). */
+/** Any signed-in user: change own password (also the forced change after a temporary password). */
 export async function changeOwnPasswordAction(formData: FormData) {
-  const me = await requireAdmin({ allowPasswordChange: true });
+  const me = await requireUser({ allowPasswordChange: true });
   const current = String(formData.get("current") ?? "");
   const next = String(formData.get("next") ?? "");
   const repeat = String(formData.get("repeat") ?? "");
@@ -119,5 +134,5 @@ export async function changeOwnPasswordAction(formData: FormData) {
     .returning();
   // Signs out every other device; keeps this one signed in.
   await startSession(updated);
-  redirect(first ? "/admin" : "/admin/account?done=1");
+  redirect(first ? homePathForRole(me.role) : "/admin/account?done=1");
 }

@@ -47,6 +47,8 @@ export const players = pgTable(
     notes: text(),
     sortOrder: integer("sort_order").notNull().default(0),
     isActive: boolean("is_active").notNull().default(true),
+    /** Personal coach (staff row). Sees this player's injury status. Set on /admin/players. */
+    coachStaffId: integer("coach_staff_id").references(() => staff.id, { onDelete: "set null" }),
   },
   (table) => [index("players_team_idx").on(table.teamId)],
 );

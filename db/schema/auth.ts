@@ -1,9 +1,13 @@
 import { boolean, integer, pgTable, serial, text } from "drizzle-orm/pg-core";
 
+import { staff } from "./team";
+
 /**
- * Management users (club managers). Parents and players never log in.
+ * Users who sign in. Parents and players never log in.
  * email: the username (unique text). The column name stays so existing rows are untouched.
- * role: "owner" (can manage other users) or "admin" (schedule editing).
+ * role: "owner" (can manage other users), "admin" (schedule editing),
+ *       "physio" (injuries + physio schedule) or "coach" (injury status of own players). See lib/roles.ts.
+ * staffId: the staff row of a coach or physio login (coach: required, decides which players they see).
  * sessionVersion: bumped on password change / deactivation, which signs the user out everywhere.
  */
 export const adminUsers = pgTable("admin_users", {
@@ -18,4 +22,5 @@ export const adminUsers = pgTable("admin_users", {
   sessionVersion: integer("session_version").notNull().default(1),
   createdAt: text("created_at").notNull(),
   lastLoginAt: text("last_login_at"),
+  staffId: integer("staff_id").references(() => staff.id, { onDelete: "set null" }),
 });
