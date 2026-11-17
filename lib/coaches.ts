@@ -28,6 +28,18 @@ export type CoachInfo = {
   absences: { id: number; type: string; startDate: string; endDate: string | null; note: string | null }[];
 };
 
+/** "מאמן: דנה · עוזר מאמן: מיכל", or null when nobody is linked to the team. */
+export function teamCoachSummary(coaches: CoachInfo[], teamId: number) {
+  const linked = coaches.filter((coach) => coach.teamIds.includes(teamId));
+  if (linked.length === 0) return null;
+  const heads = linked.filter((coach) => !coach.assistantTeamIds?.includes(teamId)).map((coach) => coach.name);
+  const assistants = linked.filter((coach) => coach.assistantTeamIds?.includes(teamId)).map((coach) => coach.name);
+  const parts = [];
+  if (heads.length) parts.push(`מאמן: ${heads.join(", ")}`);
+  if (assistants.length) parts.push(`עוזר מאמן: ${assistants.join(", ")}`);
+  return parts.join(" · ");
+}
+
 /** Absence covering a date, if any. */
 export function absenceOn(coach: CoachInfo, date: string) {
   return coach.absences.find((item) => item.startDate <= date && (item.endDate ?? item.startDate) >= date);

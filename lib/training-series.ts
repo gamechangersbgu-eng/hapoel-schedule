@@ -53,6 +53,7 @@ export async function previewSeries(input: {
   subdivisionCode: string | null;
   startTime: string;
   durationMinutes: number;
+  substituteStaffId?: number | null;
 }): Promise<OccurrencePreview[]> {
   const dates = [...new Set(input.dates)].sort();
   if (input.pitchId) {
@@ -62,6 +63,7 @@ export async function previewSeries(input: {
       subdivisionCode: input.subdivisionCode || "whole",
       start: toMinutes(input.startTime),
       durationMinutes: input.durationMinutes,
+      substituteStaffId: input.substituteStaffId ?? null,
     });
     return classified.map((item) => ({
       date: item.date,
@@ -129,6 +131,7 @@ export async function saveTrainingSeries(input: SeriesSaveInput): Promise<Series
         subdivisionCode: input.subdivisionCode,
         startTime: input.startTime,
         durationMinutes: input.durationMinutes,
+        substituteStaffId: input.substituteStaffId,
       });
   const byDate = new Map(preview.map((item) => [item.date, item]));
 
