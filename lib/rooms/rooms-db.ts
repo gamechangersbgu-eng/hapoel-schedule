@@ -10,6 +10,7 @@ import {
   ROOMS,
   datesToSave,
   formatRange,
+  isOverlapError,
   reviewOccurrences,
   validateBooking,
   type ExistingBooking,
@@ -130,9 +131,23 @@ export type RoomBookingRequest = {
   id?: number;
 };
 
+/** A real team row: not the schedule's "הערות" row, which is a team in the table but not a team. */
+async function bookableTeam(teamId: number) {
+  if (!Number.isInteger(teamId) || teamId <= 0) return null;
+  const [team] = await db
+    .select({ name: teams.name, isComments: teams.isComments })
+    .from(teams)
+    .where(eq(teams.id, teamId))
+    .limit(1);
+  return team && !team.isComments ? team : null;
+}
+
 export async function previewRoomBooking(kind: RoomKind, request: RoomBookingRequest) {
   const dates = [...new Set(request.dates)].sort();
   if (dates.length === 0) return { items: [] as OccurrenceReview[], error: "יש לבחור תאריך" };
+  if (request.teamId > 0 && !(await bookableTeam(request.teamId))) {
+    return { items: [] as OccurrenceReview[], error: "יש לבחור קבוצה" };
+  }
   const [existing, events] = await Promise.all([
     loadBookings(kind, dates[0], dates[dates.length - 1]),
     loadTeamEvents(kind, request.teamId, dates),
@@ -147,10 +162,6 @@ export async function previewRoomBooking(kind: RoomKind, request: RoomBookingReq
   );
 }
 
-function isOverlapError(error: unknown): boolean {
-  const code = (error as { code?: string; cause?: { code?: string } })?.cause?.code ?? (error as { code?: string })?.code;
-  return code === "23P01";
-}
 
 export type SaveRoomResult = { ok: true; saved: string[]; skipped: string[] } | { ok: false; error: string };
 
@@ -167,14 +178,15 @@ export async function saveRoomBooking(kind: RoomKind, request: RoomBookingReques
   const skipped = review.items.filter((item) => item.blockedBy).map((item) => item.date);
   const note = request.note?.trim() || null;
   const stamp = new Date().toISOString();
-  const [team] = await db.select({ name: teams.name }).from(teams).where(eq(teams.id, request.teamId)).limit(1);
+  const team = await bookableTeam(request.teamId);
+  if (!team) return { ok: false, error: "יש לבחור קבוצה" };
 
   if (request.id) {
     if (allowed.length !== 1) return { ok: false, error: review.items[0]?.blockedBy ?? "לא ניתן לשמור" };
     const checked = validateBooking(room, { ...request, date: allowed[0] });
     if ("error" in checked) return { ok: false, error: checked.error };
     try {
-      await db
+      const updated = await db
         .update(table)
         .set({
           teamId: request.teamId,
@@ -184,14 +196,17 @@ export async function saveRoomBooking(kind: RoomKind, request: RoomBookingReques
           note,
           updatedAt: stamp,
         })
-        .where(eq(table.id, request.id));
+        .where(eq(table.id, request.id))
+        .returning({ id: table.id });
+      // Another admin deleted it while this one was editing.
+      if (updated.length === 0) return { ok: false, error: "השיבוץ כבר לא קיים (אולי נמחק בינתיים)" };
     } catch (error) {
       if (isOverlapError(error)) return { ok: false, error: `${room.label} ${room.feminine ? "נתפסה" : "נתפס"} הרגע בשעות האלה` };
       throw error;
     }
     await logChange({
       action: "room",
-      summary: `${room.label}: עודכן שיבוץ של ${team?.name ?? ""} ב-${formatDateHe(allowed[0])} ${formatRange(checked.booking.start, checked.booking.end)}`,
+      summary: `${room.label}: עודכן שיבוץ של ${team.name} ב-${formatDateHe(allowed[0])} ${formatRange(checked.booking.start, checked.booking.end)}`,
       teamId: request.teamId,
       date: allowed[0],
     });
@@ -232,8 +247,8 @@ export async function saveRoomBooking(kind: RoomKind, request: RoomBookingReques
       action: "room",
       summary:
         saved.length === 1
-          ? `${room.label}: שובצה ${team?.name ?? ""} ב-${formatDateHe(saved[0])} ${range}`
-          : `${room.label}: שיבוץ חוזר ל-${team?.name ?? ""} ${range}, ${saved.length} מועדים מ-${formatDateHe(saved[0])} עד ${formatDateHe(saved[saved.length - 1])}`,
+          ? `${room.label}: שובצה ${team.name} ב-${formatDateHe(saved[0])} ${range}`
+          : `${room.label}: שיבוץ חוזר ל-${team.name} ${range}, ${saved.length} מועדים מ-${formatDateHe(saved[0])} עד ${formatDateHe(saved[saved.length - 1])}`,
       teamId: request.teamId,
       date: saved[0],
     });
@@ -262,8 +277,8 @@ export async function deleteRoomBooking(kind: RoomKind, id: number, scope: "one"
     action: "room",
     summary:
       count > 1
-        ? `${room.label}: נמחקו ${count} מועדים של ${team?.name ?? ""} מ-${formatDateHe(booking.date)}`
-        : `${room.label}: נמחק שיבוץ של ${team?.name ?? ""} ב-${formatDateHe(booking.date)}`,
+        ? `${room.label}: נמחקו ${count} מועדים של ${team.name} מ-${formatDateHe(booking.date)}`
+        : `${room.label}: נמחק שיבוץ של ${team.name} ב-${formatDateHe(booking.date)}`,
     teamId: booking.teamId,
     date: booking.date,
   });

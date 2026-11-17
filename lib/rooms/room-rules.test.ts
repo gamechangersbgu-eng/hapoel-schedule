@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   ROOMS,
+  isOverlapError,
+  startHours,
+  startMinutes,
   datesToSave,
   findRoomConflict,
   needsConfirmation,
@@ -81,4 +84,22 @@ test("a recurring booking skips taken dates and closed days, keeps the rest", ()
 test("a single booking on a closed day is an error, not a skipped date", () => {
   const review = reviewOccurrences(video, [saturday], { teamId: 1, startTime: "16:00", durationMinutes: 60 }, [], []);
   assert.ok(review.error);
+});
+
+test("the form never offers a start time that cannot fit the shortest session", () => {
+  assert.deepEqual(startMinutes(video, 23), [0, 15]);
+  assert.deepEqual(startMinutes(video, 6), [0, 15, 30, 45]);
+  assert.deepEqual(startMinutes(video, 5), []);
+  assert.equal(startHours(video)[0], 6);
+  assert.deepEqual(startMinutes(gym, 23), [0, 15, 30]);
+  assert.deepEqual([startHours(gym)[0], startHours(gym).at(-1)], [0, 23]);
+});
+
+test("overlap errors are recognised however the driver wraps them", () => {
+  assert.equal(isOverlapError({ code: "23P01" }), true);
+  assert.equal(isOverlapError({ message: "Failed query", cause: { code: "23P01" } }), true);
+  assert.equal(isOverlapError(new Error("x", { cause: new Error("x", { cause: { code: "23P01" } }) })), true);
+  assert.equal(isOverlapError({ message: 'violates exclusion constraint "gym_bookings_no_overlap"' }), true);
+  assert.equal(isOverlapError({ code: "23505" }), false);
+  assert.equal(isOverlapError(null), false);
 });

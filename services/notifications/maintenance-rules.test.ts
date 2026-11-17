@@ -157,11 +157,11 @@ test("today is the Israel date, not the server's UTC date", () => {
 });
 
 test("venue in a scraper note: after the opponent, cup prefix skipped", () => {
-  assert.equal(venueFromNote("יריב · באר שבע וסרמיל 1", "יריב"), "באר שבע וסרמיל 1");
-  assert.equal(venueFromNote("גביע · יריב · באר שבע טאובל", "יריב"), "באר שבע טאובל");
-  assert.equal(venueFromNote("יריב", "יריב"), null);
-  assert.equal(venueFromNote("גביע · יריב", "יריב"), null);
-  assert.equal(venueFromNote(null, "יריב"), null);
+  assert.equal(venueFromNote("יריב · באר שבע וסרמיל 1"), "באר שבע וסרמיל 1");
+  assert.equal(venueFromNote("גביע · יריב · באר שבע טאובל"), "באר שבע טאובל");
+  assert.equal(venueFromNote("יריב"), null);
+  assert.equal(venueFromNote("גביע · יריב"), null);
+  assert.equal(venueFromNote(null), null);
 });
 
 const ifa = (overrides: Partial<GameForMaintenance>) =>
@@ -216,4 +216,10 @@ test("Vasermil 1 (synthetic) and Vasermil 4 (football school) never make a task"
   );
   // The association's venue on Vasermil 1 still counts as known: no temporary pick needed.
   assert.deepEqual(unknownVenueGames([ifa({ slotId: 5, note: "יריב · באר שבע וסרמיל 1" })]), []);
+});
+
+test("an admin renaming the opponent does not hide the association's venue", () => {
+  const renamed = ifa({ slotId: 7, opponent: "שם חדש", note: "יריב · באר שבע טאובל", overrideCode: "vasermil_3" });
+  assert.equal(officialVenueKnown(renamed), true);
+  assert.deepEqual(overridesToClear([renamed]), [7]);
 });

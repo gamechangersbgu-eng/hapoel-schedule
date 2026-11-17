@@ -12,6 +12,7 @@ import {
   minutesToClock,
   needsConfirmation,
   startHours,
+  startMinutes,
   type OccurrenceReview,
   type RoomKind,
 } from "@/lib/rooms/room-rules";
@@ -157,7 +158,11 @@ export function RoomBookingForm({
               aria-label="שעה"
               value={startTime.slice(0, 2)}
               onChange={(event) => {
-                setStartTime(`${event.target.value}:${startTime.slice(3, 5) || "00"}`);
+                // Keep the minutes if they still fit in the new hour, else take the first that does.
+                const hour = event.target.value;
+                const minutes = startMinutes(room, Number(hour)).map((m) => String(m).padStart(2, "0"));
+                const current = startTime.slice(3, 5);
+                setStartTime(`${hour}:${minutes.includes(current) ? current : (minutes[0] ?? "00")}`);
                 resetReview();
               }}
               className="min-h-11 min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-2 py-2 text-base"
@@ -183,11 +188,13 @@ export function RoomBookingForm({
               }}
               className="min-h-11 min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-2 py-2 text-base"
             >
-              {["00", "15", "30", "45"].map((minute) => (
-                <option key={minute} value={minute}>
-                  {minute}
-                </option>
-              ))}
+              {startMinutes(room, Number(startTime.slice(0, 2)))
+                .map((minute) => String(minute).padStart(2, "0"))
+                .map((minute) => (
+                  <option key={minute} value={minute}>
+                    {minute}
+                  </option>
+                ))}
             </select>
           </div>
         </div>

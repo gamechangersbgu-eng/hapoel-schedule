@@ -187,9 +187,37 @@ export function datesToSave(items: OccurrenceReview[]): string[] {
   return items.filter((item) => !item.blockedBy).map((item) => item.date);
 }
 
-/** Start hours (00–23) the form offers for this room. */
+const SHORTEST_SESSION = Math.min(...ROOM_DURATIONS);
+
+/** Quarter-hour minutes (0/15/30/45) at which a session can start in this hour and still fit the shortest length. */
+export function startMinutes(room: RoomConfig, hour: number): number[] {
+  return [0, 15, 30, 45].filter((minute) => {
+    const start = hour * 60 + minute;
+    return start >= room.openFrom && start + SHORTEST_SESSION <= room.openUntil;
+  });
+}
+
+/** Start hours (00–23) the form offers for this room: only hours with at least one valid start. */
 export function startHours(room: RoomConfig): number[] {
-  const first = Math.floor(room.openFrom / 60);
-  const last = Math.floor((room.openUntil - 15) / 60);
-  return Array.from({ length: last - first + 1 }, (_, i) => first + i);
+  return Array.from({ length: 24 }, (_, hour) => hour).filter((hour) => startMinutes(room, hour).length > 0);
+}
+
+/**
+ * True for Postgres' exclusion-constraint violation (code 23P01): another admin took the room a
+ * moment ago. Drivers wrap errors differently (node-postgres, Netlify's driver, Drizzle's own
+ * wrapper), so the code is looked for on the error and on its causes, and the constraint name
+ * in the message is accepted as well.
+ */
+export function isOverlapError(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && current && typeof current === "object"; depth += 1) {
+    const value = current as { code?: unknown; constraint?: unknown; message?: unknown; cause?: unknown };
+    if (value.code === "23P01") return true;
+    if (typeof value.constraint === "string" && value.constraint.endsWith("_no_overlap")) return true;
+    if (typeof value.message === "string" && /_no_overlap|23P01|conflicting key value violates exclusion constraint/.test(value.message)) {
+      return true;
+    }
+    current = value.cause;
+  }
+  return false;
 }

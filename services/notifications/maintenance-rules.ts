@@ -87,13 +87,13 @@ export const IFA_SOURCE = "ifa_scraper";
 
 /**
  * The venue the scraper appended to the note: "[גביע · ]<opponent>[ · <venue>]".
- * Null when the association gave no venue.
+ * Null when the association gave no venue. Only read for scraper rows, so the opponent's
+ * stored name is not compared: an admin renaming the opponent must not hide the venue.
  */
-export function venueFromNote(note: string | null | undefined, opponent: string | null | undefined): string | null {
+export function venueFromNote(note: string | null | undefined): string | null {
   const parts = (note ?? "").split(" · ").map((part) => part.trim()).filter(Boolean);
   if (parts[0] === "גביע") parts.shift();
   if (parts.length < 2) return null;
-  if (opponent && parts[0] !== opponent.trim()) return null;
   return parts.slice(1).join(" · ");
 }
 
@@ -112,7 +112,7 @@ type PitchSources = {
 export function officialVenueKnown(game: PitchSources): boolean {
   if (game.pitchCode) return true;
   if (pitchCodeFromNote(game.note)) return true;
-  return game.source === IFA_SOURCE && venueFromNote(game.note, game.opponent) !== null;
+  return game.source === IFA_SOURCE && venueFromNote(game.note) !== null;
 }
 
 /**

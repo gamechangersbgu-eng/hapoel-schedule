@@ -38,9 +38,6 @@ import {
   type PlannedTask,
 } from "./maintenance-rules";
 
-/** Admin pages call sync on every load; skip it if this server instance synced a moment ago. */
-const SYNC_INTERVAL_MS = 2 * 60 * 1000;
-let lastSyncAt = 0;
 
 export type MaintenanceTaskView = {
   id: number;
@@ -136,16 +133,8 @@ async function loadWeeklyPitchBusy(pitchId: number, dates: string[]) {
   return busy;
 }
 
-/**
- * Brings `maintenance_tasks` in line with the schedule: game tasks for the next HORIZON_DAYS,
- * the weekly Vasermil 2 task for this week and next. Safe to call repeatedly.
- */
-export async function syncMaintenanceTasks(options?: { today?: string; force?: boolean }) {
-  const now = Date.now();
-  if (!options?.force && now - lastSyncAt < SYNC_INTERVAL_MS) return;
-  lastSyncAt = now;
-
-  const today = options?.today ?? israelToday();
+/** Reads everything the plan needs. No writes: the admin banner uses it on every page. */
+async function loadPlanInputs(today: string) {
   const thisWeek = sundayOfISO(today);
   const weeks = [thisWeek, addDays(thisWeek, 7)];
   const weekDates = weeks.flatMap((week) => WEEKLY_WEEKDAYS.map((day) => addDays(week, day)));
@@ -169,32 +158,55 @@ export async function syncMaintenanceTasks(options?: { today?: string; force?: b
       .where(gte(maintenanceTasks.periodKey, thisWeek)),
   ]);
 
-  // The association (or an admin on the games screen) gave the place: drop the temporary pick.
-  const cleared = overridesToClear(games);
-  if (cleared.length > 0) {
-    await db.delete(maintenancePitchOverrides).where(inArray(maintenancePitchOverrides.slotId, cleared));
-    for (const game of games.filter((g) => cleared.includes(g.slotId))) {
-      game.overrideCode = null;
-      await logChange({
-        action: "maintenance",
-        summary: `שיבוץ מגרש זמני הוסר: ההתאחדות עדכנה מגרש למשחק של ${game.teamName} ב-${formatDateHe(game.date)}`,
-        date: game.date,
-      });
-    }
-  }
+  return { thisWeek, weeks, idByCode, codeById, weeklyPitchId, games, busy, stored };
+}
 
+type PlanInputs = Awaited<ReturnType<typeof loadPlanInputs>>;
+
+function planFrom(inputs: PlanInputs, today: string) {
+  const { weeks, codeById, weeklyPitchId, games, busy, stored } = inputs;
   const planned: PlannedTask[] = [
     ...planGamePrepTasks(games),
     ...(weeklyPitchId
       ? weeks.map((week) => planWeeklyTask(week, busy, today)).filter((task): task is PlannedTask => task !== null)
       : []),
   ];
-  const changes = reconcileTasks(
-    planned,
-    stored.map((task) => ({ ...task, pitchCode: codeById.get(task.pitchId) ?? "" })),
-    today,
-  );
+  const storedWithCode = stored.map((task) => ({ ...task, pitchCode: codeById.get(task.pitchId) ?? "" }));
+  return { planned, storedWithCode, changes: reconcileTasks(planned, storedWithCode, today) };
+}
 
+/**
+ * Brings `maintenance_tasks` in line with the schedule: game tasks for the next HORIZON_DAYS,
+ * the weekly Vasermil 2 task for this week and next. Safe to call repeatedly and concurrently.
+ * Runs when the maintenance screen opens and after an admin acts there, not on every admin page.
+ */
+export async function syncMaintenanceTasks(options?: { today?: string }) {
+  const today = options?.today ?? israelToday();
+  const inputs = await loadPlanInputs(today);
+  const { games, idByCode } = inputs;
+
+  // The association (or an admin on the games screen) gave the place: drop the temporary pick.
+  // Log only what this call actually deleted, so two syncs at once do not log it twice.
+  const toClear = overridesToClear(games);
+  if (toClear.length > 0) {
+    const removed = await db
+      .delete(maintenancePitchOverrides)
+      .where(inArray(maintenancePitchOverrides.slotId, toClear))
+      .returning({ slotId: maintenancePitchOverrides.slotId });
+    for (const { slotId } of removed) {
+      const game = games.find((g) => g.slotId === slotId);
+      if (!game) continue;
+      game.overrideCode = null;
+      await logChange({
+        action: "maintenance",
+        summary: `שיבוץ מגרש זמני הוסר: ההתאחדות עדכנה מגרש למשחק של ${game.teamName} ב-${formatDateHe(game.date)}`,
+        date: game.date,
+        bySystem: true,
+      });
+    }
+  }
+
+  const { changes } = planFrom(inputs, today);
   const stamp = new Date().toISOString();
   for (const task of changes.upserts) {
     const pitchId = idByCode.get(task.pitchCode);
@@ -227,7 +239,7 @@ export async function syncMaintenanceTasks(options?: { today?: string; force?: b
 
 /** Every open task (overdue ones too) plus everything from the last week, for the maintenance page. */
 export async function getMaintenanceTasks(today = israelToday()): Promise<MaintenanceTaskView[]> {
-  await syncMaintenanceTasks({ today, force: true });
+  await syncMaintenanceTasks({ today });
   const rows = await db
     .select({ task: maintenanceTasks, pitchName: pitches.nameHe })
     .from(maintenanceTasks)
@@ -251,21 +263,34 @@ export async function getMaintenanceTasks(today = israelToday()): Promise<Mainte
 
 export type MaintenanceAlertCount = { open: number; overdue: number; unknown: number };
 
-/** Open tasks to flag today (banner + tab count), and how many of them are overdue. Never throws. */
+/**
+ * Open tasks to flag today (banner + tab count), how many are overdue, and urgent games with no
+ * pitch. Read-only: computes what the next sync would store, without writing. Never throws.
+ */
 export async function getVisibleMaintenanceCount(today = israelToday()): Promise<MaintenanceAlertCount> {
   try {
-    await syncMaintenanceTasks({ today });
-    const rows = await db
+    const inputs = await loadPlanInputs(today);
+    const { planned, storedWithCode } = planFrom(inputs, today);
+    const key = (t: { pitchCode: string; kind: string; periodKey: string }) => `${t.pitchCode}|${t.kind}|${t.periodKey}`;
+    const storedByKey = new Map(storedWithCode.map((task) => [key(task), task]));
+    // Stored open tasks the plan no longer has (game moved or cancelled) would turn obsolete:
+    // count only those whose day already passed (overdue, kept until marked done).
+    const overdueRows = await db
       .select({ status: maintenanceTasks.status, showFrom: maintenanceTasks.showFrom, date: maintenanceTasks.date })
       .from(maintenanceTasks)
-      .where(and(eq(maintenanceTasks.status, "open"), lte(maintenanceTasks.showFrom, today)));
-    const visible = visibleOpenTasks(rows, today);
-    // Only "is a pitch set?" matters here, not which one.
-    const games = await loadGames(today, addDays(today, HORIZON_DAYS), (id) => (id == null ? null : `pitch_${id}`));
+      .where(and(eq(maintenanceTasks.status, "open"), lte(maintenanceTasks.date, addDays(today, -1))));
+    const upcoming = planned
+      .filter((task) => {
+        const stored = storedByKey.get(key(task));
+        if (stored?.status === "done") return false;
+        return !(stored && stored.status === "open" && stored.date < today);
+      })
+      .map((task) => ({ status: "open", showFrom: task.showFrom, date: task.date }));
+    const visible = visibleOpenTasks([...overdueRows, ...upcoming], today);
     return {
       open: visible.length,
       overdue: visible.filter((task) => isOverdue(task, today)).length,
-      unknown: urgentUnknownCount(games, today),
+      unknown: urgentUnknownCount(inputs.games, today),
     };
   } catch (error) {
     // Table missing (migration not applied yet) or DB hiccup: the admin page must still load.
@@ -367,6 +392,6 @@ export async function setPitchOverride(slotId: number, code: string | null, admi
       date: slot.date,
     });
   }
-  await syncMaintenanceTasks({ force: true });
+  await syncMaintenanceTasks();
   return { ok: true as const };
 }
