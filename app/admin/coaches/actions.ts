@@ -77,6 +77,40 @@ export async function saveCoach(formData: FormData) {
   back({ done: `${name} נשמר` });
 }
 
+/** Optional assistant for one team. Head-coach links stay as they are. */
+export async function saveTeamAssistant(formData: FormData) {
+  await requireAdmin();
+  const teamId = Number(formData.get("teamId"));
+  const staffId = Number(formData.get("assistantStaffId") || 0) || null;
+  const [team] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
+  if (!team || team.isComments) back({ error: "הקבוצה לא נמצאה" });
+
+  if (!staffId) {
+    await db.delete(teamCoaches).where(and(eq(teamCoaches.teamId, teamId), eq(teamCoaches.isPrimary, false)));
+    await logChange({ action: "coach", summary: `הוסר עוזר המאמן של ${team.name}` });
+    back({ done: `ל${team.name} אין עוזר מאמן` });
+  }
+
+  const [person] = await db.select().from(staff).where(eq(staff.id, staffId)).limit(1);
+  if (!person || person.receivesAllUpdates) back({ error: "יש לבחור מאמן מהרשימה" });
+  const [headLink] = await db
+    .select({ id: teamCoaches.id })
+    .from(teamCoaches)
+    .where(and(eq(teamCoaches.teamId, teamId), eq(teamCoaches.staffId, staffId), eq(teamCoaches.isPrimary, true)))
+    .limit(1);
+  if (headLink) back({ error: `${person.displayName} כבר המאמן של ${team.name}. עוזר המאמן הוא אדם נוסף.` });
+
+  await db.delete(teamCoaches).where(and(eq(teamCoaches.teamId, teamId), eq(teamCoaches.isPrimary, false)));
+  await db.insert(teamCoaches).values({
+    teamId,
+    staffId,
+    coachName: person.displayName,
+    isPrimary: false,
+  });
+  await logChange({ action: "coach", summary: `עוזר מאמן ${person.displayName} בקבוצה ${team.name}` });
+  back({ done: `עוזר המאמן של ${team.name}: ${person.displayName}` });
+}
+
 const EMAIL_RE = /^\S+@\S+\.\S+$/;
 
 /** Add or update a management contact. They are told about every team, and are not linked to one team. */

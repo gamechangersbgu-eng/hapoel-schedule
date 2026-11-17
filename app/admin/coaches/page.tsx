@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { asc, eq } from "drizzle-orm";
 import { AdminShell } from "@/components/AdminShell";
-import { addAbsence, deleteAbsence, deleteCoach, deleteManagement, saveCoach, saveManagement } from "@/app/admin/coaches/actions";
+import { addAbsence, deleteAbsence, deleteCoach, deleteManagement, saveCoach, saveManagement, saveTeamAssistant } from "@/app/admin/coaches/actions";
 import { requireAdmin } from "@/lib/auth";
 import { ABSENCE_TYPES, WEEKDAY_LETTERS, absenceLabel, absenceOn } from "@/lib/coaches";
 import { getCoaches } from "@/lib/coaches-db";
@@ -109,6 +109,44 @@ export default async function CoachesPage({ searchParams }: Props) {
                   </span>
                   {SHOW_ABSENCES && upcoming.length ? <span className="text-xs font-bold text-amber-800">{upcoming.length} היעדרויות קרובות</span> : null}
                 </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+
+      <section className="rounded-2xl bg-white shadow-sm ring-1 ring-black/5">
+        <div className="border-b border-zinc-100 px-5 py-3">
+          <h2 className="text-lg font-black text-[#8e0b20]">עוזר מאמן לקבוצה</h2>
+          <p className="text-sm text-zinc-600">
+            לא חובה. עוזר המאמן נספר כמו המאמן: אי אפשר לשבץ אותו באותו זמן לקבוצה אחרת שבה הוא מאמן או עוזר מאמן.
+            אפשר גם לסמן עוזר מאמן מתוך הטופס של המאמן עצמו.
+          </p>
+        </div>
+        <ul className="divide-y divide-zinc-100">
+          {teams.map((team) => {
+            const linked = fieldCoaches.filter((coach) => coach.teamIds.includes(team.id));
+            const heads = linked.filter((coach) => !coach.assistantTeamIds?.includes(team.id));
+            const assistants = linked.filter((coach) => coach.assistantTeamIds?.includes(team.id));
+            return (
+              <li key={team.id} className="px-5 py-3">
+                <form action={saveTeamAssistant} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                  <input type="hidden" name="teamId" value={team.id} />
+                  <div className="min-w-36 flex-1">
+                    <p className="text-base font-black">{team.name}</p>
+                    <p className="text-sm text-zinc-600">מאמן: {heads.length ? heads.map((coach) => coach.name).join(", ") : "לא שובץ"}</p>
+                  </div>
+                  <label className={`${label} sm:w-64`}>
+                    עוזר מאמן
+                    <select name="assistantStaffId" className={field} defaultValue={assistants[0]?.id ?? ""}>
+                      <option value="">בלי עוזר</option>
+                      {fieldCoaches.map((coach) => (
+                        <option key={coach.id} value={coach.id}>{coach.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <button type="submit" className="min-h-11 rounded-lg px-4 text-sm font-black ring-1 ring-zinc-300">שמירה</button>
+                </form>
               </li>
             );
           })}

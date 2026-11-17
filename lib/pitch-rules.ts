@@ -16,10 +16,10 @@ export const SUBDIVISION_RANGE: Record<string, [number, number]> = {
 };
 
 /**
- * ילדות א and ילדות ב may book a third or a quarter as well as a whole pitch and a half.
+ * ילדות א, ילדות ב, and טרומיות may book a third or a quarter as well as a whole pitch and a half.
  * Every other team keeps the list from its age band.
  */
-export const GIRLS_PARTIAL_PITCH_TEAMS = ["ילדות א", "ילדות ב"] as const;
+export const GIRLS_PARTIAL_PITCH_TEAMS = ["ילדות א", "ילדות ב", "טרומיות"] as const;
 
 export const GIRLS_EXTRA_SUBDIVISIONS = [
   "third_north",
@@ -40,7 +40,7 @@ export function isGirlsPartialPitchTeam(name: string) {
   return (GIRLS_PARTIAL_PITCH_TEAMS as readonly string[]).includes(canonical);
 }
 
-/** Age-band list, plus a third and a quarter when the team is ילדות א or ילדות ב. */
+/** Age-band list, plus a third and a quarter for ילדות א, ילדות ב, and טרומיות. */
 export function allowedSubdivisionsForTeam(team: { name: string; allowedSubdivisions: readonly string[] }) {
   if (!isGirlsPartialPitchTeam(team.name)) return [...team.allowedSubdivisions];
   const have = new Set(team.allowedSubdivisions);
