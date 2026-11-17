@@ -23,6 +23,7 @@ export function RecurrenceFields({
   allowBiweekly = false,
   intervalDays = 7,
   onIntervalDays,
+  title = "אימון חוזר — אותה שעה בימים ובמועדים שתבחרו",
 }: {
   anchor: string;
   enabled: boolean;
@@ -37,6 +38,8 @@ export function RecurrenceFields({
   allowBiweekly?: boolean;
   intervalDays?: SeriesIntervalDays;
   onIntervalDays?: (value: SeriesIntervalDays) => void;
+  /** Checkbox label. Trainings keep the default; room bookings say "שיבוץ חוזר". */
+  title?: string;
 }) {
   const [draft, setDraft] = useState("");
   const interval = effectiveInterval(allowBiweekly, intervalDays);
@@ -75,7 +78,7 @@ export function RecurrenceFields({
 
   return (
     <fieldset className="flex flex-col gap-2 rounded-lg bg-zinc-50 p-3">
-      <legend className="sr-only">אימון חוזר</legend>
+      <legend className="sr-only">{title.split(" — ")[0]}</legend>
       <label className="flex items-start gap-2 text-sm font-bold">
         <input
           type="checkbox"
@@ -86,7 +89,7 @@ export function RecurrenceFields({
             enable(event.target.checked);
           }}
         />
-        אימון חוזר — אותה שעה בימים ובמועדים שתבחרו
+        {title}
       </label>
       {allowBiweekly ? (
         <div className="flex flex-col gap-2">

@@ -81,6 +81,10 @@ for (const item of [
   "lib/training-series.ts",
   // Parent web push talks to Postgres. The static site calls the Netlify API instead.
   "lib/web-push.ts",
+  // Internal room schedules (gym, video room): admin + live TV only, not on the static site.
+  "lib/rooms/rooms-db.ts",
+  "components/RoomSchedule.tsx",
+  "components/RoomBookingForm.tsx",
 ]) {
   rmSync(join(work, item), { recursive: true, force: true });
 }

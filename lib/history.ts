@@ -11,7 +11,9 @@ export type ChangeAction =
   | "lock"
   | "bank"
   | "coach"
-  | "game";
+  | "game"
+  | "maintenance"
+  | "room";
 
 /** Records a change with the signed-in manager's name. Never blocks the change itself. */
 export async function logChange(entry: {
@@ -20,9 +22,11 @@ export async function logChange(entry: {
   teamId?: number | null;
   slotId?: number | null;
   date?: string | null;
+  /** Automatic change (not an admin's click): recorded as "מערכת" even while an admin is signed in. */
+  bySystem?: boolean;
 }) {
   try {
-    const user = await getCurrentAdmin();
+    const user = entry.bySystem ? null : await getCurrentAdmin();
     await db.insert(scheduleChanges).values({
       at: new Date().toISOString(),
       adminUserId: user?.id ?? null,

@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { TvBoard } from "@/components/TvBoard";
 import { getWeekData } from "@/lib/schedule";
+import { getTodayRooms } from "@/lib/rooms/rooms-db";
+import { israelToday } from "@/services/notifications/maintenance-rules";
 
 export const dynamic = "force-dynamic";
 
@@ -11,10 +13,10 @@ export const metadata: Metadata = {
 
 // Full-screen board for the club TV: always the current week, refreshed every minute.
 export default async function TvPage() {
-  const data = await getWeekData();
+  const [data, rooms] = await Promise.all([getWeekData(), getTodayRooms(israelToday())]);
   return (
     <>
-      <TvBoard data={data} />
+      <TvBoard data={data} rooms={rooms} />
       <AutoRefresh seconds={60} />
     </>
   );
