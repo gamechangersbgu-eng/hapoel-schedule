@@ -16,11 +16,51 @@ import { SLOT_TYPES, getSlotType, isCampSlot } from "@/lib/slot-types";
 import type { SlotDTO, TeamDTO, WeekData } from "@/lib/types";
 import { formatDayMonth, formatWeekRange } from "@/lib/week";
 
+/** Today's bookings in the internal rooms (gym, video room). Shown only on the TV, not the public page. */
+export type TvRoomDay = {
+  kind: string;
+  label: string;
+  bookings: { id: number; teamName: string; start: number; end: number; note: string | null }[];
+};
+
 type TvBoardProps = {
   data: WeekData;
   /** Optional small status line, e.g. when fresh data could not be loaded. */
   notice?: string | null;
+  rooms?: TvRoomDay[];
 };
+
+function clockOf(minutes: number) {
+  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+}
+
+function TvRooms({ rooms }: { rooms: TvRoomDay[] }) {
+  if (!rooms.some((room) => room.bookings.length > 0)) return null;
+  return (
+    <div
+      className="flex shrink-0 flex-wrap gap-x-[2vw] gap-y-[0.5vh] pt-[1vh]"
+      style={{ fontSize: "min(2.1vh, 1.2vw)" }}
+    >
+      {rooms.map((room) => (
+        <div key={room.kind} className="flex min-w-0 flex-wrap items-center gap-x-[0.8vw] gap-y-[0.4vh]">
+          <span className="font-black text-white/90">{room.label} היום:</span>
+          {room.bookings.length === 0 ? (
+            <span className="text-white/60">פנוי</span>
+          ) : (
+            room.bookings.map((booking) => (
+              <span key={booking.id} className="rounded-[0.6vh] bg-white/12 px-[0.6vw] py-[0.2vh] font-bold">
+                <bdi className="tabular-nums">
+                  {clockOf(booking.start)}–{clockOf(booking.end)}
+                </bdi>{" "}
+                {booking.teamName}
+              </span>
+            ))
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function useNow(intervalMs: number) {
   const [now, setNow] = useState<Date | null>(null);
@@ -258,7 +298,7 @@ function useMouseActive(ms: number) {
   return active;
 }
 
-export function TvBoard({ data: allData, notice }: TvBoardProps) {
+export function TvBoard({ data: allData, notice, rooms = [] }: TvBoardProps) {
   const now = useNow(15_000);
   useWakeLock();
   const [selected, setSelected] = useTvTeams();
@@ -353,6 +393,8 @@ export function TvBoard({ data: allData, notice }: TvBoardProps) {
           </div>
         ))}
       </div>
+
+      <TvRooms rooms={rooms} />
 
       <footer
         className="flex shrink-0 flex-wrap items-center justify-between gap-x-[1.2vw] gap-y-[0.4vh] pt-[1vh] text-white/80"

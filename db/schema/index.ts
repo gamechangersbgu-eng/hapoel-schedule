@@ -7,3 +7,5 @@ export * from "./auth";
 export * from "./history";
 export * from "./push";
 export * from "./injury";
+export * from "./maintenance";
+export * from "./rooms";
