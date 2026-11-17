@@ -42,22 +42,23 @@ test("the venue in the scraper note names the pitch", () => {
 });
 
 test("a game on Sunday shows up on Thursday, two calendar days before", () => {
-  const [task] = planGamePrepTasks([game({ date: "2026-11-22", note: "יריב · באר שבע וסרמיל 1" })]);
-  assert.equal(task.pitchCode, "vasermil_1");
+  const [task] = planGamePrepTasks([game({ date: "2026-11-22", note: "יריב · באר שבע וסרמיל 3" })]);
+  assert.equal(task.pitchCode, "vasermil_3");
   assert.equal(task.showFrom, "2026-11-20");
   assert.equal(task.kind, "game_prep");
 });
 
 test("two games on the same pitch and day are one task, earliest kickoff first", () => {
   const tasks = planGamePrepTasks([
-    game({ slotId: 2, kickoff: "12:00", teamName: "נוער", note: "באר שבע וסרמיל 1" }),
-    game({ slotId: 1, kickoff: "09:30", note: "באר שבע וסרמיל 1" }),
-    game({ slotId: 3, kickoff: "11:00", note: "באר שבע וסרמיל 3" }),
+    game({ slotId: 2, kickoff: "12:00", teamName: "נוער", note: "באר שבע וסרמיל 3" }),
+    game({ slotId: 1, kickoff: "09:30", note: "באר שבע וסרמיל 3" }),
+    game({ slotId: 3, kickoff: "11:00", note: "באר שבע וסרמיל 2" }),
   ]);
   assert.equal(tasks.length, 2);
-  assert.deepEqual(tasks[0].slotIds, [1, 2]);
-  assert.equal(tasks[0].startTime, "09:30");
-  assert.match(tasks[0].summary, /^09:30 נערים א/);
+  const v3 = tasks.find((task) => task.pitchCode === "vasermil_3")!;
+  assert.deepEqual(v3.slotIds, [1, 2]);
+  assert.equal(v3.startTime, "09:30");
+  assert.match(v3.summary, /^09:30 נערים א/);
 });
 
 test("an admin-set pitch wins over the note", () => {
@@ -105,12 +106,12 @@ test("weekly task never lands on a day that already passed", () => {
 });
 
 test("reconcile: done tasks stay, open tasks without games become obsolete", () => {
-  const planned = planGamePrepTasks([game({ date: "2026-11-22", note: "וסרמיל 1" })]);
+  const planned = planGamePrepTasks([game({ date: "2026-11-22", note: "וסרמיל 3" })]);
   const changes = reconcileTasks(
     planned,
     [
-      { id: 1, pitchCode: "vasermil_1", kind: "game_prep", periodKey: "2026-11-22", date: "2026-11-22", status: "done" },
-      { id: 2, pitchCode: "vasermil_3", kind: "game_prep", periodKey: "2026-11-23", date: "2026-11-23", status: "open" },
+      { id: 1, pitchCode: "vasermil_3", kind: "game_prep", periodKey: "2026-11-22", date: "2026-11-22", status: "done" },
+      { id: 2, pitchCode: "vasermil_2", kind: "game_prep", periodKey: "2026-11-23", date: "2026-11-23", status: "open" },
       { id: 3, pitchCode: "vasermil_3", kind: "game_prep", periodKey: "2026-11-01", date: "2026-11-01", status: "open" },
     ],
     "2026-11-16",
@@ -120,7 +121,7 @@ test("reconcile: done tasks stay, open tasks without games become obsolete", () 
 
   const reopened = reconcileTasks(
     planned,
-    [{ id: 1, pitchCode: "vasermil_1", kind: "game_prep", periodKey: "2026-11-22", date: "2026-11-22", status: "obsolete" }],
+    [{ id: 1, pitchCode: "vasermil_3", kind: "game_prep", periodKey: "2026-11-22", date: "2026-11-22", status: "obsolete" }],
     "2026-11-16",
   );
   assert.equal(reopened.upserts.length, 1);
@@ -180,8 +181,8 @@ test("no venue from the association: listed as unknown, a temporary pick makes t
 });
 
 test("once the association gives a venue, it wins and the temporary pick is cleared", () => {
-  const updated = ifa({ slotId: 9, note: "יריב · באר שבע וסרמיל 1", overrideCode: "vasermil_3" });
-  assert.equal(planGamePrepTasks([updated])[0].pitchCode, "vasermil_1");
+  const updated = ifa({ slotId: 9, note: "יריב · באר שבע וסרמיל 2", overrideCode: "vasermil_3" });
+  assert.equal(planGamePrepTasks([updated])[0].pitchCode, "vasermil_2");
   assert.deepEqual(overridesToClear([updated]), [9]);
   assert.deepEqual(unknownVenueGames([updated]), []);
 
@@ -201,4 +202,18 @@ test("urgent unknown: no pick and the task would already be showing", () => {
     ifa({ slotId: 3, date: "2026-11-17", overrideCode: "vasermil_1" }),
   ];
   assert.equal(urgentUnknownCount(games, "2026-11-16"), 1);
+});
+
+test("Vasermil 1 (synthetic) and Vasermil 4 (football school) never make a task", () => {
+  assert.deepEqual(
+    planGamePrepTasks([
+      game({ slotId: 1, note: "יריב · באר שבע וסרמיל 1" }),
+      game({ slotId: 2, pitchCode: "vasermil_1" }),
+      ifa({ slotId: 3, overrideCode: "vasermil_1" }),
+      game({ slotId: 4, note: "יריב · באר שבע וסרמיל 4" }),
+    ]),
+    [],
+  );
+  // The association's venue on Vasermil 1 still counts as known: no temporary pick needed.
+  assert.deepEqual(unknownVenueGames([ifa({ slotId: 5, note: "יריב · באר שבע וסרמיל 1" })]), []);
 });
