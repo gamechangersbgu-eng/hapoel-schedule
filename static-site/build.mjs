@@ -79,6 +79,8 @@ for (const item of [
   "lib/rotations.ts",
   "lib/opponent-cities.ts",
   "lib/training-series.ts",
+  // Injuries and physio (management only, Postgres).
+  "lib/injuries-db.ts",
   // Parent web push talks to Postgres. The static site calls the Netlify API instead.
   "lib/web-push.ts",
   // Internal room schedules (gym, video room): admin + live TV only, not on the static site.

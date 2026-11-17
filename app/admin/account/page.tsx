@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { AdminShell } from "@/components/AdminShell";
 import { changeOwnPasswordAction } from "@/app/admin/users/actions";
-import { requireAdmin } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
+import { ROLE_LABELS } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "החשבון שלי · מצב מנהל" };
@@ -10,7 +11,7 @@ type Props = { searchParams: Promise<{ error?: string; done?: string; first?: st
 const field = "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-base";
 
 export default async function AccountPage({ searchParams }: Props) {
-  const user = await requireAdmin({ allowPasswordChange: true });
+  const user = await requireUser({ allowPasswordChange: true });
   const { error, done, first } = await searchParams;
   const forced = user.mustChangePassword || first === "1";
 
@@ -18,7 +19,7 @@ export default async function AccountPage({ searchParams }: Props) {
     <AdminShell user={user} title="החשבון שלי" current="/admin/account">
       <section className="max-w-md rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
         <p className="text-sm text-zinc-600">
-          {user.displayName} · שם משתמש <span dir="ltr">{user.email}</span> · {user.role === "owner" ? "מנהל ראשי" : "מנהל"}
+          {user.displayName} · שם משתמש <span dir="ltr">{user.email}</span> · {ROLE_LABELS[user.role]}
         </p>
         <h2 className="mt-3 text-lg font-black text-[#8e0b20]">{forced ? "יש לבחור סיסמה אישית" : "החלפת סיסמה"}</h2>
         {forced ? (

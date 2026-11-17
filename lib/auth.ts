@@ -4,20 +4,23 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 import { adminUsers, db } from "@/lib/db";
+import { homePathForRole, isManager, normalizeRole, type UserRole } from "@/lib/roles";
 import { AUTH_DISABLED, SESSION_COOKIE, decryptSession, encryptSession, sessionCookieOptions } from "@/lib/session";
 
 export type CurrentAdmin = {
   id: number;
   email: string;
   displayName: string;
-  role: "owner" | "admin";
+  role: UserRole;
+  /** Staff row of a coach or physio login (null for managers). */
+  staffId: number | null;
   mustChangePassword: boolean;
 };
 
-/** The signed-in manager, checked against the database (active, not signed out since). */
+/** The signed-in user, checked against the database (active, not signed out since). */
 export const getCurrentAdmin = cache(async (): Promise<CurrentAdmin | null> => {
   if (AUTH_DISABLED) {
-    return { id: 0, email: "test@local", displayName: "בדיקה", role: "owner", mustChangePassword: false };
+    return { id: 0, email: "test@local", displayName: "בדיקה", role: "owner", staffId: null, mustChangePassword: false };
   }
   const session = await decryptSession((await cookies()).get(SESSION_COOKIE)?.value);
   if (!session) return null;
@@ -27,16 +30,34 @@ export const getCurrentAdmin = cache(async (): Promise<CurrentAdmin | null> => {
     id: user.id,
     email: user.email,
     displayName: user.displayName,
-    role: user.role === "owner" ? "owner" : "admin",
+    role: normalizeRole(user.role),
+    staffId: user.staffId ?? null,
     mustChangePassword: user.mustChangePassword,
   };
 });
 
-/** Use at the top of every management page and every action that changes data. */
-export async function requireAdmin(options?: { allowPasswordChange?: boolean }) {
+/** Any signed-in user, whatever the role (own account page, sign-out). */
+export async function requireUser(options?: { allowPasswordChange?: boolean }) {
   const user = await getCurrentAdmin();
   if (!user) redirect("/login");
   if (user.mustChangePassword && !options?.allowPasswordChange) redirect("/admin/account?first=1");
+  return user;
+}
+
+/**
+ * Use at the top of every management page and every action that changes the schedule.
+ * Only managers (owner / admin). A physio or coach is sent to their own screen.
+ */
+export async function requireAdmin(options?: { allowPasswordChange?: boolean }) {
+  const user = await requireUser(options);
+  if (!isManager(user.role)) redirect(homePathForRole(user.role));
+  return user;
+}
+
+/** Pages and actions open to some roles only (injuries, physio). Others go to their own screen. */
+export async function requireRole(roles: readonly UserRole[]) {
+  const user = await requireUser();
+  if (!roles.includes(user.role)) redirect(homePathForRole(user.role));
   return user;
 }
 
