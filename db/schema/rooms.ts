@@ -1,4 +1,5 @@
 import { index, integer, pgTable, serial, text } from "drizzle-orm/pg-core";
+import { adminUsers } from "./auth";
 import { teams } from "./team";
 
 /**
@@ -31,3 +32,36 @@ function roomBookingsTable<TName extends string>(name: TName) {
 
 export const gymBookings = roomBookingsTable("gym_bookings");
 export const videoRoomBookings = roomBookingsTable("video_room_bookings");
+
+/**
+ * A request to book the gym or the video room. Pending rows are not schedule rows:
+ * only an approval inserts into gym_bookings / video_room_bookings.
+ * dates: JSON array of ISO dates. recurrence: JSON pattern, or null for one date.
+ */
+export const roomBookingRequests = pgTable(
+  "room_booking_requests",
+  {
+    id: serial().primaryKey(),
+    room: text().notNull(),
+    requesterId: integer("requester_id")
+      .notNull()
+      .references(() => adminUsers.id, { onDelete: "cascade" }),
+    teamId: integer("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    startTime: text("start_time").notNull(),
+    durationMinutes: integer("duration_minutes").notNull(),
+    dates: text().notNull(),
+    recurrence: text(),
+    note: text(),
+    status: text().notNull().default("pending"),
+    decidedBy: integer("decided_by").references(() => adminUsers.id, { onDelete: "set null" }),
+    decidedAt: text("decided_at"),
+    reason: text(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("room_booking_requests_status_idx").on(table.room, table.status),
+    index("room_booking_requests_requester_idx").on(table.requesterId),
+  ],
+);

@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { toggleReservedLock } from "@/app/admin/pitches/actions";
 import {
-  BOARD_END_MINUTES,
   SUBDIVISION_RANGE,
   SUBDIVISION_SHORT,
+  blockBox,
+  boardEndFor,
   boardStartFor,
   toTime,
   type BoardBooking,
@@ -95,10 +96,10 @@ function Block({
   const [from, to] = SUBDIVISION_RANGE[booking.subdivisionCode] ?? [0, 12];
   const isGame = booking.kind === "home_game";
   const cancelled = booking.status === "cancelled";
-  const height = (booking.end - booking.start) * PX_PER_MINUTE;
+  const box = blockBox(boardStart, booking.start, booking.end, PX_PER_MINUTE);
   const style = {
-    top: yAt(boardStart, booking.start) + 1,
-    height: height - 2,
+    top: box.top + 1,
+    height: Math.max(box.height - 2, 0),
     insetInlineStart: `calc(${(from / 12) * 100}% + 2px)`,
     width: `calc(${((to - from) / 12) * 100}% - 4px)`,
     background: cancelled
@@ -210,10 +211,11 @@ function PitchList({ day, baseHref }: { day: PitchDay; baseHref: string }) {
 
 export function PitchBoard({ day, baseHref }: { day: PitchDay; baseHref: string }) {
   const boardStart = boardStartFor(day);
+  const boardEnd = boardEndFor(day);
   const y = (minutes: number) => yAt(boardStart, minutes);
   const hours: number[] = [];
-  for (let m = boardStart; m <= BOARD_END_MINUTES; m += 60) hours.push(m);
-  const totalHeight = y(BOARD_END_MINUTES);
+  for (let m = boardStart; m <= boardEnd; m += 60) hours.push(m);
+  const totalHeight = y(boardEnd);
 
   return (
     <div className="flex flex-col gap-3">

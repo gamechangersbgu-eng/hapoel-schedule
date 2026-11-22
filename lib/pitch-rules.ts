@@ -81,6 +81,25 @@ export function boardStartFor(day: { bookings: { start: number }[] }) {
   return Math.max(BOARD_START_MINUTES, Math.floor(earliest / 60) * 60);
 }
 
+/**
+ * Last labeled hour on the pitch grid. The usual day ends at 22:00, but a session
+ * that runs past that (a 75-minute block from 21:00 ends at 22:15) extends the grid
+ * so the block is not clipped. Capped at midnight.
+ */
+export function boardEndFor(day: { bookings: { end: number }[] }) {
+  const latest = day.bookings.reduce((max, item) => Math.max(max, item.end), BOARD_END_MINUTES);
+  const rounded = Math.ceil(latest / 60) * 60;
+  return Math.min(24 * 60, Math.max(BOARD_END_MINUTES, rounded));
+}
+
+/** Pixel box of one booking on the pitch grid. Height follows the real length, including 75 minutes. */
+export function blockBox(boardStart: number, start: number, end: number, pxPerMinute: number) {
+  return {
+    top: (start - boardStart) * pxPerMinute,
+    height: Math.max(0, end - start) * pxPerMinute,
+  };
+}
+
 export function toMinutes(time: string) {
   const [h, m] = time.split(":").map(Number);
   return h * 60 + m;
@@ -90,6 +109,12 @@ export function toTime(minutes: number) {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+/** Clock the public grid, the club TV and the static snapshot show as the end of a training. */
+export function trainingEndClock(startTime: string | null | undefined, durationMinutes: number | null | undefined) {
+  if (!startTime || !durationMinutes || durationMinutes <= 0) return null;
+  return toTime(toMinutes(startTime) + durationMinutes);
 }
 
 export type BoardBooking = {
@@ -149,17 +174,19 @@ export const ROTATION_PRESETS: {
   { number: 5, weekday: null, label: "סבב 5", times: ["08:30", "10:00", "11:30", "13:00", "14:30"] },
 ];
 
+/** Club-wide training lengths. Every team uses this list; nothing here is per age band. */
 export const DURATION_PRESETS: { minutes: number; labelHe: string }[] = [
   { minutes: 60, labelHe: "שעה" },
+  { minutes: 75, labelHe: "שעה ורבע" },
   { minutes: 90, labelHe: "שעה וחצי" },
   { minutes: 105, labelHe: "שעה ו־45 דקות" },
   { minutes: 120, labelHe: "שעתיים" },
 ];
 
 export const OFFICIAL_DURATION_ERROR_HE =
-  "משך האימון יכול להיות רק שעה, שעה וחצי, שעה ו־45 דקות או שעתיים";
+  "משך האימון יכול להיות רק שעה, שעה ורבע, שעה וחצי, שעה ו־45 דקות או שעתיים";
 
-/** True for the official training lengths: 60, 90, 105, and 120 minutes. */
+/** True for the official training lengths: 60, 75, 90, 105, and 120 minutes. */
 export function isOfficialDuration(minutes: number) {
   return DURATION_PRESETS.some((item) => item.minutes === minutes);
 }

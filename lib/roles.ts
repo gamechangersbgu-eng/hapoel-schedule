@@ -27,6 +27,20 @@ export function isManager(role: UserRole) {
   return role === "owner" || role === "admin";
 }
 
+/**
+ * Who may approve gym and video-room requests, and book those rooms directly.
+ * The owner role (מנהל ראשי) is the approver. Change this list to grant the
+ * capability to another role. Do not hardcode a person's name.
+ */
+export const APPROVER_ROLES = ["owner"] as const satisfies readonly UserRole[];
+
+export function hasApproverCapability(role: UserRole) {
+  return (APPROVER_ROLES as readonly UserRole[]).includes(role);
+}
+
+/** Label for the fitness-coach flag on an admin user (not a separate login role). */
+export const FITNESS_COACH_LABEL = "מאמן כושר";
+
 /** Body part, notes, history and treatments: managers and the physio. Coaches see the status only. */
 export function canSeeInjuryDetails(role: UserRole) {
   return isManager(role) || role === "physio";

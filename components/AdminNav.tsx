@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { isManager, type UserRole } from "@/lib/roles";
+import { getCurrentAdmin } from "@/lib/auth";
+import { hasApproverCapability, isManager, type UserRole } from "@/lib/roles";
+import { countPendingRoomRequests } from "@/lib/rooms/room-requests-db";
 import { getVisibleMaintenanceCount } from "@/services/notifications/maintenance";
 
 type Item = { href: string; label: string };
@@ -26,25 +28,34 @@ const PHYSIO_ITEMS: Item[] = [
 
 const COACH_ITEMS: Item[] = [{ href: "/admin/injuries", label: "הפצועים שלי" }];
 
-function itemsFor(role: UserRole) {
-  if (role === "physio") return PHYSIO_ITEMS;
-  if (role === "coach") return COACH_ITEMS;
-  return MANAGER_ITEMS;
+function itemsFor(role: UserRole, isFitnessCoach: boolean) {
+  const base = role === "physio" ? PHYSIO_ITEMS : role === "coach" ? COACH_ITEMS : MANAGER_ITEMS;
+  if (isFitnessCoach && !isManager(role) && !base.some((item) => item.href === "/admin/gym")) {
+    return [...base, { href: "/admin/gym", label: "חדר כושר" }];
+  }
+  return base;
 }
 
 /** Tabs between the management screens. `current` is the active screen's path; `role` decides which tabs show. */
-export async function AdminNav({ current, role = "admin" }: { current: string; role?: UserRole }) {
+export async function AdminNav({ current, role: roleProp = "admin" }: { current: string; role?: UserRole }) {
+  const session = await getCurrentAdmin();
+  const role = session?.role ?? roleProp;
+  const isFitnessCoach = session?.isFitnessCoach ?? false;
   const manager = isManager(role);
-  const { open: taskCount, overdue, unknown } = manager
-    ? await getVisibleMaintenanceCount()
-    : { open: 0, overdue: 0, unknown: 0 };
+  const approver = hasApproverCapability(role);
+  const [{ open: taskCount, overdue, unknown }, pendingRooms] = await Promise.all([
+    manager ? getVisibleMaintenanceCount() : Promise.resolve({ open: 0, overdue: 0, unknown: 0 }),
+    approver ? countPendingRoomRequests() : Promise.resolve({ gym: 0, video: 0 }),
+  ]);
   const maintenanceCount = taskCount + unknown;
+  const pendingFor = (href: string) => (href === "/admin/gym" ? pendingRooms.gym : href === "/admin/video" ? pendingRooms.video : 0);
   return (
     <>
       <nav aria-label="מסכי ניהול" className="no-print border-b border-black/10 bg-white">
         <div className="mx-auto flex max-w-[1400px] gap-1 overflow-x-auto px-3">
-          {itemsFor(role).map((item) => {
+          {itemsFor(role, isFitnessCoach).map((item) => {
             const active = item.href === current;
+            const pendingCount = pendingFor(item.href);
             return (
               <Link
                 key={item.href}
@@ -57,6 +68,14 @@ export async function AdminNav({ current, role = "admin" }: { current: string; r
                 }`}
               >
                 {item.label}
+                {pendingCount > 0 ? (
+                  <span
+                    title="בקשות ממתינות"
+                    className="ms-1.5 rounded-full bg-amber-500 px-1.5 py-0.5 text-[11px] font-black text-white"
+                  >
+                    {pendingCount}
+                  </span>
+                ) : null}
                 {item.href === "/admin/maintenance" && maintenanceCount > 0 ? (
                   <span
                     className={`ms-1.5 rounded-full px-1.5 py-0.5 text-[11px] font-black ${

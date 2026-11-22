@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import { asc } from "drizzle-orm";
 import { AdminShell } from "@/components/AdminShell";
-import { addUserAction, resetPasswordAction, setActiveAction, setRoleAction } from "@/app/admin/users/actions";
+import { addUserAction, resetPasswordAction, setActiveAction, setFitnessCoachAction, setRoleAction } from "@/app/admin/users/actions";
 import { requireOwner } from "@/lib/auth";
 import { adminUsers, db, staff } from "@/lib/db";
-import { ROLE_LABELS, isManager, normalizeRole } from "@/lib/roles";
+import { FITNESS_COACH_LABEL, ROLE_LABELS, isManager, normalizeRole } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "משתמשים · מצב מנהל" };
@@ -60,6 +60,9 @@ export default async function UsersPage({ searchParams }: Props) {
                     {user.displayName}
                     {user.id === me.id ? <span className="ms-2 text-xs font-bold text-zinc-500">(את/ה)</span> : null}
                     <span className={`ms-2 rounded-full px-2 py-0.5 text-xs font-bold ${ROLE_BADGE[role]}`}>{ROLE_LABELS[role]}</span>
+                    {user.isFitnessCoach ? (
+                      <span className="ms-2 rounded-full bg-lime-100 px-2 py-0.5 text-xs font-bold text-lime-900">{FITNESS_COACH_LABEL}</span>
+                    ) : null}
                     {!user.isActive ? <span className="ms-2 rounded-full bg-zinc-200 px-2 py-0.5 text-xs font-bold">מושבת</span> : null}
                     {user.mustChangePassword && user.isActive ? (
                       <span className="ms-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-900">ממתין לסיסמה אישית</span>
@@ -70,42 +73,51 @@ export default async function UsersPage({ searchParams }: Props) {
                     {user.staffId != null ? ` · ${staffName.get(user.staffId) ?? "איש צוות שנמחק"}` : ""}
                   </p>
                 </div>
-                {user.id === me.id ? null : (
-                  <div className="flex flex-wrap items-center gap-2">
-                    {isManager(role) ? (
-                      <form action={setRoleAction}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <form action={setFitnessCoachAction}>
+                    <input type="hidden" name="id" value={user.id} />
+                    <input type="hidden" name="fitness" value={user.isFitnessCoach ? "0" : "1"} />
+                    <button type="submit" className={small}>
+                      {user.isFitnessCoach ? `הסרת ${FITNESS_COACH_LABEL}` : `סימון כ${FITNESS_COACH_LABEL}`}
+                    </button>
+                  </form>
+                  {user.id === me.id ? null : (
+                    <>
+                      {isManager(role) ? (
+                        <form action={setRoleAction}>
+                          <input type="hidden" name="id" value={user.id} />
+                          <input type="hidden" name="role" value={role === "owner" ? "admin" : "owner"} />
+                          <button type="submit" className={small}>
+                            {role === "owner" ? "הורדה למנהל" : "הפיכה למנהל ראשי"}
+                          </button>
+                        </form>
+                      ) : null}
+                      <form action={setActiveAction}>
                         <input type="hidden" name="id" value={user.id} />
-                        <input type="hidden" name="role" value={role === "owner" ? "admin" : "owner"} />
-                        <button type="submit" className={small}>
-                          {role === "owner" ? "הורדה למנהל" : "הפיכה למנהל ראשי"}
+                        <input type="hidden" name="active" value={user.isActive ? "0" : "1"} />
+                        <button type="submit" className={`${small} ${user.isActive ? "text-red-700" : ""}`}>
+                          {user.isActive ? "השבתה" : "הפעלה מחדש"}
                         </button>
                       </form>
-                    ) : null}
-                    <form action={setActiveAction}>
-                      <input type="hidden" name="id" value={user.id} />
-                      <input type="hidden" name="active" value={user.isActive ? "0" : "1"} />
-                      <button type="submit" className={`${small} ${user.isActive ? "text-red-700" : ""}`}>
-                        {user.isActive ? "השבתה" : "הפעלה מחדש"}
-                      </button>
-                    </form>
-                    <form action={resetPasswordAction} className="flex items-center gap-1.5">
-                      <input type="hidden" name="id" value={user.id} />
-                      <input
-                        name="password"
-                        type="text"
-                        dir="ltr"
-                        minLength={8}
-                        required
-                        placeholder="סיסמה זמנית חדשה"
-                        autoComplete="off"
-                        className="w-40 rounded-md border border-zinc-300 px-2 py-1.5 text-sm"
-                      />
-                      <button type="submit" className={small}>
-                        איפוס סיסמה
-                      </button>
-                    </form>
-                  </div>
-                )}
+                      <form action={resetPasswordAction} className="flex items-center gap-1.5">
+                        <input type="hidden" name="id" value={user.id} />
+                        <input
+                          name="password"
+                          type="text"
+                          dir="ltr"
+                          minLength={8}
+                          required
+                          placeholder="סיסמה זמנית חדשה"
+                          autoComplete="off"
+                          className="w-40 rounded-md border border-zinc-300 px-2 py-1.5 text-sm"
+                        />
+                        <button type="submit" className={small}>
+                          איפוס סיסמה
+                        </button>
+                      </form>
+                    </>
+                  )}
+                </div>
               </li>
             );
           })}
@@ -116,6 +128,8 @@ export default async function UsersPage({ searchParams }: Props) {
         <h2 className="text-lg font-black text-[#8e0b20]">הוספת משתמש</h2>
         <p className="mt-1 text-sm text-zinc-600">
           בוחרים סיסמה זמנית ומוסרים אותה. בכניסה הראשונה יתבקש לבחור סיסמה אישית.
+          {" "}
+          {FITNESS_COACH_LABEL} הוא סימון על המשתמש, לא הרשאה נפרדת: רק מי שמסומן כך יכול לבקש שיבוץ בחדר הכושר.
         </p>
         <form action={addUserAction} className="mt-3 grid gap-3 sm:grid-cols-2">
           <label className="flex flex-col gap-1 text-sm font-bold">
@@ -160,6 +174,10 @@ export default async function UsersPage({ searchParams }: Props) {
                 </option>
               ))}
             </select>
+          </label>
+          <label className="flex items-center gap-2 text-sm font-bold sm:col-span-2">
+            <input name="fitness" type="checkbox" value="1" className="h-4 w-4" />
+            {FITNESS_COACH_LABEL} — יכול לבקש שיבוץ בחדר הכושר
           </label>
           <button type="submit" className="min-h-11 rounded-lg bg-[#c8102e] text-base font-black text-white sm:col-span-2">
             הוספה
