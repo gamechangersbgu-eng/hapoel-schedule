@@ -9,7 +9,7 @@ import {
   teamCoaches,
   teams as teamsTable,
 } from "@/lib/db";
-import { SUBDIVISION_SHORT, toMinutes, toTime } from "@/lib/pitch-rules";
+import { SUBDIVISION_SHORT, trainingEndClock } from "@/lib/pitch-rules";
 import { applyCoachLabels, coachFullNameByTeam } from "@/lib/team-labels";
 import type { SlotDTO, WeekData } from "@/lib/types";
 import { resolveWeekStart, weekDates, weekNumber } from "@/lib/week";
@@ -119,10 +119,7 @@ export async function getWeekData(weekParam?: string | null): Promise<WeekData> 
         medicName: gameBySlot.get(slot.id)?.medicName ?? null,
         durationMinutes,
         rotationTemplateId: training?.rotationTemplateId ?? null,
-        endTime:
-          slot.startTime && durationMinutes
-            ? toTime(toMinutes(slot.startTime) + durationMinutes)
-            : null,
+        endTime: trainingEndClock(slot.startTime, durationMinutes),
       };
     }),
   };

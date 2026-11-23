@@ -9,7 +9,7 @@ import { writeFileSync } from "node:fs";
 import { asc, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/neon-http";
 import * as schema from "../db/schema/index";
-import { SUBDIVISION_SHORT } from "../lib/pitch-rules";
+import { SUBDIVISION_SHORT, trainingEndClock } from "../lib/pitch-rules";
 import { applyCoachLabels, coachFullNameByTeam } from "../lib/team-labels";
 
 const url =
@@ -87,6 +87,7 @@ async function main() {
       .filter((row) => row.subdivisionCode && row.subdivisionCode !== "whole")
       .map((row) => [row.slotId, SUBDIVISION_SHORT[row.subdivisionCode!] ?? null]),
   );
+  const trainingBySlot = new Map(trainingRows.map((row) => [row.slotId, row]));
   const gameBySlot = new Map(gameRows.map((row) => [row.slotId, row]));
 
   const snapshot = {
@@ -107,6 +108,8 @@ async function main() {
     ),
     slots: slotRows.map((slot) => {
       const game = gameBySlot.get(slot.id);
+      const durationMinutes = trainingBySlot.get(slot.id)?.durationMinutes ?? null;
+      const endTime = trainingEndClock(slot.startTime, durationMinutes);
       return {
         id: slot.id,
         teamId: slot.teamId,
@@ -121,6 +124,8 @@ async function main() {
           ? (substituteNames.get(slot.substituteStaffId) ?? null)
           : null,
         place: placeBySlot.get(slot.id) ?? null,
+        durationMinutes,
+        endTime,
         opponent: game?.opponent ?? null,
         departureTime: game?.departureTime ?? null,
       };

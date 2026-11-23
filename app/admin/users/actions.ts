@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { adminUsers, db, staff } from "@/lib/db";
 import { requireOwner, requireUser, startSession } from "@/lib/auth";
 import { MIN_PASSWORD_LENGTH, hashPassword, verifyPassword } from "@/lib/password";
-import { homePathForRole, isManager, isUserRole, normalizeRole } from "@/lib/roles";
+import { FITNESS_COACH_LABEL, homePathForRole, isManager, isUserRole, normalizeRole } from "@/lib/roles";
 import { isValidUsername, normalizeUsername } from "@/lib/username";
 
 function usersPage(params: Record<string, string>): never {
@@ -30,6 +30,7 @@ export async function addUserAction(formData: FormData) {
   const password = String(formData.get("password") ?? "");
   const staffValue = Number(formData.get("staffId"));
   const staffId = Number.isInteger(staffValue) && staffValue > 0 ? staffValue : null;
+  const isFitnessCoach = formData.get("fitness") === "1";
 
   if (!displayName || !isValidUsername(username)) usersPage({ error: "יש למלא שם ושם משתמש תקין" });
   if (password.length < MIN_PASSWORD_LENGTH) usersPage({ error: `סיסמה זמנית: לפחות ${MIN_PASSWORD_LENGTH} תווים` });
@@ -47,6 +48,7 @@ export async function addUserAction(formData: FormData) {
     role,
     // Managers are not tied to a staff row.
     staffId: isManager(role) ? null : staffId,
+    isFitnessCoach,
     passwordHash: await hashPassword(password),
     mustChangePassword: true,
     createdAt: new Date().toISOString(),
@@ -90,6 +92,23 @@ export async function setActiveAction(formData: FormData) {
     .where(eq(adminUsers.id, id));
   revalidatePath("/admin/users");
   usersPage({ done: active ? `${user.displayName} הופעל/ה מחדש` : `${user.displayName} הושבת/ה ולא יוכל/תוכל להיכנס` });
+}
+
+/** מאמן כושר is a flag, not a role. Any user, including this owner, can hold it. */
+export async function setFitnessCoachAction(formData: FormData) {
+  await requireOwner();
+  const id = Number(formData.get("id"));
+  const isFitnessCoach = formData.get("fitness") === "1";
+  const [user] = await db.select({ displayName: adminUsers.displayName }).from(adminUsers).where(eq(adminUsers.id, id)).limit(1);
+  if (!user) usersPage({ error: "המשתמש לא נמצא" });
+  await db.update(adminUsers).set({ isFitnessCoach }).where(eq(adminUsers.id, id));
+  revalidatePath("/admin/users");
+  revalidatePath("/admin/gym");
+  usersPage({
+    done: isFitnessCoach
+      ? `${user.displayName} סומן/ה כ${FITNESS_COACH_LABEL} ויכול/ה לבקש שיבוץ בחדר הכושר`
+      : `הוסר הסימון ${FITNESS_COACH_LABEL} מ-${user.displayName}`,
+  });
 }
 
 /** Owner ↔ admin only. Coach and physio logins keep their role (add a new user for a different role). */

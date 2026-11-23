@@ -6,6 +6,7 @@ import { and, asc, eq, gte, inArray, lte } from "drizzle-orm";
 import { db, gymBookings, slotGameDetails, slotTrainingDetails, slots, teams, videoRoomBookings } from "@/lib/db";
 import { formatDateHe, logChange } from "@/lib/history";
 import { getSlotType, isPitchSlot } from "@/lib/slot-types";
+import { approvalPlan } from "./room-requests";
 import {
   ROOMS,
   datesToSave,
@@ -17,6 +18,7 @@ import {
   type OccurrenceReview,
   type RoomKind,
   type TeamEvent,
+  type ValidBooking,
 } from "./room-rules";
 
 const DEFAULT_TRAINING_MINUTES = 90;
@@ -284,7 +286,80 @@ export async function deleteRoomBooking(kind: RoomKind, id: number, scope: "one"
   });
 }
 
-/** Today's bookings in both rooms, for the club TV. Never throws. */
+/**
+ * Inserts every date of an approved request, or none of them.
+ * A conflict found before insert, or an exclusion-constraint race during insert,
+ * leaves the schedule unchanged and returns a Hebrew error.
+ */
+export async function insertApprovedRoomBookings(
+  kind: RoomKind,
+  request: { teamId: number; startTime: string; durationMinutes: number; dates: string[]; note?: string | null },
+  adminName: string,
+): Promise<{ ok: true; saved: string[]; ids: number[]; summary: string } | { ok: false; error: string }> {
+  const room = ROOMS[kind];
+  const table = tableFor(kind);
+  const dates = [...new Set(request.dates)].sort();
+  const existing = dates.length > 0 ? await loadBookings(kind, dates[0], dates[dates.length - 1]) : [];
+  const plan = approvalPlan(room, { ...request, dates }, existing);
+  if (!plan.ok) return plan;
+  const team = await bookableTeam(request.teamId);
+  if (!team) return { ok: false, error: "יש לבחור קבוצה" };
+
+  const note = request.note?.trim() || null;
+  const stamp = new Date().toISOString();
+  const seriesId = plan.bookings.length > 1 ? randomUUID() : null;
+  const inserted: number[] = [];
+  try {
+    for (const booking of plan.bookings) {
+      const [row] = await db
+        .insert(table)
+        .values({
+          teamId: request.teamId,
+          date: booking.date,
+          startMin: booking.start,
+          endMin: booking.end,
+          note,
+          seriesId,
+          createdBy: adminName,
+          createdAt: stamp,
+          updatedAt: stamp,
+        })
+        .returning({ id: table.id });
+      inserted.push(row.id);
+    }
+  } catch (error) {
+    if (inserted.length > 0) await db.delete(table).where(inArray(table.id, inserted));
+    if (isOverlapError(error)) {
+      return { ok: false, error: `${room.label} ${room.feminine ? "נתפסה" : "נתפס"} הרגע בשעות האלה. הבקשה נשארה ממתינה.` };
+    }
+    throw error;
+  }
+
+  return {
+    ok: true,
+    saved: plan.bookings.map((booking) => booking.date),
+    ids: inserted,
+    summary: approvedSummary(room.label, team.name, plan.bookings),
+  };
+}
+
+export async function removeRoomBookings(kind: RoomKind, ids: number[]) {
+  if (ids.length === 0) return;
+  const table = tableFor(kind);
+  await db.delete(table).where(inArray(table.id, ids));
+}
+
+function approvedSummary(label: string, teamName: string, bookings: ValidBooking[]) {
+  const first = bookings[0];
+  const range = formatRange(first.start, first.end);
+  if (bookings.length === 1) {
+    return `${label}: אושר שיבוץ של ${teamName} ב-${formatDateHe(first.date)} ${range}`;
+  }
+  const last = bookings[bookings.length - 1];
+  return `${label}: אושר שיבוץ חוזר ל-${teamName} ${range}, ${bookings.length} מועדים מ-${formatDateHe(first.date)} עד ${formatDateHe(last.date)}`;
+}
+
+/** Today's bookings in both rooms, for the club TV. Pending requests are not included. Never throws. */
 export async function getTodayRooms(today: string): Promise<{ kind: RoomKind; label: string; bookings: RoomBookingView[] }[]> {
   try {
     const [gym, video] = await Promise.all([loadBookings("gym", today, today), loadBookings("video", today, today)]);

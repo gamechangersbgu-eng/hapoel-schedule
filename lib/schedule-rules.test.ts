@@ -1,17 +1,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { TRAINING_DURATION_MINUTES } from "../shared/practice";
+import { timeLabel } from "../components/display-utils";
 import { matchCityInName } from "./opponent-city-match";
 import {
   DURATION_PRESETS,
   ROTATION_PRESETS,
+  blockBox,
+  boardEndFor,
+  checkBooking,
   clocksAfterDurationChange,
   clocksAfterEndChange,
   clocksAfterStartChange,
   durationAllowedForSave,
+  durationLabelHe,
   isOfficialDuration,
   isQuarterHour,
   roundToQuarterHour,
+  trainingEndClock,
+  type PitchDay,
 } from "./pitch-rules";
 import { buildOccurrenceDates, effectiveInterval, occurrenceDecision, parseSeriesChoices, readSeriesInterval } from "./recurrence";
 
@@ -26,26 +32,26 @@ const cities = [
 test("training length is only the official options", () => {
   assert.deepEqual(
     DURATION_PRESETS.map((item) => item.minutes),
-    [60, 90, 105, 120],
+    [60, 75, 90, 105, 120],
   );
-  assert.deepEqual(
-    [...TRAINING_DURATION_MINUTES],
-    DURATION_PRESETS.map((item) => item.minutes),
-  );
+  assert.equal(DURATION_PRESETS.find((item) => item.minutes === 75)?.labelHe, "שעה ורבע");
+  assert.equal(durationLabelHe(75), "שעה ורבע");
   assert.equal(DURATION_PRESETS.find((item) => item.minutes === 90)?.labelHe, "שעה וחצי");
   assert.equal(DURATION_PRESETS.find((item) => item.minutes === 105)?.labelHe, "שעה ו־45 דקות");
   assert.equal(isOfficialDuration(60), true);
+  assert.equal(isOfficialDuration(75), true);
   assert.equal(isOfficialDuration(90), true);
   assert.equal(isOfficialDuration(105), true);
   assert.equal(isOfficialDuration(120), true);
-  for (const minutes of [30, 45, 75, 135, 150, 165, 180]) {
+  for (const minutes of [30, 45, 135, 150, 165, 180]) {
     assert.equal(isOfficialDuration(minutes), false);
     assert.equal(durationAllowedForSave(minutes, null), false);
   }
+  assert.equal(durationAllowedForSave(75, null), true);
   assert.equal(durationAllowedForSave(75, 75), true);
   assert.equal(durationAllowedForSave(90, null), true);
   assert.equal(durationAllowedForSave(60, 90), true);
-  assert.equal(durationAllowedForSave(75, 90), false);
+  assert.equal(durationAllowedForSave(75, 90), true);
 
   const kept = clocksAfterStartChange({ startTime: "16:30", endTime: "18:15", duration: 105 }, "17:00");
   assert.deepEqual(kept, { startTime: "17:00", endTime: "18:45", duration: 105 });
@@ -62,11 +68,16 @@ test("training length is only the official options", () => {
   const acceptedHalf = clocksAfterEndChange({ startTime: "16:30", endTime: "18:15", duration: 105 }, "18:00");
   assert.deepEqual(acceptedHalf, { startTime: "16:30", endTime: "18:00", duration: 90 });
 
-  const rejected = clocksAfterEndChange({ startTime: "16:30", endTime: "18:15", duration: 105 }, "17:45");
+  const acceptedQuarter = clocksAfterEndChange({ startTime: "16:30", endTime: "18:15", duration: 105 }, "17:45");
+  assert.deepEqual(acceptedQuarter, { startTime: "16:30", endTime: "17:45", duration: 75 });
+
+  const rejected = clocksAfterEndChange({ startTime: "16:30", endTime: "18:15", duration: 105 }, "17:00");
   assert.deepEqual(rejected, { startTime: "16:30", endTime: "18:15", duration: 105 });
 
   const chosen = clocksAfterDurationChange({ startTime: "16:30", endTime: "", duration: 90 }, 60);
   assert.deepEqual(chosen, { startTime: "16:30", endTime: "17:30", duration: 60 });
+  const hourAndQuarter = clocksAfterDurationChange({ startTime: "16:00", endTime: "", duration: 0 }, 75);
+  assert.deepEqual(hourAndQuarter, { startTime: "16:00", endTime: "17:15", duration: 75 });
   const ignored = clocksAfterDurationChange({ startTime: "16:30", endTime: "18:00", duration: 90 }, 45);
   assert.deepEqual(ignored, { startTime: "16:30", endTime: "18:00", duration: 90 });
 
@@ -80,6 +91,78 @@ test("training length is only the official options", () => {
       [5, ["08:30", "10:00", "11:30", "13:00", "14:30"]],
     ],
   );
+});
+
+function pitchDay(end: number): PitchDay {
+  return {
+    date: "2026-11-22",
+    pitches: [
+      {
+        id: 1,
+        code: "vasermil_1",
+        nameHe: "וסרמיל 1",
+        colorKey: "green",
+        surfaceType: "synthetic",
+        isReservedLock: false,
+        allowsHomeGames: true,
+      },
+    ],
+    subdivisions: [{ code: "whole", labelHe: "מגרש שלם" }],
+    durations: DURATION_PRESETS,
+    rotations: [],
+    teams: [
+      { id: 1, name: "נערים א", ageBandCode: "noar", allowedSubdivisions: ["whole"] },
+      { id: 2, name: "נערים ב", ageBandCode: "noar", allowedSubdivisions: ["whole"] },
+    ],
+    footballSchoolRules: [],
+    bookings: [
+      {
+        slotId: 1,
+        kind: "training",
+        teamId: 1,
+        teamName: "נערים א",
+        pitchId: 1,
+        subdivisionCode: "whole",
+        start: 16 * 60,
+        end,
+        durationMinutes: end - 16 * 60,
+        rotationTemplateId: null,
+        note: null,
+        opponent: null,
+        status: "active",
+        statusNote: null,
+        substituteStaffId: null,
+        seriesId: null,
+      },
+    ],
+    coaches: [],
+  };
+}
+
+test("a 75-minute block clashes until 17:15 and is drawn at that height", () => {
+  assert.equal(trainingEndClock("16:00", 75), "17:15");
+  assert.equal(
+    timeLabel({
+      id: 1,
+      teamId: 1,
+      date: "2026-11-22",
+      endDate: null,
+      startTime: "16:00",
+      endTime: trainingEndClock("16:00", 75),
+      type: "vasermil_1",
+      note: null,
+    }),
+    "16:00–17:15",
+  );
+  const day = pitchDay(16 * 60 + 75);
+  assert.equal(checkBooking(day, { teamId: 2, pitchId: 1, subdivisionCode: "whole", start: 17 * 60, durationMinutes: 60 }).length, 1);
+  assert.deepEqual(
+    checkBooking(day, { teamId: 2, pitchId: 1, subdivisionCode: "whole", start: 17 * 60 + 15, durationMinutes: 60 }),
+    [],
+  );
+  assert.deepEqual(blockBox(15 * 60, 16 * 60, 16 * 60 + 75, 1.15), { top: 60 * 1.15, height: 75 * 1.15 });
+  assert.equal(boardEndFor({ bookings: [{ end: 21 * 60 }] }), 22 * 60);
+  assert.equal(boardEndFor({ bookings: [{ end: 22 * 60 + 15 }] }), 23 * 60);
 });
 
 test("quarter hours round to 00, 15, 30 or 45", () => {

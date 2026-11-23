@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { previewRoomBookingAction, saveRoomBookingAction } from "@/app/admin/rooms/actions";
+import { previewRoomBookingAction, saveRoomBookingAction, submitRoomRequestAction } from "@/app/admin/rooms/actions";
 import { RecurrenceFields } from "@/components/RecurrenceFields";
 import { buildOccurrenceDates } from "@/lib/recurrence";
 import {
@@ -28,27 +28,32 @@ function dateLabel(date: string) {
 }
 
 function durationLabel(minutes: number) {
+  if (minutes === 75) return "שעה ורבע";
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
   if (hours === 0) return `${rest} דק׳`;
   return rest === 0 ? `${hours === 1 ? "שעה" : `${hours} שעות`}` : `${hours}:${String(rest).padStart(2, "0")} שעות`;
 }
 
-/** Add or edit a room booking, optionally recurring. Reviews conflicts before saving. */
+/** Add or edit a room booking, or send a request that stays off the schedule until approved. */
 export function RoomBookingForm({
   kind,
   teams,
   weekStart,
   initial,
+  purpose = "book",
 }: {
   kind: RoomKind;
   teams: TeamOption[];
   weekStart: string;
   initial: Initial;
+  /** "request" stores a pending request. "book" writes the schedule (approver only). */
+  purpose?: "book" | "request";
 }) {
   const room = ROOMS[kind];
   const router = useRouter();
-  const editing = Boolean(initial.id);
+  const requesting = purpose === "request";
+  const editing = Boolean(initial.id) && !requesting;
   const [teamId, setTeamId] = useState(initial.teamId);
   const [date, setDate] = useState(initial.date);
   const [startTime, setStartTime] = useState(initial.startTime);
@@ -72,7 +77,18 @@ export function RoomBookingForm({
   }
 
   function request() {
-    return { teamId, startTime, durationMinutes: duration, dates: dates(), note, id: initial.id };
+    return {
+      teamId,
+      startTime,
+      durationMinutes: duration,
+      dates: dates(),
+      note,
+      id: editing ? initial.id : undefined,
+      recurrence:
+        repeat && !editing
+          ? { weekdays, until, extraDates, intervalDays: 7 as const }
+          : null,
+    };
   }
 
   function resetReview() {
@@ -83,8 +99,20 @@ export function RoomBookingForm({
   function submit() {
     setError(null);
     startTransition(async () => {
+      const payload = request();
+      if (requesting) {
+        const result = await submitRoomRequestAction(kind, payload);
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+        const dropped = Math.max(0, payload.dates.length - result.dates.length);
+        router.push(`${close}&requested=1${dropped > 0 ? `&dropped=${dropped}` : ""}`);
+        router.refresh();
+        return;
+      }
       if (!review) {
-        const preview = await previewRoomBookingAction(kind, request());
+        const preview = await previewRoomBookingAction(kind, payload);
         if (preview.error) {
           setError(preview.error);
           return;
@@ -94,7 +122,7 @@ export function RoomBookingForm({
           return;
         }
       }
-      const result = await saveRoomBookingAction(kind, request());
+      const result = await saveRoomBookingAction(kind, payload);
       if (!result.ok) {
         setError(result.error);
         setReview(null);
@@ -112,11 +140,18 @@ export function RoomBookingForm({
   return (
     <section className="flex flex-col gap-3 rounded-xl bg-white p-4 shadow-sm ring-2 ring-[#c8102e]">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-lg font-black text-[#8e0b20]">{editing ? "עריכת שיבוץ" : `שיבוץ חדש · ${room.label}`}</h2>
+        <h2 className="text-lg font-black text-[#8e0b20]">
+          {editing ? "עריכת שיבוץ" : requesting ? `בקשת שיבוץ · ${room.label}` : `שיבוץ חדש · ${room.label}`}
+        </h2>
         <a href={close} className="rounded-md px-2 py-1 text-sm font-bold text-zinc-500 hover:bg-zinc-100">
           סגור
         </a>
       </div>
+      {requesting ? (
+        <p className="text-sm font-semibold text-zinc-600">
+          הבקשה נשמרת כממתינה לאישור המנהל הראשי ולא מופיעה בלוח עד שתאושר.
+        </p>
+      ) : null}
 
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="flex flex-col gap-1 text-sm font-bold">
@@ -295,7 +330,7 @@ export function RoomBookingForm({
           disabled={pending || teamId === 0 || start == null || (review !== null && willSave === 0)}
           className="min-h-11 rounded-lg bg-[#c8102e] px-5 py-2 text-sm font-black text-white disabled:opacity-50"
         >
-          {pending ? "שומר..." : review ? "אישור ושמירה" : "שמירה"}
+          {pending ? "שולח..." : requesting ? "שליחת בקשה" : review ? "אישור ושמירה" : "שמירה"}
         </button>
         <a href={close} className="min-h-11 rounded-lg px-4 py-2 text-sm font-bold ring-1 ring-zinc-300">
           ביטול

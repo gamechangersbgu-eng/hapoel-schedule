@@ -66,7 +66,7 @@ async function seedGameBanks(database: Db) {
   ]);
 }
 
-/** Inserts the standard training lengths (60 / 90 / 105 / 120) when they are missing. */
+/** Inserts the standard training lengths (60 / 75 / 90 / 105 / 120) when they are missing. */
 export async function ensureTrainingDurations(database: Db) {
   const existing = await database
     .select({ minutes: trainingSessionDurations.minutes })
