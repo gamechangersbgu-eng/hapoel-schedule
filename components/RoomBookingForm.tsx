@@ -11,6 +11,7 @@ import {
   clockToMinutes,
   minutesToClock,
   needsConfirmation,
+  roomDurationLabel,
   startHours,
   startMinutes,
   type OccurrenceReview,
@@ -25,14 +26,6 @@ function dateLabel(date: string) {
   const [y, m, d] = date.split("-").map(Number);
   const weekday = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
   return `יום ${HEBREW_DAY_LETTERS[weekday]}, ${d}.${m}`;
-}
-
-function durationLabel(minutes: number) {
-  if (minutes === 75) return "שעה ורבע";
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  if (hours === 0) return `${rest} דק׳`;
-  return rest === 0 ? `${hours === 1 ? "שעה" : `${hours} שעות`}` : `${hours}:${String(rest).padStart(2, "0")} שעות`;
 }
 
 /** Add or edit a room booking, or send a request that stays off the schedule until approved. */
@@ -245,7 +238,7 @@ export function RoomBookingForm({
           >
             {ROOM_DURATIONS.map((minutes) => (
               <option key={minutes} value={minutes}>
-                {durationLabel(minutes)}
+                {roomDurationLabel(minutes)}
               </option>
             ))}
           </select>

@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   ROOMS,
+  ROOM_DURATIONS,
   isOverlapError,
+  roomDurationLabel,
   startHours,
   startMinutes,
   datesToSave,
@@ -27,12 +29,16 @@ test("sessions that touch end to end do not overlap", () => {
   assert.equal(overlaps({ start: 960, end: 1020 }, { start: 1005, end: 1080 }), true);
 });
 
-test("validation: team, quarter hours, allowed day, listed duration, ends by 23:45", () => {
+test("validation: team, five-minute steps, allowed day, listed duration, ends by closing time", () => {
   const ok = { teamId: 1, date: sunday, startTime: "16:00", durationMinutes: 60 };
   assert.deepEqual(validateBooking(gym, ok), { booking: { teamId: 1, date: sunday, start: 960, end: 1020 } });
   assert.ok("error" in validateBooking(gym, { ...ok, teamId: 0 }));
-  assert.ok("error" in validateBooking(gym, { ...ok, startTime: "16:10" }));
-  assert.ok("error" in validateBooking(gym, { ...ok, durationMinutes: 50 }));
+  assert.ok("booking" in validateBooking(gym, { ...ok, startTime: "16:10", durationMinutes: 10 }));
+  assert.ok("error" in validateBooking(gym, { ...ok, startTime: "16:07" }), "starts stay on a 5-minute grid");
+  assert.ok("error" in validateBooking(gym, { ...ok, durationMinutes: 7 }));
+  assert.ok("error" in validateBooking(gym, { ...ok, durationMinutes: 185 }));
+  assert.ok("booking" in validateBooking(gym, { ...ok, durationMinutes: 5 }));
+  assert.ok("booking" in validateBooking(gym, { ...ok, durationMinutes: 50 }));
   assert.ok("booking" in validateBooking(gym, { ...ok, startTime: "23:00" }), "gym is open until midnight");
   assert.ok("booking" in validateBooking(gym, { ...ok, startTime: "00:00" }), "gym is open from midnight");
   assert.ok("error" in validateBooking(gym, { ...ok, startTime: "23:30" }), "no session past midnight");
@@ -40,6 +46,71 @@ test("validation: team, quarter hours, allowed day, listed duration, ends by 23:
   assert.ok("error" in validateBooking(video, { ...ok, startTime: "05:00" }), "video room opens at 06:00");
   assert.ok("booking" in validateBooking(gym, { ...ok, date: saturday }));
   assert.ok("error" in validateBooking(video, { ...ok, date: saturday }), "video room is open Sunday to Friday");
+});
+
+test("5, 10 and 15 minute bookings can sit back to back without a gap", () => {
+  const ten = validateBooking(gym, { teamId: 1, date: sunday, startTime: "10:00", durationMinutes: 10 });
+  const fifteen = validateBooking(gym, { teamId: 2, date: sunday, startTime: "10:10", durationMinutes: 15 });
+  const five = validateBooking(video, { teamId: 3, date: sunday, startTime: "10:25", durationMinutes: 5 });
+  assert.ok("booking" in ten && "booking" in fifteen && "booking" in five);
+  if (!("booking" in ten) || !("booking" in fifteen) || !("booking" in five)) return;
+  assert.deepEqual([ten.booking.start, ten.booking.end], [10 * 60, 10 * 60 + 10]);
+  assert.deepEqual([fifteen.booking.start, fifteen.booking.end], [10 * 60 + 10, 10 * 60 + 25]);
+  assert.equal(overlaps(ten.booking, fifteen.booking), false);
+  assert.equal(overlaps(fifteen.booking, five.booking), false);
+  const crossing = validateBooking(gym, { teamId: 4, date: sunday, startTime: "10:05", durationMinutes: 10 });
+  assert.ok("booking" in crossing);
+  if (!("booking" in crossing)) return;
+  assert.equal(overlaps(ten.booking, crossing.booking), true);
+  assert.equal(
+    findRoomConflict(
+      [{ id: 1, teamId: 1, teamName: "נוער", date: sunday, start: ten.booking.start, end: ten.booking.end }],
+      crossing.booking,
+    )?.id,
+    1,
+  );
+  assert.equal(
+    findRoomConflict(
+      [{ id: 1, teamId: 1, teamName: "נוער", date: sunday, start: ten.booking.start, end: ten.booking.end }],
+      fifteen.booking,
+    ),
+    null,
+  );
+});
+
+test("a short session may end exactly at closing, and not a minute later", () => {
+  assert.ok("booking" in validateBooking(video, { teamId: 1, date: sunday, startTime: "23:40", durationMinutes: 5 }));
+  assert.ok("error" in validateBooking(video, { teamId: 1, date: sunday, startTime: "23:40", durationMinutes: 10 }));
+  assert.ok("error" in validateBooking(video, { teamId: 1, date: sunday, startTime: "23:45", durationMinutes: 5 }));
+  assert.ok("booking" in validateBooking(video, { teamId: 1, date: sunday, startTime: "06:00", durationMinutes: 5 }));
+  assert.ok("booking" in validateBooking(gym, { teamId: 1, date: sunday, startTime: "23:55", durationMinutes: 5 }));
+  assert.ok("error" in validateBooking(gym, { teamId: 1, date: sunday, startTime: "23:55", durationMinutes: 10 }));
+});
+
+test("durations are every 5 minutes from 5 through 180, with the existing Hebrew labels", () => {
+  assert.equal(ROOM_DURATIONS[0], 5);
+  assert.equal(ROOM_DURATIONS.at(-1), 180);
+  assert.equal(ROOM_DURATIONS.length, 36);
+  for (let index = 1; index < ROOM_DURATIONS.length; index += 1) {
+    assert.equal(ROOM_DURATIONS[index] - ROOM_DURATIONS[index - 1], 5);
+  }
+  for (const minutes of [30, 45, 60, 75, 90, 105, 120, 150, 180]) {
+    assert.equal(ROOM_DURATIONS.includes(minutes), true);
+  }
+  assert.equal(roomDurationLabel(5), "5 דק׳");
+  assert.equal(roomDurationLabel(10), "10 דק׳");
+  assert.equal(roomDurationLabel(15), "15 דק׳");
+  assert.equal(roomDurationLabel(30), "30 דק׳");
+  assert.equal(roomDurationLabel(45), "45 דק׳");
+  assert.equal(roomDurationLabel(60), "שעה");
+  assert.equal(roomDurationLabel(75), "שעה ורבע");
+  assert.equal(roomDurationLabel(90), "שעה וחצי");
+  assert.equal(roomDurationLabel(105), "שעה ו־45 דק׳");
+  assert.equal(roomDurationLabel(120), "שעתיים");
+  assert.equal(roomDurationLabel(135), "שעתיים ורבע");
+  assert.equal(roomDurationLabel(150), "שעתיים וחצי");
+  assert.equal(roomDurationLabel(180), "3 שעות");
+  assert.equal(roomDurationLabel(65), "שעה ו־5 דק׳");
 });
 
 test("one team at a time: the second team is told who holds the room", () => {
@@ -87,11 +158,15 @@ test("a single booking on a closed day is an error, not a skipped date", () => {
 });
 
 test("the form never offers a start time that cannot fit the shortest session", () => {
-  assert.deepEqual(startMinutes(video, 23), [0, 15]);
-  assert.deepEqual(startMinutes(video, 6), [0, 15, 30, 45]);
+  const everyFive = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+  assert.deepEqual(startMinutes(video, 23), [0, 5, 10, 15, 20, 25, 30, 35, 40]);
+  assert.deepEqual(startMinutes(video, 6), everyFive);
+  assert.deepEqual(startMinutes(video, 22), everyFive);
   assert.deepEqual(startMinutes(video, 5), []);
   assert.equal(startHours(video)[0], 6);
-  assert.deepEqual(startMinutes(gym, 23), [0, 15, 30]);
+  assert.equal(startHours(video).at(-1), 23);
+  assert.deepEqual(startMinutes(gym, 23), everyFive);
+  assert.deepEqual(startMinutes(gym, 0), everyFive);
   assert.deepEqual([startHours(gym)[0], startHours(gym).at(-1)], [0, 23]);
 });
 

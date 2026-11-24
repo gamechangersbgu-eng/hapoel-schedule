@@ -1,10 +1,10 @@
 // Pure rules for gym / video-room requests. Pending requests are not bookings.
-import { durationLabelHe } from "@/lib/pitch-rules";
 import { HEBREW_DAY_LETTERS } from "@/lib/week";
 import {
   conflictMessage,
   findRoomConflict,
   formatRange,
+  roomDurationLabel,
   validateBooking,
   weekdayOfDate,
   type ExistingBooking,
@@ -139,6 +139,7 @@ export function requestWhenLabel(startTime: string, durationMinutes: number): st
     { kind: "gym", label: "", path: "", weekdays: [0, 1, 2, 3, 4, 5, 6], feminine: false, openFrom: 0, openUntil: 24 * 60 },
     { teamId: 1, date: "2026-11-22", startTime, durationMinutes },
   );
-  if ("error" in checked) return `${startTime} · ${durationLabelHe(durationMinutes)}`;
-  return `${formatRange(checked.booking.start, checked.booking.end)} · ${durationLabelHe(durationMinutes)}`;
+  const label = roomDurationLabel(durationMinutes);
+  if ("error" in checked) return `${startTime} · ${label}`;
+  return `${formatRange(checked.booking.start, checked.booking.end)} · ${label}`;
 }
