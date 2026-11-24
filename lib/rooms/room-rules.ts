@@ -43,9 +43,33 @@ export function readRoomKind(raw: unknown): RoomKind | null {
   return raw === "gym" || raw === "video" ? raw : null;
 }
 
-/** Session lengths offered in the form (minutes). */
-export const ROOM_DURATIONS = [30, 45, 60, 75, 90, 105, 120, 150, 180] as const;
+/** Start times and session lengths both move in this step (minutes). */
+export const ROOM_MINUTE_STEP = 5;
+const MIN_ROOM_MINUTES = 5;
+const MAX_ROOM_MINUTES = 180;
+
+/** Session lengths offered in the form: every 5 minutes, from 5 through 3 hours. */
+export const ROOM_DURATIONS: readonly number[] = Array.from(
+  { length: (MAX_ROOM_MINUTES - MIN_ROOM_MINUTES) / ROOM_MINUTE_STEP + 1 },
+  (_, index) => MIN_ROOM_MINUTES + index * ROOM_MINUTE_STEP,
+);
 export const DEFAULT_ROOM_MINUTES = 60;
+
+/**
+ * Hebrew length for the room form and for request cards.
+ * Short lengths keep the room form's "דק׳". Whole hours and the quarter/half phrases
+ * match the rest of the club UI (שעה, שעה ורבע, שעה וחצי, שעתיים).
+ */
+export function roomDurationLabel(minutes: number): string {
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  if (hours <= 0) return `${rest} דק׳`;
+  const head = hours === 1 ? "שעה" : hours === 2 ? "שעתיים" : `${hours} שעות`;
+  if (rest === 0) return head;
+  if (rest === 15) return `${head} ורבע`;
+  if (rest === 30) return `${head} וחצי`;
+  return `${head} ו־${rest} דק׳`;
+}
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -95,8 +119,10 @@ export function validateBooking(room: RoomConfig, input: RoomBookingInput): { bo
   }
   const start = clockToMinutes(input.startTime);
   if (start == null) return { error: "יש לבחור שעת התחלה" };
-  if (start % 15 !== 0) return { error: "השעה צריכה להיות ברבעי שעה" };
-  if (!(ROOM_DURATIONS as readonly number[]).includes(input.durationMinutes)) return { error: "משך לא חוקי" };
+  if (start % ROOM_MINUTE_STEP !== 0) return { error: "השעה צריכה להיות בקפיצות של 5 דקות" };
+  if (!Number.isInteger(input.durationMinutes) || !ROOM_DURATIONS.includes(input.durationMinutes)) {
+    return { error: "משך לא חוקי" };
+  }
   const end = start + input.durationMinutes;
   if (start < room.openFrom) return { error: `${room.label} ${room.feminine ? "פתוחה" : "פתוח"} מ-${minutesToClock(room.openFrom)}` };
   if (end > room.openUntil) {
@@ -188,10 +214,11 @@ export function datesToSave(items: OccurrenceReview[]): string[] {
 }
 
 const SHORTEST_SESSION = Math.min(...ROOM_DURATIONS);
+const START_MINUTES = Array.from({ length: 60 / ROOM_MINUTE_STEP }, (_, index) => index * ROOM_MINUTE_STEP);
 
-/** Quarter-hour minutes (0/15/30/45) at which a session can start in this hour and still fit the shortest length. */
+/** Five-minute marks at which a session can start in this hour and still fit the shortest length before closing. */
 export function startMinutes(room: RoomConfig, hour: number): number[] {
-  return [0, 15, 30, 45].filter((minute) => {
+  return START_MINUTES.filter((minute) => {
     const start = hour * 60 + minute;
     return start >= room.openFrom && start + SHORTEST_SESSION <= room.openUntil;
   });
