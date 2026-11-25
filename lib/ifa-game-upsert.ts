@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { cities, db, slotGameDetails, slots, teams } from "@/lib/db";
 import { departureFor } from "@/lib/game-rules";
 import { cityForOpponent } from "@/lib/opponent-cities";
+import { applyLeagueLock } from "@/lib/ifa-team-locks";
 import { bumpScheduleRevision } from "@/lib/schedule-revision";
 import {
   GAME_DETAIL_SOURCES,
@@ -19,6 +20,7 @@ export async function upsertIfaGame(
   const bumpRevision = options?.bumpRevision !== false;
   const source = GAME_DETAIL_SOURCES.IFA_SCRAPER;
   const type = input.gameKind;
+  const teamId = await applyLeagueLock(input.externalId, input.teamId);
 
   const [byExternal] = await db
     .select({ slotId: slotGameDetails.slotId })
@@ -32,7 +34,7 @@ export async function upsertIfaGame(
     .limit(1);
 
   const slotPayload = {
-    teamId: input.teamId,
+    teamId,
     date: input.date,
     endDate: null as string | null,
     startTime: input.startTime,
@@ -83,7 +85,7 @@ export async function upsertIfaGame(
   let travelMinutes: number | null = null;
   if (input.gameKind === "away_game" && cityId && input.kickoffTime && !existing?.departureTime) {
     const [city] = await db.select().from(cities).where(eq(cities.id, cityId)).limit(1);
-    const [team] = await db.select({ name: teams.name }).from(teams).where(eq(teams.id, input.teamId)).limit(1);
+    const [team] = await db.select({ name: teams.name }).from(teams).where(eq(teams.id, teamId)).limit(1);
     if (city && team) {
       travelMinutes = city.travelMinutesFromBeerSheva;
       departureTime = departureFor({

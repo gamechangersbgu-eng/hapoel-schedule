@@ -5,7 +5,7 @@ import { staff } from "./team";
 /**
  * Users who sign in. Parents and players never log in.
  * email: the username (unique text). The column name stays so existing rows are untouched.
- * role: "owner" (can manage other users), "admin" (schedule editing),
+ * role: "owner" (can manage other users and schedule trainings), "admin" (the rest of the schedule),
  *       "physio" (injuries + physio schedule) or "coach" (injury status of own players). See lib/roles.ts.
  * isFitnessCoach: מאמן כושר. A flag, not a role, so a manager or a coach can hold it.
  *                 Only these users may request a gym booking. Assigned on /admin/users.

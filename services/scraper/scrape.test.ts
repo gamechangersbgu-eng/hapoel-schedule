@@ -9,7 +9,8 @@ import { toCsv } from "./csv";
 import { parseClubGames, parseDate, parseTeamGames, parseTime } from "./parse";
 import { saveResults } from "./save";
 import { curlFetch, scrapeAll, teamGamesUrl, weeksBetween } from "./scrape";
-import { calendarTeamId, DB_TEAM_BY_IFA_TEAM } from "./db-teams";
+import { calendarTeamId, CALENDAR_ROW_ALIASES, DB_TEAM_BY_IFA_TEAM } from "./db-teams";
+import { ifaTeamIdFromExternalId, lockedTeamId } from "./league-locks";
 import { planWrites, writeRows } from "./write";
 import { TEAMS } from "./teams";
 
@@ -452,6 +453,74 @@ test("name and league together identify one association team, mapped to one cale
     name: "הפועל בנות הבית האדום באר שבע",
     row: "ילדות ב",
   });
+});
+
+test("the four youth squads stay on the leagues the club asked for", () => {
+  assert.equal(DB_TEAM_BY_IFA_TEAM[6248], "ילדים ב");
+  assert.deepEqual(CALENDAR_ROW_ALIASES["ילדים ב"], ["ילדים ב נועם"]);
+  assert.equal(TEAMS.find((team) => team.id === 6248)?.league, "ליגת ילדים ב' מרכז");
+
+  assert.equal(DB_TEAM_BY_IFA_TEAM[2755], "ילדים ב ל");
+  assert.deepEqual(CALENDAR_ROW_ALIASES["ילדים ב ל"], ["ילדים ב חגי"]);
+  assert.equal(TEAMS.find((team) => team.id === 2755)?.league, "ליגת ילדים ב' דן");
+
+  assert.equal(DB_TEAM_BY_IFA_TEAM[2014], "ילדים ג");
+  assert.deepEqual(CALENDAR_ROW_ALIASES["ילדים ג"], ["ילדים ג ניצן"]);
+  assert.equal(TEAMS.find((team) => team.id === 2014)?.league, "ליגת ילדים ג' מרכז");
+
+  assert.equal(DB_TEAM_BY_IFA_TEAM[2143], "ילדים ג ל");
+  assert.deepEqual(CALENDAR_ROW_ALIASES["ילדים ג ל"], ["ילדים ג סטיב"]);
+  assert.equal(TEAMS.find((team) => team.id === 2143)?.league, "ליגת ילדים ג' דן");
+});
+
+test("a league lock sends the game to the locked team even when the code map disagrees", () => {
+  const { games } = parseTeamGames(fixture, youth, 28);
+  const game = { ...games[0], teamId: 2755, key: "28:2755:הפועל|יריב" };
+  const rows = new Map<string, number>([
+    ["ילדים ב", 6],
+    ["ילדים ב ל", 7],
+  ]);
+  assert.equal(planWrites([game], rows, []).rows[0]?.teamId, 7);
+  const locked = planWrites([game], rows, [], [{ ifaTeamId: 2755, teamId: 6 }]);
+  assert.equal(locked.rows[0]?.teamId, 6);
+  assert.equal(locked.rows[0]?.externalId, game.key);
+  assert.equal(locked.skipped.length, 0);
+});
+
+test("the stable game key carries the association team id for league and cup games", () => {
+  assert.equal(ifaTeamIdFromExternalId("28:6248:בית|חוץ"), 6248);
+  assert.equal(ifaTeamIdFromExternalId("28:2143:גביע:1:בית|חוץ"), 2143);
+  assert.equal(ifaTeamIdFromExternalId("28:2014:בית|חוץ#2"), 2014);
+  assert.equal(ifaTeamIdFromExternalId("nope"), null);
+  assert.equal(lockedTeamId(6248, [{ ifaTeamId: 6248, teamId: 6 }]), 6);
+  assert.equal(lockedTeamId(999, [{ ifaTeamId: 6248, teamId: 6 }]), undefined);
+});
+
+test("the league-lock migration names the four squads and does not wipe the schedule", () => {
+  const sql = readFileSync(
+    path.join(process.cwd(), "netlify/database/migrations/20261125170000_ifa_league_locks/migration.sql"),
+    "utf8",
+  );
+  for (const piece of [
+    "ifa_team_locks",
+    "6248",
+    "2755",
+    "2014",
+    "2143",
+    "ילדים ב נועם",
+    "ילדים ב חגי",
+    "ילדים ג ניצן",
+    "ילדים ג סטיב",
+    "ליגת ילדים ב'' מרכז",
+    "ליגת ילדים ב'' דן",
+    "ליגת ילדים ג'' מרכז",
+    "ליגת ילדים ג'' דן",
+    "ifa_scraper",
+  ]) {
+    assert.ok(sql.includes(piece), piece);
+  }
+  assert.equal(sql.toLowerCase().includes("delete from"), false);
+  assert.equal(sql.toLowerCase().includes("truncate"), false);
 });
 
 test("a calendar row missing from the database stops before any write", () => {

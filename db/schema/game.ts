@@ -70,6 +70,19 @@ export const slots = pgTable(
   ],
 );
 
+/**
+ * Manual IFA team → calendar row. When `locked`, the scraper writes that team's games
+ * here and does not follow `services/scraper/db-teams.ts`.
+ */
+export const ifaTeamLocks = pgTable("ifa_team_locks", {
+  ifaTeamId: integer("ifa_team_id").primaryKey(),
+  teamId: integer("team_id")
+    .notNull()
+    .references(() => teams.id, { onDelete: "cascade" }),
+  leagueLabel: text("league_label").notNull(),
+  locked: boolean().notNull().default(true),
+});
+
 /** 1:1 extension for home/away games on `slots`. */
 export const slotGameDetails = pgTable(
   "slot_game_details",

@@ -1,5 +1,6 @@
 import type { IfaGameUpsert } from "@/shared/game";
 import { calendarTeamId, DB_TEAM_BY_IFA_TEAM } from "./db-teams";
+import { lockedTeamId, type IfaTeamLock } from "./league-locks";
 import type { ScrapedGame } from "./types";
 
 export type SkippedGame = { key: string; reason: string };
@@ -22,16 +23,24 @@ export function planWrites(
   games: ScrapedGame[],
   teamIds: Map<string, number>,
   cityNames: string[],
+  locks: readonly IfaTeamLock[] = [],
 ): WritePlan {
   const plan: WritePlan = { rows: [], skipped: [] };
   for (const game of games) {
-    const row = DB_TEAM_BY_IFA_TEAM[game.teamId];
-    if (!row) {
-      plan.skipped.push({ key: game.key, reason: `no calendar row for team ${game.teamId}` });
-      continue;
+    const override = lockedTeamId(game.teamId, locks);
+    let teamId: number;
+    if (override !== undefined) {
+      teamId = override;
+    } else {
+      const row = DB_TEAM_BY_IFA_TEAM[game.teamId];
+      if (!row) {
+        plan.skipped.push({ key: game.key, reason: `no calendar row for team ${game.teamId}` });
+        continue;
+      }
+      const resolved = calendarTeamId(row, teamIds);
+      if (resolved === undefined) throw new Error(`calendar row "${row}" is not in the database`);
+      teamId = resolved;
     }
-    const teamId = calendarTeamId(row, teamIds);
-    if (teamId === undefined) throw new Error(`calendar row "${row}" is not in the database`);
     if (game.isHome === null) {
       plan.skipped.push({ key: game.key, reason: "unknown home or away" });
       continue;

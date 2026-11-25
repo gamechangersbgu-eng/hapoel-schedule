@@ -11,6 +11,7 @@ import { bumpScheduleRevision } from "@/lib/schedule-revision";
 import { notifyTeamsScheduleChanged } from "@/lib/web-push";
 import { deleteTrainingScope, previewSeries, saveTrainingSeries } from "@/lib/training-series";
 import { requireAdmin } from "@/lib/auth";
+import { canScheduleTrainings, TRAINING_SCHEDULE_DENIED } from "@/lib/roles";
 import { formatDateHe, logChange } from "@/lib/history";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -24,6 +25,18 @@ function boardPath(date: string, extra?: Record<string, string | undefined>) {
   return `/admin/pitches?${params.toString()}`;
 }
 
+async function requireTrainingEditor(date: string) {
+  const user = await requireAdmin();
+  if (!canScheduleTrainings(user.role)) {
+    redirect(
+      DATE_RE.test(date)
+        ? boardPath(date, { error: TRAINING_SCHEDULE_DENIED })
+        : `/admin/pitches?error=${encodeURIComponent(TRAINING_SCHEDULE_DENIED)}`,
+    );
+  }
+  return user;
+}
+
 async function refresh() {
   await bumpScheduleRevision();
   revalidatePath("/");
@@ -34,7 +47,7 @@ async function refresh() {
 
 /** Create or update a training booking from the board form. */
 export async function saveBoardBooking(formData: FormData) {
-  await requireAdmin();
+  await requireTrainingEditor(String(formData.get("date") ?? ""));
   const date = String(formData.get("date") ?? "");
   const idRaw = String(formData.get("id") ?? "").trim();
   const teamId = Number(formData.get("teamId"));
@@ -248,7 +261,7 @@ export async function previewBoardSeries(input: {
   startTime: string;
   durationMinutes: number;
 }) {
-  await requireAdmin();
+  await requireTrainingEditor("");
   const startTime = roundToQuarterHour(input.startTime);
   return previewSeries({
     dates: input.dates.filter((date) => DATE_RE.test(date)),
@@ -261,7 +274,7 @@ export async function previewBoardSeries(input: {
 }
 
 export async function deleteBoardBooking(formData: FormData) {
-  await requireAdmin();
+  await requireTrainingEditor(String(formData.get("date") ?? ""));
   const date = String(formData.get("date") ?? "");
   const id = Number(formData.get("id"));
   const scopeRaw = String(formData.get("scope") ?? "one");
