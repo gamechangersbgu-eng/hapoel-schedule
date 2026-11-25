@@ -18,7 +18,11 @@ export function timeLabel(slot: SlotDTO): string | null {
 /** What the slot is, in words: pitch name for trainings, otherwise the type label. */
 export function kindLabel(slot: SlotDTO): string {
   const style = getSlotType(slot.type);
-  if (isPitchSlot(slot.type)) return `אימון · ${style.label}${slot.place ? ` · ${slot.place}` : ""}`;
+  if (isPitchSlot(slot.type)) {
+    const what = slot.sessionKind === "tournament" ? "טורניר/ליגה" : "אימון";
+    return `${what} · ${style.label}${slot.place ? ` · ${slot.place}` : ""}`;
+  }
+  if (slot.sessionKind === "tournament") return "טורניר/ליגה";
   return style.label;
 }
 
@@ -41,7 +45,17 @@ export function campCovers(slot: SlotDTO, date: string) {
   return slot.date <= date && end >= date;
 }
 
-/** Everything a team has on one day, camps first, then by start time. */
+/** Days off sit under every other entry. Camps stay first, then the clock. */
+export function compareDaySlots(a: SlotDTO, b: SlotDTO) {
+  const rank = (slot: SlotDTO) => (slot.type === "off" ? 2 : isCampSlot(slot.type) ? 0 : 1);
+  return (
+    rank(a) - rank(b) ||
+    (a.startTime ?? "").localeCompare(b.startTime ?? "") ||
+    a.id - b.id
+  );
+}
+
+/** Everything a team has on one day, camps first, days off last, then by start time. */
 export function slotsForDay(slots: SlotDTO[], teamId: number, date: string) {
   return slots
     .filter(
@@ -49,12 +63,22 @@ export function slotsForDay(slots: SlotDTO[], teamId: number, date: string) {
         slot.teamId === teamId &&
         (isCampSlot(slot.type) ? campCovers(slot, date) : slot.date === date),
     )
-    .sort(
-      (a, b) =>
-        Number(isCampSlot(b.type)) - Number(isCampSlot(a.type)) ||
-        (a.startTime ?? "").localeCompare(b.startTime ?? "") ||
-        a.id - b.id,
-    );
+    .sort(compareDaySlots);
+}
+
+/** Pitch chips on the phone. "all" keeps every entry. */
+export const MOBILE_PITCH_FILTERS = [
+  { id: "all", label: "כל המגרשים" },
+  { id: "vasermil_1", label: "וסרמיל 1" },
+  { id: "vasermil_2", label: "וסרמיל 2" },
+  { id: "vasermil_3", label: "וסרמיל 3" },
+  { id: "vasermil_4", label: "וסרמיל 4" },
+  { id: "other", label: "אחר" },
+] as const;
+
+export function slotMatchesPitch(slot: SlotDTO, pitchId: string) {
+  if (pitchId === "all") return true;
+  return slot.type === pitchId;
 }
 
 export function regularTeams(teams: TeamDTO[]) {

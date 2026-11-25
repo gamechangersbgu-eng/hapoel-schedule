@@ -10,9 +10,12 @@ import { useRouter } from "next/navigation";
 import { type TouchEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   HEBREW_DAY_NAMES,
+  MOBILE_PITCH_FILTERS,
+  compareDaySlots,
   kindLabel,
   practiceGameDetail,
   regularTeams,
+  slotMatchesPitch,
   slotsForDay,
   timeLabel,
   todayISO,
@@ -34,19 +37,18 @@ import {
   addDaysISO,
   currentWeekStart,
   formatDayMonth,
+  formatISODate,
   formatWeekRange,
+  parseISODate,
+  sundayOf,
 } from "@/lib/week";
 
-/** All items of the chosen teams on a day, by time (camps first). */
-function slotsForTeams(slots: SlotDTO[], teamIds: number[], date: string) {
+/** All items of the chosen teams on a day. Days off are last. */
+function slotsForTeams(slots: SlotDTO[], teamIds: number[], date: string, pitchId = "all") {
   return teamIds
     .flatMap((id) => slotsForDay(slots, id, date))
-    .sort(
-      (a, b) =>
-        Number(isCampSlot(b.type)) - Number(isCampSlot(a.type)) ||
-        (a.startTime ?? "").localeCompare(b.startTime ?? "") ||
-        a.id - b.id,
-    );
+    .filter((slot) => slotMatchesPitch(slot, pitchId))
+    .sort(compareDaySlots);
 }
 
 /** Team names to show on cards; null when only one team is shown (no need to repeat it). */
@@ -71,24 +73,6 @@ function countdown(slot: SlotDTO, now: Date): string | null {
   return hours === 1 ? "בעוד שעה" : hours === 2 ? "בעוד שעתיים" : `בעוד ${hours} שעות`;
 }
 
-function GameBadge({ type }: { type: string }) {
-  if (type === "home_game") {
-    return (
-      <span className="rounded-full bg-[#c8102e] px-2 py-0.5 text-xs font-bold text-white">
-        משחק בית
-      </span>
-    );
-  }
-  if (type === "away_game") {
-    return (
-      <span className="rounded-full bg-[#0277bd] px-2 py-0.5 text-xs font-bold text-white">
-        משחק חוץ
-      </span>
-    );
-  }
-  return null;
-}
-
 /** Spoken description for screen readers, e.g. "אימון · וסרמיל 1, 17:30". */
 function spoken(slot: SlotDTO) {
   return [kindLabel(slot), timeLabel(slot), practiceGameDetail(slot), slot.note].filter(Boolean).join(", ");
@@ -108,32 +92,25 @@ function SlotCard({ slot, teamLabel }: { slot: SlotDTO; teamLabel?: string }) {
         cancelled ? "bg-zinc-100 ring-zinc-300 dark:bg-zinc-800 dark:ring-white/10" : "bg-white ring-black/5 dark:bg-zinc-900 dark:ring-white/10"
       }`}
     >
-      <span aria-hidden className="w-1.5 shrink-0" style={{ background: cancelled ? "#a1a1aa" : style.bg }} />
-      <div aria-hidden className="flex min-w-0 flex-1 items-center gap-3 px-3 py-3">
-        <span
-          dir="ltr"
-          className={`w-[4.5rem] shrink-0 text-right text-lg font-black tabular-nums text-[#1a1214] dark:text-white ${
-            cancelled ? "text-zinc-500 line-through" : ""
-          }`}
-        >
-          {time ?? "—"}
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            {teamLabel ? (
-              <span className="rounded-md bg-[#5c0814] px-2 py-0.5 text-sm font-black text-white dark:bg-[#f4e6e8] dark:text-[#5c0814]">
-                {teamLabel}
-              </span>
-            ) : null}
-            {cancelled ? (
-              <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-xs font-black text-white">בוטל</span>
-            ) : null}
-            {isGame ? (
-              <GameBadge type={slot.type} />
-            ) : (
-              <span className="text-base font-bold leading-snug dark:text-white">{kindLabel(slot)}</span>
-            )}
-          </div>
+      <span aria-hidden className="w-1.5 shrink-0 self-stretch" style={{ background: cancelled ? "#a1a1aa" : style.bg }} />
+      <div aria-hidden className="flex min-w-0 flex-1 flex-col gap-1 px-3 py-2.5">
+        <div className="flex min-w-0 items-center gap-2">
+          <span
+            dir="ltr"
+            className={`w-[7.75rem] shrink-0 text-left text-base font-black tabular-nums text-[#1a1214] dark:text-white ${
+              cancelled ? "text-zinc-500 line-through" : ""
+            }`}
+          >
+            {time ?? "—"}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-base font-black text-[#5c0814] dark:text-white">
+            {teamLabel ?? ""}
+          </span>
+        </div>
+        <div className="min-w-0 ps-[8.25rem]">
+          <p className="truncate text-base font-bold leading-snug dark:text-white">
+            {cancelled ? "בוטל" : isGame ? (slot.type === "home_game" ? "משחק בית" : "משחק חוץ") : kindLabel(slot)}
+          </p>
           {practiceGameDetail(slot) ? (
             <p className="mt-0.5 text-[15px] font-semibold leading-snug text-zinc-700 dark:text-zinc-200">
               {practiceGameDetail(slot)}
@@ -481,7 +458,7 @@ function TeamPicker({
   );
 }
 
-export function TeamWeek({ data }: { data: WeekData }) {
+export function TeamWeek({ data, focusDay }: { data: WeekData; focusDay?: string }) {
   const router = useRouter();
   const teams = useMemo(() => regularTeams(data.teams), [data.teams]);
   const commentsTeam = data.teams.find((team) => team.isComments);
@@ -493,6 +470,8 @@ export function TeamWeek({ data }: { data: WeekData }) {
   const [focus, setFocus] = useState<number | null>(null);
   const [picking, setPicking] = useState(false);
   const [showPast, setShowPast] = useState(false);
+  const [pitchId, setPitchId] = useState("all");
+  const [selectedDay, setSelectedDay] = useState<string | null>(focusDay ?? null);
   const [now, setNow] = useState<Date | null>(null);
   const touch = useRef<{ x: number; y: number } | null>(null);
 
@@ -553,7 +532,7 @@ export function TeamWeek({ data }: { data: WeekData }) {
   const anyAlert = alertingTeamIds(mine.map((item) => item.id), alertPrefs).length > 0;
   const shown = focus && mine.some((item) => item.id === focus) ? mine.filter((item) => item.id === focus) : mine;
   const shownIds = shown.map((item) => item.id);
-  const labels: TeamLabels = shown.length > 1 ? Object.fromEntries(shown.map((item) => [item.id, item.name])) : null;
+  const labels: TeamLabels = Object.fromEntries(shown.map((item) => [item.id, item.name]));
 
   const prevWeek = addDaysISO(data.weekStart, -7);
   const nextWeek = addDaysISO(data.weekStart, 7);
@@ -578,9 +557,24 @@ export function TeamWeek({ data }: { data: WeekData }) {
   const days: Day[] = data.dates.map((date, index) => ({
     date,
     index,
-    items: slotsForTeams(data.slots, shownIds, date),
-    notes: commentsTeam ? slotsForDay(data.slots, commentsTeam.id, date) : [],
+    items: slotsForTeams(data.slots, shownIds, date, pitchId),
+    notes: pitchId === "all" && commentsTeam ? slotsForDay(data.slots, commentsTeam.id, date) : [],
   }));
+  const activeDay = data.dates.includes(selectedDay ?? "") ? (selectedDay as string) : data.dates.includes(today) ? today : data.dates[0];
+  function moveDay(delta: number) {
+    const index = data.dates.indexOf(activeDay);
+    const nextIndex = index + delta;
+    if (nextIndex >= 0 && nextIndex < data.dates.length) {
+      const next = data.dates[nextIndex];
+      setSelectedDay(next);
+      if (next < today) setShowPast(true);
+      window.setTimeout(() => document.getElementById(`day-${next}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+      return;
+    }
+    const target = addDaysISO(activeDay, delta);
+    const week = formatISODate(sundayOf(parseISODate(target)));
+    router.push(`/?week=${week}&day=${target}`);
+  }
   const todayDay = isThisWeek ? days.find((day) => day.date === today) : undefined;
   const past = isThisWeek ? days.filter((day) => day.date < today) : [];
   const upcoming = isThisWeek ? days.filter((day) => day.date > today) : days;
@@ -611,6 +605,48 @@ export function TeamWeek({ data }: { data: WeekData }) {
         </p>
       </div>
       <PushNotices blocked={pushBlocked} iosHint={iosHint} />
+
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+        <button
+          type="button"
+          onClick={() => moveDay(-1)}
+          className="min-h-11 rounded-xl bg-[#f4e6e8] px-2 text-sm font-black text-[#5c0814] dark:bg-zinc-800 dark:text-white"
+        >
+          → יום קודם
+        </button>
+        <p className="text-center text-sm font-black text-[#5c0814] dark:text-white">
+          יום {HEBREW_DAY_NAMES[data.dates.indexOf(activeDay)]}
+          <span className="block text-xs font-semibold text-zinc-500">{formatDayMonth(activeDay)}</span>
+        </p>
+        <button
+          type="button"
+          onClick={() => moveDay(1)}
+          className="min-h-11 rounded-xl bg-[#f4e6e8] px-2 text-sm font-black text-[#5c0814] dark:bg-zinc-800 dark:text-white"
+        >
+          יום הבא ←
+        </button>
+      </div>
+
+      <div className="-mx-3 flex gap-2 overflow-x-auto px-3 pb-1 [scrollbar-width:none]" role="group" aria-label="סינון לפי מגרש">
+        {MOBILE_PITCH_FILTERS.map((item) => {
+          const on = pitchId === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setPitchId(item.id)}
+              aria-pressed={on}
+              className={`min-h-10 shrink-0 rounded-full px-3 text-sm font-bold whitespace-nowrap ring-1 ${
+                on
+                  ? "bg-[#c8102e] text-white ring-[#c8102e]"
+                  : "bg-white text-[#5c0814] ring-[#d7b4b8] dark:bg-zinc-900 dark:text-white dark:ring-white/15"
+              }`}
+            >
+              {item.label}
+            </button>
+          );
+        })}
+      </div>
 
       {mine.length > 1 ? (
         <div className="-mx-3 flex gap-2 overflow-x-auto px-3 pb-1 [scrollbar-width:none]" role="group" aria-label="הצגה לפי קבוצה">

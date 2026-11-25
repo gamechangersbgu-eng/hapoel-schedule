@@ -30,7 +30,7 @@ import {
 
 export * from "@/lib/pitch-rules";
 import { getCoaches } from "@/lib/coaches-db";
-import { applyCoachLabels, coachFullNameByTeam } from "@/lib/team-labels";
+import { applyCoachLabels, coachFullNameByTeam, sortTeamsByAge } from "@/lib/team-labels";
 
 type PitchCatalog = Omit<PitchDay, "date" | "bookings">;
 type LoadedCatalog = { catalog: PitchCatalog; teamName: Record<number, string> };
@@ -54,7 +54,7 @@ async function loadCatalog(): Promise<LoadedCatalog> {
   }
 
   const fieldCoaches = coaches.filter((coach) => !coach.receivesAllUpdates);
-  const labeledTeams = applyCoachLabels(
+  const labeledTeams = sortTeamsByAge(applyCoachLabels(
     teamRows,
     coachFullNameByTeam(
       fieldCoaches.flatMap((coach) =>
@@ -67,7 +67,7 @@ async function loadCatalog(): Promise<LoadedCatalog> {
       ),
       fieldCoaches.map((coach) => ({ id: coach.id, name: coach.name })),
     ),
-  );
+  ));
   const labeledById = new Map(labeledTeams.map((team) => [team.id, team]));
   const storedName = new Map(teamRows.map((team) => [team.id, team.name]));
 
@@ -154,6 +154,7 @@ async function loadBookings(
         statusNote: slot.statusNote,
         substituteStaffId: slot.substituteStaffId,
         seriesId: slot.seriesId,
+        sessionKind: null,
       });
       continue;
     }
@@ -178,6 +179,7 @@ async function loadBookings(
       statusNote: slot.statusNote,
       substituteStaffId: slot.substituteStaffId,
       seriesId: slot.seriesId,
+      sessionKind: training?.sessionKind === "tournament" ? "tournament" : "training",
     });
   }
   return byDate;

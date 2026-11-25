@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { copyPreviousWeekForm } from "@/app/actions";
+import { TRAINING_SCHEDULE_DENIED } from "@/lib/roles";
 import { Legend } from "@/components/Legend";
 import { TeamFilter } from "@/components/TeamFilter";
 import { TeamWeek } from "@/components/TeamWeek";
@@ -14,12 +15,18 @@ type ScheduleViewProps = {
   data: WeekData;
   editable?: boolean;
   message?: string;
+  /** Copy-week rewrites trainings. Only the head manager. */
+  canScheduleTrainings?: boolean;
+  /** Phone view opens on this day when it belongs to the loaded week. */
+  focusDay?: string;
 };
 
 export function ScheduleView({
   data,
   editable = false,
   message,
+  canScheduleTrainings = false,
+  focusDay,
 }: ScheduleViewProps) {
   const scope = editable ? "admin" : "public";
   /** null = all teams. Remembered in this browser (shared with the phone view on the public page). */
@@ -54,7 +61,7 @@ export function ScheduleView({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {editable ? (
+          {editable && canScheduleTrainings ? (
             <>
               <form action={copyPreviousWeekForm}>
                 <input type="hidden" name="week" value={data.weekStart} />
@@ -87,8 +94,9 @@ export function ScheduleView({
 
       {editable ? (
         <p className="no-print rounded-md bg-white px-3 py-2 text-sm font-medium text-[#8e0b20] shadow-sm">
-          מצב עריכה — לחצו על תא כדי להוסיף או לשנות אימון. השינוי יופיע מיד בקישור
-          הציבורי.
+          {canScheduleTrainings
+            ? "מצב עריכה — לחצו על תא כדי להוסיף או לשנות אימון. השינוי יופיע מיד בקישור הציבורי."
+            : `מצב עריכה — ${TRAINING_SCHEDULE_DENIED}. משחקים, חופש ושאר מסכי הניהול נשארים פתוחים.`}
         </p>
       ) : null}
 
@@ -107,7 +115,7 @@ export function ScheduleView({
 
       {editable ? null : (
         <div className="md:hidden print:hidden">
-          <TeamWeek data={data} />
+          <TeamWeek data={data} focusDay={focusDay} />
         </div>
       )}
 

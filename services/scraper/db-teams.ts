@@ -7,6 +7,9 @@
  * טרום ג the public schedule shows "<group> <coach given name>" (ילדים א coached by
  * רמי is "ילדים א רמי"). `CALENDAR_ROW_ALIASES` accepts that label when it was stored
  * as the row name. נוער, נערים, ילדות, בית ספר, מ.קייץ and הערות keep their stored names.
+ *
+ * ילדים ב/ג נועם, חגי, ניצן and סטיב are also locked in `ifa_team_locks`. A lock wins
+ * over this map, so a later import cannot put those games back on the other squad.
  */
 export const DB_TEAM_BY_IFA_TEAM: Record<number, string | null> = {
   // נוער — הפ' ב"ש השלושה, ליגת העל לנוער

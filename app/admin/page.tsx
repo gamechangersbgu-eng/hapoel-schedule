@@ -10,6 +10,7 @@ import { getScheduleRevision } from "@/lib/schedule-revision";
 import { AdminNav } from "@/components/AdminNav";
 import { AdminUserMenu } from "@/components/AdminUserMenu";
 import { requireAdmin } from "@/lib/auth";
+import { canScheduleTrainings } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
@@ -71,7 +72,12 @@ export default async function AdminPage({ searchParams }: AdminProps) {
         <AdminUserMenu user={user} />
       </AppHeader>
       <AdminNav current="/admin" />
-      <ScheduleView data={data} editable message={message} />
+      <ScheduleView
+        data={data}
+        editable
+        canScheduleTrainings={canScheduleTrainings(user.role)}
+        message={message}
+      />
       {selectedTeam && selectedDate ? (
         <EditSlotForm
           key={`${selectedTeam.id}-${selectedDate}-${slotId ?? "new"}`}
@@ -83,6 +89,7 @@ export default async function AdminPage({ searchParams }: AdminProps) {
           error={params.error}
           rotations={rotations}
           opponentNames={opponents.map((club) => club.name)}
+          canScheduleTrainings={canScheduleTrainings(user.role)}
         />
       ) : null}
     </div>

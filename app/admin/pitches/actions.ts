@@ -4,13 +4,15 @@ import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { ensureTrainingDuration, resolveRotationTemplateId } from "@/db/reference-seed";
-import { db, pitches, slotTrainingDetails, slots } from "@/lib/db";
-import { OFFICIAL_DURATION_ERROR_HE, checkBooking, durationAllowedForSave, durationBetween, getPitchDay, roundToQuarterHour, toMinutes, toTime } from "@/lib/pitch-board";
+import { db, pitches, slotTrainingDetails, slots, teams } from "@/lib/db";
+import { OFFICIAL_DURATION_ERROR_HE, checkBooking, durationAllowedForAcademy, durationAllowedForSave, durationBetween, getPitchDay, roundToQuarterHour, toMinutes, toTime } from "@/lib/pitch-board";
+import { isFootballSchoolTeam } from "@/lib/team-labels";
 import { parseSeriesChoices, readSeriesInterval } from "@/lib/recurrence";
 import { bumpScheduleRevision } from "@/lib/schedule-revision";
 import { notifyTeamsScheduleChanged } from "@/lib/web-push";
 import { deleteTrainingScope, previewSeries, saveTrainingSeries } from "@/lib/training-series";
 import { requireAdmin } from "@/lib/auth";
+import { canScheduleTrainings, TRAINING_SCHEDULE_DENIED } from "@/lib/roles";
 import { formatDateHe, logChange } from "@/lib/history";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -24,6 +26,18 @@ function boardPath(date: string, extra?: Record<string, string | undefined>) {
   return `/admin/pitches?${params.toString()}`;
 }
 
+async function requireTrainingEditor(date: string) {
+  const user = await requireAdmin();
+  if (!canScheduleTrainings(user.role)) {
+    redirect(
+      DATE_RE.test(date)
+        ? boardPath(date, { error: TRAINING_SCHEDULE_DENIED })
+        : `/admin/pitches?error=${encodeURIComponent(TRAINING_SCHEDULE_DENIED)}`,
+    );
+  }
+  return user;
+}
+
 async function refresh() {
   await bumpScheduleRevision();
   revalidatePath("/");
@@ -34,7 +48,7 @@ async function refresh() {
 
 /** Create or update a training booking from the board form. */
 export async function saveBoardBooking(formData: FormData) {
-  await requireAdmin();
+  await requireTrainingEditor(String(formData.get("date") ?? ""));
   const date = String(formData.get("date") ?? "");
   const idRaw = String(formData.get("id") ?? "").trim();
   const teamId = Number(formData.get("teamId"));
@@ -77,9 +91,17 @@ export async function saveBoardBooking(formData: FormData) {
         .where(eq(slotTrainingDetails.slotId, slotId))
         .limit(1)
     : [];
-  if (!durationAllowedForSave(durationMinutes, storedDuration?.durationMinutes)) {
-    back(OFFICIAL_DURATION_ERROR_HE);
-  }
+  const [teamRow] = await db
+    .select({ name: teams.name, ageBandCode: teams.ageBandCode })
+    .from(teams)
+    .where(eq(teams.id, teamId))
+    .limit(1);
+  const academy = isFootballSchoolTeam(teamRow);
+  const tournament = academy && String(formData.get("sessionKind") ?? "") === "tournament";
+  const durationOk = academy
+    ? durationAllowedForAcademy(durationMinutes, { tournament, previous: storedDuration?.durationMinutes })
+    : durationAllowedForSave(durationMinutes, storedDuration?.durationMinutes);
+  if (!durationOk) back(OFFICIAL_DURATION_ERROR_HE);
   if (!cancelled && String(formData.get("series") ?? "") === "1" && !idRaw) {
     await saveBoardSeries(formData, {
       date,
@@ -94,6 +116,7 @@ export async function saveBoardBooking(formData: FormData) {
       substituteStaffId,
       statusNote,
       back,
+      sessionKind: tournament ? "tournament" : "training",
     });
   }
 
@@ -106,6 +129,7 @@ export async function saveBoardBooking(formData: FormData) {
     start: toMinutes(startTime),
     durationMinutes,
     substituteStaffId,
+    openHours: tournament,
   });
   // A cancelled session no longer takes the pitch, so it never conflicts.
   if (problems.length && !cancelled) back(problems.join(" | "));
@@ -130,6 +154,7 @@ export async function saveBoardBooking(formData: FormData) {
     subdivisionCode,
     durationMinutes,
     rotationTemplateId,
+    sessionKind: tournament ? "tournament" : "training",
   };
 
   const team = day.teams.find((item) => item.id === teamId)!;
@@ -183,6 +208,7 @@ type SeriesContext = {
   substituteStaffId: number | null;
   statusNote: string | null;
   back: (error: string) => never;
+  sessionKind: "training" | "tournament";
 };
 
 async function saveBoardSeries(formData: FormData, ctx: SeriesContext): Promise<never> {
@@ -223,6 +249,7 @@ async function saveBoardSeries(formData: FormData, ctx: SeriesContext): Promise<
     status: ctx.cancelled ? "cancelled" : "active",
     statusNote: ctx.statusNote,
     substituteStaffId: ctx.substituteStaffId,
+    sessionKind: ctx.sessionKind,
   });
   if (result.error || result.created === 0) ctx.back(result.error || "לא נשמר אף מועד");
 
@@ -247,8 +274,9 @@ export async function previewBoardSeries(input: {
   subdivisionCode: string;
   startTime: string;
   durationMinutes: number;
+  openHours?: boolean;
 }) {
-  await requireAdmin();
+  await requireTrainingEditor("");
   const startTime = roundToQuarterHour(input.startTime);
   return previewSeries({
     dates: input.dates.filter((date) => DATE_RE.test(date)),
@@ -257,11 +285,12 @@ export async function previewBoardSeries(input: {
     subdivisionCode: input.subdivisionCode,
     startTime,
     durationMinutes: input.durationMinutes,
+    openHours: input.openHours === true,
   });
 }
 
 export async function deleteBoardBooking(formData: FormData) {
-  await requireAdmin();
+  await requireTrainingEditor(String(formData.get("date") ?? ""));
   const date = String(formData.get("date") ?? "");
   const id = Number(formData.get("id"));
   const scopeRaw = String(formData.get("scope") ?? "one");

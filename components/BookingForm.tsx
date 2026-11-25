@@ -16,6 +16,7 @@ import {
   clocksAfterEndChange,
   clocksAfterStartChange,
   fallbackRotations,
+  ACADEMY_DURATION,
   roundToQuarterHour,
   toMinutes,
   toTime,
@@ -30,7 +31,7 @@ import {
   type SeriesIntervalDays,
 } from "@/lib/recurrence";
 import { teamCoachSummary } from "@/lib/coaches";
-import { biweeklyRepeatAllowed } from "@/lib/team-labels";
+import { biweeklyRepeatAllowed, isFootballSchoolTeam } from "@/lib/team-labels";
 
 type Initial = {
   slotId?: number;
@@ -45,6 +46,7 @@ type Initial = {
   statusNote?: string | null;
   substituteStaffId?: number | null;
   seriesId?: number | null;
+  sessionKind?: "training" | "tournament" | null;
 };
 
 export function BookingForm({
@@ -71,6 +73,7 @@ export function BookingForm({
       : "",
   );
   const [rotationId, setRotationId] = useState<number | null>(initial.rotationTemplateId ?? null);
+  const [tournament, setTournament] = useState(initial.sessionKind === "tournament");
   const [status, setStatus] = useState<"active" | "cancelled" | "substitute">(
     initial.status === "cancelled" ? "cancelled" : initial.substituteStaffId ? "substitute" : "active",
   );
@@ -89,6 +92,8 @@ export function BookingForm({
   const seriesChoicesRef = useRef<HTMLInputElement>(null);
 
   const team = day.teams.find((item) => item.id === teamId);
+  const academy = isFootballSchoolTeam(team);
+  const openHours = academy && tournament;
   const allowBiweekly = biweeklyRepeatAllowed(team ? [team] : []);
   const interval = effectiveInterval(allowBiweekly, intervalDays);
   const allowed = team
@@ -108,11 +113,11 @@ export function BookingForm({
   }
 
   function applyEnd(value: string) {
-    applyClocks(clocksAfterEndChange({ startTime, endTime, duration }, value));
+    applyClocks(clocksAfterEndChange({ startTime, endTime, duration }, value, { free: openHours, academy }));
   }
 
   function applyDuration(minutes: number) {
-    applyClocks(clocksAfterDurationChange({ startTime, endTime, duration }, minutes));
+    applyClocks(clocksAfterDurationChange({ startTime, endTime, duration }, minutes, { academy }));
   }
 
   const occurrence = buildOccurrenceDates({
@@ -136,8 +141,9 @@ export function BookingForm({
       durationMinutes: duration,
       // The chosen substitute is checked again on save; here the form's last saved one is used.
       substituteStaffId: status === "substitute" ? (initial.substituteStaffId ?? null) : null,
+      openHours,
     });
-  }, [day, initial.slotId, initial.substituteStaffId, status, teamId, pitchId, subdivisionCode, startTime, duration]);
+  }, [day, initial.slotId, initial.substituteStaffId, status, teamId, pitchId, subdivisionCode, startTime, duration, openHours]);
   const problems = [...classified.hard, ...classified.conflicts.map((conflict) => conflict.summary)];
   const blocked = classified.hard.length > 0 || (classified.conflicts.length > 0 && !seriesOn);
 
@@ -168,6 +174,7 @@ export function BookingForm({
         subdivisionCode,
         startTime,
         durationMinutes: duration,
+        openHours,
       });
       if (!preview.some((item) => occurrenceDecision(item) !== "save")) {
         writeSeries(occurrence.dates, {});
@@ -238,6 +245,7 @@ export function BookingForm({
           <input type="hidden" name="subdivisionCode" value={subdivisionCode} />
           <input type="hidden" name="durationMinutes" value={duration > 0 ? duration : ""} />
           <input type="hidden" name="rotationTemplateId" value={rotationId != null && rotationId > 0 ? rotationId : ""} />
+          <input type="hidden" name="sessionKind" value={openHours ? "tournament" : "training"} />
 
           <label className="flex flex-col gap-1 text-sm font-bold">
             קבוצה
@@ -377,7 +385,29 @@ export function BookingForm({
             <p className="text-sm font-bold text-red-700">שעת הסיום חייבת להיות אחרי שעת ההתחלה</p>
           ) : null}
 
-          <DurationPicker value={duration} onChange={applyDuration} />
+          {academy ? (
+            <button
+              type="button"
+              aria-pressed={tournament}
+              onClick={() => setTournament((value) => !value)}
+              className={`rounded-lg px-3 py-2 text-sm font-bold ring-1 ${
+                tournament ? "bg-[#c8102e] text-white ring-[#c8102e]" : "bg-white text-zinc-800 ring-zinc-300"
+              }`}
+            >
+              טורניר/ליגה · שעות פתוחות
+            </button>
+          ) : null}
+          {openHours ? (
+            <p className="text-xs font-semibold text-zinc-500">
+              טורניר/ליגה: בחרו שעת התחלה ושעת סיום חופשיות, בלי משך קבוע.
+            </p>
+          ) : (
+            <DurationPicker
+              value={duration}
+              onChange={applyDuration}
+              extras={academy ? [ACADEMY_DURATION] : []}
+            />
+          )}
 
           {initial.slotId ? null : (
             <RecurrenceFields

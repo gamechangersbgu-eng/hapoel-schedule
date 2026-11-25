@@ -36,3 +36,26 @@ export function isPracticeGame(type: string) {
 export function isCampSlot(type: string) {
   return type === "camp";
 }
+
+/**
+ * A training on the weekly plan: a Vasermil session, an off-site session ("אחר"), or a camp.
+ * The comments row also uses "other" for a note; pass `commentsRow` so that note is not a training.
+ * League games, practice games, and a day off ("חופש") are not trainings.
+ */
+export function isTrainingScheduleType(type: string, options?: { commentsRow?: boolean }) {
+  if (options?.commentsRow) return false;
+  return isPitchSlot(type) || type === "other" || type === "camp";
+}
+
+/** Types a manager may pick. Without training permission, pitch / off-site / camp are omitted. */
+export function slotTypesForScheduler(canSchedule: boolean, commentsRow: boolean) {
+  if (canSchedule) return SLOT_TYPES;
+  return SLOT_TYPES.filter((item) => !isTrainingScheduleType(item.id, { commentsRow }));
+}
+
+/** New-cell default. Editing keeps the stored type. */
+export function defaultSlotType(canSchedule: boolean, commentsRow: boolean, editingType?: string) {
+  if (editingType) return editingType;
+  if (commentsRow) return "other";
+  return canSchedule ? "vasermil_1" : "off";
+}

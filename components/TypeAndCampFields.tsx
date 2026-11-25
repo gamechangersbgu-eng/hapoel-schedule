@@ -15,6 +15,8 @@ type TypeAndCampFieldsProps = {
   defaultEndDate?: string | null;
   weekOptions: string[];
   onTypeChange?: (type: string) => void;
+  /** Omit training types when this manager cannot schedule them. */
+  types?: readonly { id: string; label: string }[];
 };
 
 export function TypeAndCampFields({
@@ -27,6 +29,7 @@ export function TypeAndCampFields({
   defaultEndDate,
   weekOptions,
   onTypeChange,
+  types = SLOT_TYPES,
 }: TypeAndCampFieldsProps) {
   const [type, setType] = useState(defaultType);
   const pitchSelected = isPitchSlot(type);
@@ -46,7 +49,7 @@ export function TypeAndCampFields({
           }}
           className="mt-1 w-full rounded-md border border-zinc-300 p-2 font-medium"
         >
-          {SLOT_TYPES.map((item) => (
+          {types.map((item) => (
             <option key={item.id} value={item.id}>
               {item.label}
             </option>

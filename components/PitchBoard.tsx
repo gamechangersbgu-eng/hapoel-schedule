@@ -29,14 +29,17 @@ function PitchActions({
   locked,
   date,
   baseHref,
+  canEdit,
 }: {
   pitchId: number;
   locked: boolean;
   date: string;
   baseHref: string;
+  canEdit: boolean;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
+      {canEdit ? (
       <Link
         href={`${baseHref}&new=1&pitch=${pitchId}`}
         className={`rounded-md px-2.5 py-1 text-xs font-bold ${
@@ -46,6 +49,7 @@ function PitchActions({
       >
         + שיבוץ
       </Link>
+      ) : null}
       <form action={toggleReservedLock}>
         <input type="hidden" name="date" value={date} />
         <input type="hidden" name="pitchId" value={pitchId} />
@@ -87,11 +91,13 @@ function Block({
   color,
   href,
   boardStart,
+  canEdit,
 }: {
   booking: BoardBooking;
   color: { bg: string; fg: string };
   href: string;
   boardStart: number;
+  canEdit: boolean;
 }) {
   const [from, to] = SUBDIVISION_RANGE[booking.subdivisionCode] ?? [0, 12];
   const isGame = booking.kind === "home_game";
@@ -131,18 +137,21 @@ function Block({
   const label = `${cancelled ? "בוטל: " : ""}${booking.teamName}, ${toTime(booking.start)} עד ${toTime(booking.end)}, ${
     isGame ? "משחק בית" : SHORT_SUB[booking.subdivisionCode]
   }`;
-  return isGame ? (
-    <div className={className} style={style} aria-label={label} title="משחקים נערכים במסך הניהול הרגיל">
-      {body}
-    </div>
-  ) : (
+  if (isGame || !canEdit) {
+    return (
+      <div className={className} style={style} aria-label={label} title={isGame ? "משחקים נערכים במסך הניהול הרגיל" : undefined}>
+        {body}
+      </div>
+    );
+  }
+  return (
     <Link href={href} className={className} style={style} aria-label={`${label}. לחצו לעריכה`}>
       {body}
     </Link>
   );
 }
 
-function PitchList({ day, baseHref }: { day: PitchDay; baseHref: string }) {
+function PitchList({ day, baseHref, canEdit }: { day: PitchDay; baseHref: string; canEdit: boolean }) {
   return (
     <div className="flex flex-col gap-3 md:hidden">
       {day.pitches.map((pitch) => {
@@ -158,7 +167,7 @@ function PitchList({ day, baseHref }: { day: PitchDay; baseHref: string }) {
               <span className="shrink-0 text-xs font-semibold text-zinc-500">{SURFACE_HE[pitch.surfaceType]}</span>
             </header>
             <div className="flex items-center justify-between gap-2 px-3 py-2">
-              <PitchActions pitchId={pitch.id} locked={pitch.isReservedLock} date={day.date} baseHref={baseHref} />
+              <PitchActions pitchId={pitch.id} locked={pitch.isReservedLock} date={day.date} baseHref={baseHref} canEdit={canEdit} />
               <span className="text-xs font-bold text-zinc-500">
                 {bookings.length === 0 ? "פנוי" : `${bookings.length} שיבוצים`}
               </span>
@@ -188,8 +197,8 @@ function PitchList({ day, baseHref }: { day: PitchDay; baseHref: string }) {
                   );
                   return (
                     <li key={booking.slotId}>
-                      {isGame ? (
-                        <div className="bg-zinc-50" title="משחקים נערכים במסך הניהול הרגיל">
+                      {isGame || !canEdit ? (
+                        <div className="bg-zinc-50" title={isGame ? "משחקים נערכים במסך הניהול הרגיל" : undefined}>
                           {body}
                         </div>
                       ) : (
@@ -209,7 +218,15 @@ function PitchList({ day, baseHref }: { day: PitchDay; baseHref: string }) {
   );
 }
 
-export function PitchBoard({ day, baseHref }: { day: PitchDay; baseHref: string }) {
+export function PitchBoard({
+  day,
+  baseHref,
+  canEdit = true,
+}: {
+  day: PitchDay;
+  baseHref: string;
+  canEdit?: boolean;
+}) {
   const boardStart = boardStartFor(day);
   const boardEnd = boardEndFor(day);
   const y = (minutes: number) => yAt(boardStart, minutes);
@@ -219,7 +236,7 @@ export function PitchBoard({ day, baseHref }: { day: PitchDay; baseHref: string 
 
   return (
     <div className="flex flex-col gap-3">
-      <PitchList day={day} baseHref={baseHref} />
+      <PitchList day={day} baseHref={baseHref} canEdit={canEdit} />
       <div className="hidden overflow-x-auto rounded-xl bg-white shadow-sm ring-1 ring-black/10 md:block">
       <div className="grid min-w-[680px]" style={{ gridTemplateColumns: "3.25rem repeat(4, minmax(0, 1fr))" }}>
         {/* header row */}
@@ -241,7 +258,7 @@ export function PitchBoard({ day, baseHref }: { day: PitchDay; baseHref: string 
                 </span>
               </div>
               <div className="mt-1.5">
-                <PitchActions pitchId={pitch.id} locked={pitch.isReservedLock} date={day.date} baseHref={baseHref} />
+                <PitchActions pitchId={pitch.id} locked={pitch.isReservedLock} date={day.date} baseHref={baseHref} canEdit={canEdit} />
               </div>
               <div className="mt-1 flex justify-between text-[10px] font-semibold text-zinc-400">
                 <span>צפון</span>
@@ -293,7 +310,7 @@ export function PitchBoard({ day, baseHref }: { day: PitchDay; baseHref: string 
               {/* faint halfway line between north and south */}
               <div className="absolute inset-y-0 start-1/2 border-s border-dashed border-black/10" />
               {bookings.map((booking) => (
-                <Block key={booking.slotId} booking={booking} color={color} href={`${baseHref}&slot=${booking.slotId}`} boardStart={boardStart} />
+                <Block key={booking.slotId} booking={booking} color={color} href={`${baseHref}&slot=${booking.slotId}`} boardStart={boardStart} canEdit={canEdit} />
               ))}
             </div>
           );

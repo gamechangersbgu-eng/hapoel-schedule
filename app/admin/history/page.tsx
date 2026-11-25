@@ -4,6 +4,7 @@ import { asc, desc, eq } from "drizzle-orm";
 import { AdminShell } from "@/components/AdminShell";
 import { requireAdmin } from "@/lib/auth";
 import { db, scheduleChanges, teams as teamsTable } from "@/lib/db";
+import { sortTeamsByAge } from "@/lib/team-labels";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "היסטוריית שינויים · מצב מנהל" };
@@ -51,7 +52,7 @@ export default async function HistoryPage({ searchParams }: Props) {
           קבוצה
           <select name="team" defaultValue={teamId ?? ""} className="rounded-md border border-zinc-300 bg-white px-2.5 py-1.5 text-sm">
             <option value="">כל השינויים</option>
-            {teamRows.filter((row) => !row.isComments).map((row) => (
+            {sortTeamsByAge(teamRows.filter((row) => !row.isComments)).map((row) => (
               <option key={row.id} value={row.id}>{row.name}</option>
             ))}
           </select>

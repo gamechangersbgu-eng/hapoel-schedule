@@ -2,10 +2,11 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { and, eq, gte, isNull, lte, ne, notInArray } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, lte, ne, notInArray } from "drizzle-orm";
 import { ensureTrainingDuration, resolveRotationTemplateId } from "@/db/reference-seed";
 import { db, slotGameDetails, slotTrainingDetails, slots, teams } from "@/lib/db";
-import { DEFAULT_TRAINING_MINUTES, OFFICIAL_DURATION_ERROR_HE, coachClashes, durationAllowedForSave, durationBetween, roundToQuarterHour, toMinutes } from "@/lib/pitch-rules";
+import { DEFAULT_TRAINING_MINUTES, OFFICIAL_DURATION_ERROR_HE, coachClashes, durationAllowedForAcademy, durationAllowedForSave, durationBetween, roundToQuarterHour, toMinutes } from "@/lib/pitch-rules";
+import { isFootballSchoolTeam } from "@/lib/team-labels";
 import { getPitchDay } from "@/lib/pitch-board";
 import { parseSeriesChoices, readSeriesInterval } from "@/lib/recurrence";
 import { formatDateHe, logChange } from "@/lib/history";
@@ -14,7 +15,8 @@ import { notifyTeamsScheduleChanged } from "@/lib/web-push";
 import { getSlotsInWeek } from "@/lib/schedule";
 import { cityForOpponent } from "@/lib/opponent-cities";
 import { readPracticeText } from "@/lib/practice-game";
-import { getSlotType, isPitchSlot, isPracticeGame, SLOT_TYPES } from "@/lib/slot-types";
+import { getSlotType, isPitchSlot, isPracticeGame, isTrainingScheduleType, SLOT_TYPES } from "@/lib/slot-types";
+import { canScheduleTrainings, TRAINING_SCHEDULE_DENIED } from "@/lib/roles";
 import { GAME_DETAIL_SOURCES } from "@/shared/game";
 import { deleteTrainingScope, pitchByCode, previewSeries, saveTrainingSeries, teamName } from "@/lib/training-series";
 import { addDaysISO, weekDates } from "@/lib/week";
@@ -22,6 +24,25 @@ import { endSession, requireAdmin } from "@/lib/auth";
 
 const VALID_TYPES: Set<string> = new Set(SLOT_TYPES.map((item) => item.id));
 const GAME_TYPES = ["home_game", "away_game", "practice_game"];
+
+/** Null when this user may write the slot. A training (including one being turned into something else) needs the owner. */
+async function trainingDenied(
+  type: string,
+  teamId: number,
+  existing?: { type: string; teamId: number } | null,
+) {
+  const user = await requireAdmin();
+  if (canScheduleTrainings(user.role)) return null;
+  const ids = [...new Set([teamId, existing?.teamId].filter((id): id is number => typeof id === "number"))];
+  const rows = ids.length
+    ? await db.select({ id: teams.id, isComments: teams.isComments }).from(teams).where(inArray(teams.id, ids))
+    : [];
+  const comments = new Map(rows.map((row) => [row.id, row.isComments]));
+  const blocked =
+    isTrainingScheduleType(type, { commentsRow: comments.get(teamId) }) ||
+    (existing != null && isTrainingScheduleType(existing.type, { commentsRow: comments.get(existing.teamId) }));
+  return blocked ? TRAINING_SCHEDULE_DENIED : null;
+}
 
 async function refreshSchedule() {
   await bumpScheduleRevision();
@@ -44,10 +65,16 @@ export type SlotInput = {
   /** Practice game (משחק אימון). Ignored for every other type. */
   opponent?: string | null;
   medicName?: string | null;
+  /** Academy only. Anything else is stored as a normal training. */
+  sessionKind?: "training" | "tournament" | null;
 };
 
 export async function saveSlot(input: SlotInput) {
-  await requireAdmin();
+  const [existing] = input.id
+    ? await db.select({ type: slots.type, teamId: slots.teamId }).from(slots).where(eq(slots.id, input.id)).limit(1)
+    : [];
+  const denied = await trainingDenied(input.type, input.teamId, existing);
+  if (denied) return { error: denied };
   if (!VALID_TYPES.has(input.type)) {
     return { error: "סוג אימון לא חוקי" };
   }
@@ -137,12 +164,13 @@ export async function saveSlot(input: SlotInput) {
         ? input.durationMinutes
         : null;
     if (durationMinutes) await ensureTrainingDuration(db, durationMinutes);
+    const sessionKind = input.sessionKind === "tournament" ? "tournament" : "training";
     await db
       .insert(slotTrainingDetails)
-      .values({ slotId, rotationTemplateId, durationMinutes })
+      .values({ slotId, rotationTemplateId, durationMinutes, sessionKind })
       .onConflictDoUpdate({
         target: slotTrainingDetails.slotId,
-        set: { rotationTemplateId, durationMinutes },
+        set: { rotationTemplateId, durationMinutes, sessionKind },
       });
   }
   if (slotId && isPracticeGame(input.type)) {
@@ -212,7 +240,13 @@ export async function saveSlot(input: SlotInput) {
 }
 
 export async function deleteSlot(id: number) {
-  await requireAdmin();
+  const [existing] = await db.select().from(slots).where(eq(slots.id, id)).limit(1);
+  if (!existing) {
+    await requireAdmin();
+    return { ok: true as const };
+  }
+  const denied = await trainingDenied(existing.type, existing.teamId);
+  if (denied) return { error: denied };
   const [removed] = await db.delete(slots).where(eq(slots.id, id)).returning();
   if (removed) {
     await logChange({
@@ -260,7 +294,17 @@ export async function saveSlotForm(formData: FormData) {
         .limit(1)
     : [];
 
-  if (durationMinutes > 0 && !durationAllowedForSave(durationMinutes, storedDuration?.durationMinutes)) {
+  const [slotTeam] = await db
+    .select({ name: teams.name, ageBandCode: teams.ageBandCode })
+    .from(teams)
+    .where(eq(teams.id, teamId))
+    .limit(1);
+  const academy = isFootballSchoolTeam(slotTeam);
+  const tournament = academy && String(formData.get("sessionKind") ?? "") === "tournament";
+  const durationOk = academy
+    ? durationAllowedForAcademy(durationMinutes, { tournament, previous: storedDuration?.durationMinutes })
+    : durationAllowedForSave(durationMinutes, storedDuration?.durationMinutes);
+  if (durationMinutes > 0 && !durationOk) {
     redirect(
       adminWeekPath(week, {
         team: String(teamId),
@@ -303,6 +347,8 @@ export async function saveSlotForm(formData: FormData) {
     if (isPitchSlot(type) && !pitch) {
       redirect(adminWeekPath(week, { team: String(teamId), date, error: "המגרש לא נמצא" }));
     }
+    const denied = await trainingDenied(type, teamId);
+    if (denied) redirect(adminWeekPath(week, { team: String(teamId), date, error: denied }));
     const result = await saveTrainingSeries({
       anchor: date,
       dates,
@@ -321,6 +367,7 @@ export async function saveSlotForm(formData: FormData) {
       status: "active",
       statusNote: null,
       substituteStaffId: null,
+      sessionKind: tournament ? "tournament" : "training",
     });
     if (result.error || result.created === 0) {
       redirect(
@@ -356,6 +403,7 @@ export async function saveSlotForm(formData: FormData) {
     durationMinutes: durationMinutes > 0 ? durationMinutes : null,
     opponent: isPracticeGame(type) ? String(formData.get("opponent") ?? "") : null,
     medicName: isPracticeGame(type) ? String(formData.get("medicName") ?? "") : null,
+    sessionKind: tournament ? "tournament" : "training",
   });
 
   if (result && "error" in result && result.error) {
@@ -378,9 +426,20 @@ export async function deleteSlotForm(formData: FormData) {
   const scopeRaw = String(formData.get("scope") ?? "one");
   const scope = scopeRaw === "future" || scopeRaw === "series" ? scopeRaw : "one";
   if (scope === "one") {
-    await deleteSlot(id);
+    const result = await deleteSlot(id);
+    if (result && "error" in result && result.error) redirect(adminWeekPath(week, { error: result.error }));
   } else {
-    await requireAdmin();
+    const [existing] = await db
+      .select({ type: slots.type, teamId: slots.teamId })
+      .from(slots)
+      .where(eq(slots.id, id))
+      .limit(1);
+    if (existing) {
+      const denied = await trainingDenied(existing.type, existing.teamId);
+      if (denied) redirect(adminWeekPath(week, { error: denied }));
+    } else {
+      await requireAdmin();
+    }
     const result = await deleteTrainingScope(id, scope);
     if (result) {
       const count = result.removed.length;
@@ -404,7 +463,8 @@ export async function previewWeeklySeries(input: {
   startTime: string;
   durationMinutes: number;
 }) {
-  await requireAdmin();
+  const denied = await trainingDenied(input.type, input.teamId);
+  if (denied) return [];
   const startTime = roundToQuarterHour(input.startTime);
   const pitch = isPitchSlot(input.type) ? await pitchByCode(input.type) : null;
   return previewSeries({
@@ -427,7 +487,8 @@ export async function copyPreviousWeekForm(formData: FormData) {
 }
 
 export async function copyPreviousWeek(weekStart: string) {
-  await requireAdmin();
+  const user = await requireAdmin();
+  if (!canScheduleTrainings(user.role)) return { error: TRAINING_SCHEDULE_DENIED };
   const previousStart = addDaysISO(weekStart, -7);
   // Games are not copied or removed: they come from the IFA fixtures (or are entered one by one).
   const source = (await getSlotsInWeek(previousStart)).filter((slot) => !GAME_TYPES.includes(slot.type));

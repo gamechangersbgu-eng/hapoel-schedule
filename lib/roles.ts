@@ -38,6 +38,19 @@ export function hasApproverCapability(role: UserRole) {
   return (APPROVER_ROLES as readonly UserRole[]).includes(role);
 }
 
+/**
+ * Who may create, edit, or delete trainings (pitch sessions, off-site "אחר", camps).
+ * The owner role (מנהל ראשי) is the only scheduler. Change this list to grant it
+ * to another role. Do not hardcode a person's name.
+ */
+export const TRAINING_SCHEDULER_ROLES = ["owner"] as const satisfies readonly UserRole[];
+
+export const TRAINING_SCHEDULE_DENIED = "רק המנהל הראשי יכול לשבץ, לערוך או למחוק אימונים";
+
+export function canScheduleTrainings(role: UserRole) {
+  return (TRAINING_SCHEDULER_ROLES as readonly UserRole[]).includes(role);
+}
+
 /** Label for the fitness-coach flag on an admin user (not a separate login role). */
 export const FITNESS_COACH_LABEL = "מאמן כושר";
 

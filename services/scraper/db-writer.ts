@@ -1,5 +1,6 @@
 import { cities, db, teams } from "@/lib/db";
 import { upsertIfaGame } from "@/lib/ifa-game-upsert";
+import { loadIfaTeamLocks } from "@/lib/ifa-team-locks";
 import { bumpScheduleRevision } from "@/lib/schedule-revision";
 import type { GameWriter } from "./write";
 
@@ -14,6 +15,7 @@ export async function loadDatabase() {
   return {
     teamIds: new Map(teamRows.map((team) => [team.name, team.id])),
     cityNames: cityRows.map((city) => city.name),
+    locks: await loadIfaTeamLocks(),
     writer,
   };
 }

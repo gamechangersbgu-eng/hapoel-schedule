@@ -7,6 +7,7 @@ import { coachWarnings, dayWarnings, getPitchDay, toTime } from "@/lib/pitch-boa
 import { AdminNav } from "@/components/AdminNav";
 import { AdminUserMenu } from "@/components/AdminUserMenu";
 import { requireAdmin } from "@/lib/auth";
+import { canScheduleTrainings, TRAINING_SCHEDULE_DENIED } from "@/lib/roles";
 import { addDaysISO, formatDayMonth, formatISODate, weekDates } from "@/lib/week";
 
 export const dynamic = "force-dynamic";
@@ -37,6 +38,7 @@ function sundayOf(date: string) {
 
 export default async function PitchBoardPage({ searchParams }: Props) {
   const user = await requireAdmin();
+  const canEdit = canScheduleTrainings(user.role);
   const params = await searchParams;
   const today = formatISODate(new Date());
   const date = params.date && /^\d{4}-\d{2}-\d{2}$/.test(params.date) ? params.date : today;
@@ -48,7 +50,7 @@ export default async function PitchBoardPage({ searchParams }: Props) {
   const dateLabel = `יום ${HEBREW_DAY_NAMES[dayIndex]}, ${formatDayMonth(date)}`;
 
   const editing = params.slot ? day.bookings.find((item) => item.slotId === Number(params.slot)) : undefined;
-  const showForm = Boolean(params.new) || Boolean(editing);
+  const showForm = canEdit && (Boolean(params.new) || Boolean(editing));
   const num = (value?: string) => (value && Number(value) ? Number(value) : undefined);
 
   const trainings = day.bookings.filter((item) => item.kind === "training" && item.status !== "cancelled").length;
@@ -115,14 +117,23 @@ export default async function PitchBoardPage({ searchParams }: Props) {
             {dateLabel} · {trainings} אימונים{games ? ` · ${games} משחקי בית` : ""}
             {cancelledCount ? ` · ${cancelledCount} בוטלו` : ""}
           </p>
+          {canEdit ? (
           <Link
             href={`${baseHref}&new=1`}
             className="rounded-lg bg-[#c8102e] px-4 py-2 text-sm font-black text-white shadow-sm hover:bg-[#a50d26]"
           >
             + שיבוץ חדש
           </Link>
+          ) : (
+            <p className="text-sm font-bold text-[#8e0b20]">{TRAINING_SCHEDULE_DENIED}</p>
+          )}
         </div>
 
+        {params.error && !showForm ? (
+          <p role="alert" className="rounded-lg bg-amber-50 px-3 py-2 text-sm font-bold text-amber-950 ring-1 ring-amber-200">
+            {params.error}
+          </p>
+        ) : null}
         {params.saved ? (
           <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800 ring-1 ring-emerald-200">
             {params.skipped
@@ -136,10 +147,11 @@ export default async function PitchBoardPage({ searchParams }: Props) {
           </p>
         ))}
 
-        <PitchBoard day={day} baseHref={baseHref} />
+        <PitchBoard day={day} baseHref={baseHref} canEdit={canEdit} />
 
         <p className="pb-6 text-xs text-zinc-500">
-          לחיצה על אימון פותחת אותו לעריכה. משחקי בית מוצגים כחסימה של המגרש המלא לשעתיים מהשריקה.
+          {canEdit ? "לחיצה על אימון פותחת אותו לעריכה. " : ""}
+          משחקי בית מוצגים כחסימה של המגרש המלא לשעתיים מהשריקה. שריון מגרש נשאר פתוח לכל מנהל.
         </p>
       </main>
 
@@ -165,6 +177,7 @@ export default async function PitchBoardPage({ searchParams }: Props) {
                   statusNote: editing.statusNote,
                   substituteStaffId: editing.substituteStaffId,
                   seriesId: editing.seriesId,
+                  sessionKind: editing.sessionKind,
                 }
               : {
                   teamId: num(params.team),

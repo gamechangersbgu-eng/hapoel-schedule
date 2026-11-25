@@ -7,7 +7,17 @@ import { PracticeGameFields } from "@/components/PracticeGameFields";
 import { RecurrenceFields } from "@/components/RecurrenceFields";
 import { SeriesConflictReview } from "@/components/SeriesConflictReview";
 import { TypeAndCampFields } from "@/components/TypeAndCampFields";
-import { SLOT_TYPES, isCampSlot, isPracticeGame } from "@/lib/slot-types";
+import {
+  SLOT_TYPES,
+  defaultSlotType,
+  isCampSlot,
+  isPracticeGame,
+  isTrainingScheduleType,
+  slotTypesForScheduler,
+} from "@/lib/slot-types";
+import { TRAINING_SCHEDULE_DENIED } from "@/lib/roles";
+import { ACADEMY_DURATION } from "@/lib/pitch-rules";
+import { isFootballSchoolTeam } from "@/lib/team-labels";
 import {
   clocksAfterDurationChange,
   clocksAfterEndChange,
@@ -39,6 +49,8 @@ type EditSlotFormProps = {
   error?: string;
   rotations: BoardRotation[];
   opponentNames?: string[];
+  /** False for every manager except the head manager (owner). */
+  canScheduleTrainings?: boolean;
 };
 
 export function EditSlotForm({
@@ -50,6 +62,7 @@ export function EditSlotForm({
   error,
   rotations,
   opponentNames = [],
+  canScheduleTrainings = true,
 }: EditSlotFormProps) {
   const cellSlots = slots.filter((slot) => {
     if (slot.teamId !== team.id) return false;
@@ -73,7 +86,14 @@ export function EditSlotForm({
     durationBetween(roundToQuarterHour(editing?.startTime ?? ""), roundToQuarterHour(editing?.endTime ?? "")),
   );
   const [rotationId, setRotationId] = useState<number | null>(editing?.rotationTemplateId ?? null);
-  const [slotType, setSlotType] = useState(editing?.type ?? (team.isComments ? "other" : "vasermil_1"));
+  const [tournament, setTournament] = useState(editing?.sessionKind === "tournament");
+  const academy = isFootballSchoolTeam(team);
+  const openHours = academy && tournament;
+  const [slotType, setSlotType] = useState(defaultSlotType(canScheduleTrainings, team.isComments, editing?.type));
+  const typeChoices = slotTypesForScheduler(canScheduleTrainings, team.isComments);
+  const editingTraining = Boolean(
+    editing && isTrainingScheduleType(editing.type, { commentsRow: team.isComments }),
+  );
   const [repeat, setRepeat] = useState(false);
   const [intervalDays, setIntervalDays] = useState<SeriesIntervalDays>(7);
   const [weekdays, setWeekdays] = useState<number[]>([]);
@@ -164,11 +184,11 @@ export function EditSlotForm({
   }
 
   function applyEnd(value: string) {
-    applyClocks(clocksAfterEndChange({ startTime, endTime, duration }, value));
+    applyClocks(clocksAfterEndChange({ startTime, endTime, duration }, value, { free: openHours, academy }));
   }
 
   function applyDuration(minutes: number) {
-    applyClocks(clocksAfterDurationChange({ startTime, endTime, duration }, minutes));
+    applyClocks(clocksAfterDurationChange({ startTime, endTime, duration }, minutes, { academy }));
   }
 
   function pickRotationTime(id: number, time: string) {
@@ -200,6 +220,8 @@ export function EditSlotForm({
             <p className="text-xs font-bold text-zinc-500">אימונים קיימים</p>
             {cellSlots.map((slot) => {
               const style = SLOT_TYPES.find((item) => item.id === slot.type);
+              const canDelete =
+                canScheduleTrainings || !isTrainingScheduleType(slot.type, { commentsRow: team.isComments });
               return (
                 <div key={slot.id} className="flex items-stretch gap-1">
                   <a
@@ -213,16 +235,18 @@ export function EditSlotForm({
                     </span>
                     <span>{slot.startTime || slot.note || "עריכה"}</span>
                   </a>
-                  <form action={deleteSlotForm}>
-                    <input type="hidden" name="week" value={weekStart} />
-                    <input type="hidden" name="id" value={slot.id} />
-                    <button
-                      type="submit"
-                      className="h-full rounded-lg px-2 text-xs font-bold text-red-700 hover:bg-red-50"
-                    >
-                      מחק
-                    </button>
-                  </form>
+                  {canDelete ? (
+                    <form action={deleteSlotForm}>
+                      <input type="hidden" name="week" value={weekStart} />
+                      <input type="hidden" name="id" value={slot.id} />
+                      <button
+                        type="submit"
+                        className="h-full rounded-lg px-2 text-xs font-bold text-red-700 hover:bg-red-50"
+                      >
+                        מחק
+                      </button>
+                    </form>
+                  ) : null}
                 </div>
               );
             })}
@@ -231,12 +255,17 @@ export function EditSlotForm({
                 href={addHref}
                 className="block rounded-lg border border-dashed border-[#c8102e] py-2 text-center text-sm font-bold text-[#c8102e]"
               >
-                + הוסף אימון נוסף
+                {canScheduleTrainings ? "+ הוסף אימון נוסף" : "+ הוספת פריט נוסף"}
               </a>
             ) : null}
           </div>
         ) : null}
 
+        {editingTraining && !canScheduleTrainings ? (
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm font-bold text-amber-950 ring-1 ring-amber-200">
+            {TRAINING_SCHEDULE_DENIED}
+          </p>
+        ) : (
         <form ref={formRef} action={saveSlotForm} onSubmit={onSubmit} className="space-y-3">
           <input type="hidden" name="week" value={weekStart} />
           <input type="hidden" name="series" ref={seriesFlag} defaultValue="" />
@@ -250,10 +279,21 @@ export function EditSlotForm({
           {editing ? <input type="hidden" name="id" value={editing.id} /> : null}
 
           <p className="text-sm font-black text-[#8e0b20]">
-            {editing ? "עריכת אימון" : cellSlots.length > 0 ? "+ הוספת אימון נוסף ליום הזה" : "אימון חדש"}
+            {editing
+              ? canScheduleTrainings || !editingTraining
+                ? "עריכת אימון"
+                : "צפייה"
+              : cellSlots.length > 0
+                ? canScheduleTrainings
+                  ? "+ הוספת אימון נוסף ליום הזה"
+                  : "+ הוספת פריט נוסף ליום הזה"
+                : canScheduleTrainings
+                  ? "אימון חדש"
+                  : "פריט חדש"}
           </p>
 
           <input type="hidden" name="rotationTemplateId" value={rotationId != null && rotationId > 0 ? rotationId : ""} />
+          <input type="hidden" name="sessionKind" value={openHours ? "tournament" : "training"} />
           <input type="hidden" name="durationMinutes" value={duration > 0 ? duration : ""} />
 
           <fieldset className="flex flex-col gap-1.5">
@@ -293,7 +333,8 @@ export function EditSlotForm({
           </fieldset>
 
           <TypeAndCampFields
-            defaultType={editing?.type ?? (team.isComments ? "other" : "vasermil_1")}
+            types={typeChoices}
+            defaultType={defaultSlotType(canScheduleTrainings, team.isComments, editing?.type)}
             startTime={startTime}
             onStartTimeChange={applyStart}
             endTime={endTime}
@@ -312,7 +353,21 @@ export function EditSlotForm({
             />
           ) : null}
 
-          <DurationPicker value={duration} onChange={applyDuration} />
+          {academy ? (
+            <button
+              type="button"
+              aria-pressed={tournament}
+              onClick={() => setTournament((value) => !value)}
+              className={chip(tournament)}
+            >
+              טורניר/ליגה · שעות פתוחות
+            </button>
+          ) : null}
+          {openHours ? (
+            <p className="text-xs font-semibold text-zinc-500">טורניר/ליגה: בחרו שעת התחלה ושעת סיום חופשיות.</p>
+          ) : (
+            <DurationPicker value={duration} onChange={applyDuration} extras={academy ? [ACADEMY_DURATION] : []} />
+          )}
 
           {repeatable ? (
             <RecurrenceFields
@@ -380,7 +435,8 @@ export function EditSlotForm({
             </a>
           </div>
         </form>
-        {editing?.seriesId ? (
+        )}
+        {editing?.seriesId && canScheduleTrainings ? (
           <form
             action={deleteSlotForm}
             className="mt-3 flex flex-col gap-2 border-t border-zinc-200 pt-3"

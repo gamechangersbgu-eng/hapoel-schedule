@@ -37,8 +37,8 @@ async function main() {
 
   if (WRITE_TO_DATABASE) {
     const { loadDatabase } = await import("./db-writer");
-    const { teamIds, cityNames, writer } = await loadDatabase();
-    const plan = planWrites(output.games, teamIds, cityNames);
+    const { teamIds, cityNames, writer, locks } = await loadDatabase();
+    const plan = planWrites(output.games, teamIds, cityNames, locks);
     const written = await writeRows(plan.rows, writer);
     console.log(`${written} games written to the database, ${plan.skipped.length} skipped`);
     return;

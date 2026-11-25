@@ -129,7 +129,7 @@ export const DEMO_TWO_WEEK_SLOTS: DemoSlotSpec[] = [
 
   { teamName: "טרום ג אדום", dayOffset: 1, endDayOffset: 3, type: "camp", note: "מחנה אימון" },
 
-  { teamName: "בית ספר לכדורגל", dayOffset: 5, startTime: "09:00", type: "other", note: "אימון בית ספר" },
+  { teamName: "אקדמיה לכדורגל", dayOffset: 5, startTime: "09:00", type: "other", note: "אימון בית ספר" },
 
   // --- Week 2 (days 7–13) ---
   { teamName: "נוער", dayOffset: 7, startTime: "19:30", type: "vasermil_1" },
@@ -192,6 +192,6 @@ export const DEMO_TWO_WEEK_SLOTS: DemoSlotSpec[] = [
   { teamName: "טרום א אדום", dayOffset: 7, startTime: "17:00", type: "vasermil_3" },
   { teamName: "טרום ב אדום", dayOffset: 10, startTime: "16:00", type: "vasermil_1" },
 
-  { teamName: "בית ספר לכדורגל", dayOffset: 8, startTime: "16:30", type: "vasermil_2", note: "ימי א–ד בית ספר" },
-  { teamName: "בית ספר לכדורגל", dayOffset: 12, startTime: "17:00", type: "other", note: "ליגה פנימית" },
+  { teamName: "אקדמיה לכדורגל", dayOffset: 8, startTime: "16:30", type: "vasermil_2", note: "ימי א–ד בית ספר" },
+  { teamName: "אקדמיה לכדורגל", dayOffset: 12, startTime: "17:00", type: "other", note: "ליגה פנימית" },
 ];

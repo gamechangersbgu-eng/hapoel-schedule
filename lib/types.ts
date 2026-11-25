@@ -27,6 +27,8 @@ export type SlotDTO = {
   departureTime?: string | null;
   /** Practice game (משחק אימון): free-text medic. League games use the medic bank instead. */
   medicName?: string | null;
+  /** Academy טורניר/ליגה. Absent or "training" is a normal session. */
+  sessionKind?: "training" | "tournament" | null;
 };
 
 export type TeamDTO = {

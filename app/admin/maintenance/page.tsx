@@ -178,7 +178,7 @@ export default async function MaintenancePage({ searchParams }: { searchParams: 
     <AdminShell user={user} title="כיסוח וסימון מגרשים" current="/admin/maintenance">
       <p className="text-sm text-zinc-600">
         משימה נפתחת יומיים לפני משחק ליגה בבית על וסרמיל 2 ו־3, ופעם בשבוע לוסרמיל 2 בחלון בלי אימונים.
-        וסרמיל 1 (סינטטי) ווסרמיל 4 (בית הספר לכדורגל) לא דורשים כיסוח וסימון.
+        וסרמיל 1 (סינטטי) ווסרמיל 4 (אקדמיה לכדורגל) לא דורשים כיסוח וסימון.
         המגרש נלקח מהשיבוץ במסך המשחקים, ואם אין — משם המגרש שמגיע מההתאחדות.
       </p>
       {error ? (

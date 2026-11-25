@@ -6,6 +6,80 @@
 
 const COACH_LABELED_GROUPS = ["טרום ג", "טרום ב", "טרום א", "ילדים ג", "ילדים ב", "ילדים א"] as const;
 
+/** Shown everywhere instead of the stored בית ספר names. The row id and age-band code stay. */
+export const ACADEMY_DISPLAY_NAME = "אקדמיה לכדורגל";
+
+const ACADEMY_STORED_NAMES = new Set([
+  "אקדמיה לכדורגל",
+  "בית ספר לכדורגל",
+  "בית הספר לכדורגל",
+  "בית ספר",
+]);
+
+/** Oldest age group first. Unknown names sort after the known groups and before notes. */
+const AGE_GROUP_RANKS: { prefix: string; rank: number }[] = [
+  { prefix: "בוגרים", rank: 0 },
+  { prefix: "נוער", rank: 10 },
+  { prefix: "נערים א", rank: 20 },
+  { prefix: "נערים ב", rank: 21 },
+  { prefix: "נערים ג", rank: 22 },
+  { prefix: "נערים", rank: 23 },
+  { prefix: "ילדים א", rank: 30 },
+  { prefix: "ילדים ב", rank: 31 },
+  { prefix: "ילדים ג", rank: 32 },
+  { prefix: "ילדים", rank: 33 },
+  { prefix: "טרום א", rank: 40 },
+  { prefix: "טרום ב", rank: 41 },
+  { prefix: "טרום ג", rank: 42 },
+  { prefix: "טרום", rank: 43 },
+  { prefix: "ילדות א", rank: 50 },
+  { prefix: "ילדות ב", rank: 51 },
+  { prefix: "ילדות", rank: 52 },
+  { prefix: "טרומיות", rank: 53 },
+  { prefix: ACADEMY_DISPLAY_NAME, rank: 60 },
+  { prefix: "בית הספר לכדורגל", rank: 60 },
+  { prefix: "בית ספר לכדורגל", rank: 60 },
+  { prefix: "בית ספר", rank: 60 },
+  { prefix: "מ.קייץ", rank: 70 },
+];
+
+export function isAcademyName(name: string) {
+  return ACADEMY_STORED_NAMES.has(name.trim().replace(/\s+/g, " "));
+}
+
+/** Lower rank is older. Comments always come last. */
+export function ageGroupRank(name: string, isComments = false) {
+  if (isComments) return 100;
+  const normalized = name.trim().replace(/\s+/g, " ");
+  let best = 80;
+  let bestLength = 0;
+  for (const group of AGE_GROUP_RANKS) {
+    const matches = normalized === group.prefix || normalized.startsWith(`${group.prefix} `);
+    if (matches && group.prefix.length > bestLength) {
+      best = group.rank;
+      bestLength = group.prefix.length;
+    }
+  }
+  return best;
+}
+
+export function compareTeamsByAge<T extends { name: string; sortOrder?: number; id?: number; isComments?: boolean }>(
+  a: T,
+  b: T,
+) {
+  const rank = ageGroupRank(a.name, a.isComments) - ageGroupRank(b.name, b.isComments);
+  if (rank !== 0) return rank;
+  const order = (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+  if (order !== 0) return order;
+  return (a.id ?? 0) - (b.id ?? 0);
+}
+
+export function sortTeamsByAge<T extends { name: string; sortOrder?: number; id?: number; isComments?: boolean }>(
+  teams: T[],
+) {
+  return [...teams].sort(compareTeamsByAge);
+}
+
 export type CoachLink = {
   teamId: number;
   staffId: number | null;
@@ -32,6 +106,7 @@ export function coachGivenName(fullName: string) {
  * With no coach, the stored name is kept (including a name that already has one, like "ילדים א שחר").
  */
 export function teamDisplayName(teamName: string, coachFullName: string | null | undefined) {
+  if (isAcademyName(teamName)) return ACADEMY_DISPLAY_NAME;
   const group = coachLabeledAgeGroup(teamName);
   if (!group) return teamName;
   const given = coachFullName ? coachGivenName(coachFullName) : "";
@@ -78,7 +153,12 @@ export function coachFullNameByTeam(
  * "בית ספר" is the short name from the first teams migration, still mapped to this band.
  */
 const FOOTBALL_SCHOOL_AGE_BAND = "football_school";
-const FOOTBALL_SCHOOL_NAMES = new Set(["בית ספר לכדורגל", "בית הספר לכדורגל", "בית ספר"]);
+const FOOTBALL_SCHOOL_NAMES = new Set([
+  ACADEMY_DISPLAY_NAME,
+  "בית ספר לכדורגל",
+  "בית הספר לכדורגל",
+  "בית ספר",
+]);
 
 export type FootballSchoolIdentity = {
   name?: string | null;
