@@ -136,6 +136,8 @@ export type BoardBooking = {
   substituteStaffId: number | null;
   /** Recurring training this booking belongs to, when it was saved as part of a series. */
   seriesId: number | null;
+  /** Academy tournament uses open hours. Null on home games. */
+  sessionKind?: "training" | "tournament" | null;
 };
 
 export type BoardTeam = {
@@ -183,6 +185,13 @@ export const DURATION_PRESETS: { minutes: number; labelHe: string }[] = [
   { minutes: 120, labelHe: "שעתיים" },
 ];
 
+/** Extra length for the academy (אקדמיה לכדורגל) only. Not offered to the other teams. */
+export const ACADEMY_DURATION_MINUTES = 240;
+export const ACADEMY_DURATION = { minutes: ACADEMY_DURATION_MINUTES, labelHe: "4 שעות" };
+/** Academy tournament / internal league: any start and end, not a fixed length. */
+export const TOURNAMENT_SESSION = "tournament";
+export const TOURNAMENT_LABEL = "טורניר/ליגה";
+
 export const OFFICIAL_DURATION_ERROR_HE =
   "משך האימון יכול להיות רק שעה, שעה ורבע, שעה וחצי, שעה ו־45 דקות או שעתיים";
 
@@ -198,6 +207,19 @@ export function isOfficialDuration(minutes: number) {
 export function durationAllowedForSave(minutes: number, previous?: number | null) {
   if (isOfficialDuration(minutes)) return true;
   return previous != null && previous > 0 && previous === minutes;
+}
+
+/**
+ * Academy sessions may also last 4 hours. טורניר/ליגה may use any positive length up to 12 hours.
+ * Other teams stay on the club-wide list.
+ */
+export function durationAllowedForAcademy(
+  minutes: number,
+  options: { tournament: boolean; previous?: number | null },
+) {
+  if (options.tournament) return minutes > 0 && minutes <= 12 * 60;
+  if (minutes === ACADEMY_DURATION_MINUTES) return true;
+  return durationAllowedForSave(minutes, options.previous);
 }
 
 export type TrainingClocks = {
@@ -227,11 +249,18 @@ export function clocksAfterStartChange(current: TrainingClocks, start: string): 
   return { startTime, endTime: "", duration: 0 };
 }
 
-/** Accept an end clock only when it lands on one of the official lengths. */
-export function clocksAfterEndChange(current: TrainingClocks, end: string): TrainingClocks {
+/** Accept an end clock only when it lands on one of the official lengths. `free` keeps any later end. */
+export function clocksAfterEndChange(
+  current: TrainingClocks,
+  end: string,
+  options?: { free?: boolean; academy?: boolean },
+): TrainingClocks {
   const endTime = roundToQuarterHour(end);
   const minutes = durationBetween(current.startTime, endTime);
-  if (isOfficialDuration(minutes)) {
+  if (options?.free && minutes > 0 && minutes <= 12 * 60) {
+    return { startTime: current.startTime, endTime, duration: minutes };
+  }
+  if (isOfficialDuration(minutes) || (options?.academy === true && minutes === ACADEMY_DURATION_MINUTES)) {
     return { startTime: current.startTime, endTime, duration: minutes };
   }
   if (current.startTime && current.duration > 0) {
@@ -244,9 +273,14 @@ export function clocksAfterEndChange(current: TrainingClocks, end: string): Trai
   return current;
 }
 
-/** Apply one official length. Anything else, including the old custom menu, is ignored. */
-export function clocksAfterDurationChange(current: TrainingClocks, minutes: number): TrainingClocks {
-  if (!isOfficialDuration(minutes)) return current;
+/** Apply one official length, or 4 hours when the caller allows the academy length. */
+export function clocksAfterDurationChange(
+  current: TrainingClocks,
+  minutes: number,
+  options?: { academy?: boolean },
+): TrainingClocks {
+  const allowed = isOfficialDuration(minutes) || (options?.academy === true && minutes === ACADEMY_DURATION_MINUTES);
+  if (!allowed) return current;
   if (!current.startTime) return { ...current, duration: minutes };
   const endTime = endClockFor(current.startTime, minutes);
   if (!endTime) return current;
@@ -370,6 +404,8 @@ export type ProposedBooking = {
   durationMinutes: number;
   /** A substitute coach runs this session instead of the team's own coaches. */
   substituteStaffId?: number | null;
+  /** Academy טורניר/ליגה: the weekday window does not apply, and the length is free. */
+  openHours?: boolean;
 };
 
 export type BookingConflict = {
@@ -409,17 +445,17 @@ export function classifyBooking(
     hard.push(`${team.name} יכולה להתאמן רק ב: ${labels.join(", ")}.`);
   }
 
-  if (team.ageBandCode === "football_school") {
+  if (team.ageBandCode === "football_school" && !booking.openHours) {
     const weekday = weekdayOf(day.date);
     const windows = day.footballSchoolRules.filter((rule) => rule.weekdays.includes(weekday));
     const fits = windows.some((rule) => booking.start >= rule.start && end <= rule.end);
     if (!fits) {
       hard.push(
         windows.length
-          ? `בית ספר לכדורגל ביום ${WEEKDAY_HE[weekday]}: רק בין ${windows
+          ? `אקדמיה לכדורגל ביום ${WEEKDAY_HE[weekday]}: רק בין ${windows
               .map((rule) => `${toTime(rule.start)}–${toTime(rule.end)}`)
               .join(" או ")}.`
-          : `בית ספר לכדורגל לא פעיל ביום ${WEEKDAY_HE[weekday]}.`,
+          : `אקדמיה לכדורגל לא פעילה ביום ${WEEKDAY_HE[weekday]}.`,
       );
     }
   }

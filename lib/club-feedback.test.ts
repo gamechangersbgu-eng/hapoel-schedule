@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { israeliIdChecksumOk, nationalIdError, normalizeNationalId } from "./national-id";
 import {
+  ageGroupRank,
   applyCoachLabels,
   biweeklyRepeatAllowed,
+  compareTeamsByAge,
   coachFullNameByTeam,
   coachLabeledAgeGroup,
   isFootballSchoolTeam,
@@ -20,7 +22,9 @@ test("ילדים א through טרום ג are labeled by the coach's given name", 
   assert.equal(teamDisplayName("נוער", "דני כהן"), "נוער");
   assert.equal(teamDisplayName("נערים א", "דני"), "נערים א");
   assert.equal(teamDisplayName("ילדות א", "מיכל"), "ילדות א");
-  assert.equal(teamDisplayName("בית ספר לכדורגל", "רן"), "בית ספר לכדורגל");
+  assert.equal(teamDisplayName("בית ספר לכדורגל", "רן"), "אקדמיה לכדורגל");
+  assert.equal(teamDisplayName("בית ספר", null), "אקדמיה לכדורגל");
+  assert.equal(teamDisplayName("אקדמיה לכדורגל", null), "אקדמיה לכדורגל");
   assert.equal(coachLabeledAgeGroup("ילדות א"), null);
   assert.equal(coachLabeledAgeGroup("ילדים א"), "ילדים א");
 });
@@ -29,6 +33,7 @@ test("biweekly repeat is only for בית הספר לכדורגל, by age band or
   assert.equal(isFootballSchoolTeam({ ageBandCode: "football_school", name: "בית ספר לכדורגל" }), true);
   assert.equal(isFootballSchoolTeam({ name: "בית ספר" }), true);
   assert.equal(isFootballSchoolTeam({ name: "בית הספר לכדורגל" }), true);
+  assert.equal(isFootballSchoolTeam({ name: "אקדמיה לכדורגל" }), true);
   assert.equal(isFootballSchoolTeam({ name: "בית ספר לכדורגל", ageBandCode: null }), true);
   assert.equal(isFootballSchoolTeam({ ageBandCode: "football_school", name: "ילדים א שחר" }), true);
   assert.equal(isFootballSchoolTeam({ name: "נוער", ageBandCode: "noar_through_yeladim_b" }), false);
@@ -126,4 +131,21 @@ test("Israeli ID keeps leading zeros and checks the control digit", () => {
   assert.equal(nationalIdError("123456780"), "תעודת הזהות לא עברה בדיקת ספרת ביקורת");
   assert.equal(nationalIdError("12345678"), "תעודת זהות חייבת להיות 9 ספרות (אפשר אפסים מובילים)");
   assert.equal(nationalIdError("123456782"), null);
+});
+
+test("team pickers run from the oldest age group to the youngest", () => {
+  assert.ok(ageGroupRank("נוער") < ageGroupRank("נערים א"));
+  assert.ok(ageGroupRank("נערים ג") < ageGroupRank("ילדים א שחר"));
+  assert.ok(ageGroupRank("ילדים ב נועם") < ageGroupRank("ילדים ג ניצן"));
+  assert.ok(ageGroupRank("ילדים ג סטיב") < ageGroupRank("טרום א יותם"));
+  assert.ok(ageGroupRank("טרום ג צחי") < ageGroupRank("ילדות א"));
+  assert.ok(ageGroupRank("ילדות ב") < ageGroupRank("אקדמיה לכדורגל"));
+  assert.ok(ageGroupRank("אקדמיה לכדורגל") < ageGroupRank("מ.קייץ"));
+  assert.ok(ageGroupRank("מ.קייץ") < ageGroupRank("הערות", true));
+  const ordered = [
+    { id: 3, name: "טרום א", sortOrder: 9 },
+    { id: 1, name: "נוער", sortOrder: 0 },
+    { id: 2, name: "ילדים ב נועם", sortOrder: 5 },
+  ].sort(compareTeamsByAge);
+  assert.deepEqual(ordered.map((team) => team.name), ["נוער", "ילדים ב נועם", "טרום א"]);
 });

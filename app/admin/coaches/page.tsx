@@ -7,7 +7,7 @@ import { requireAdmin } from "@/lib/auth";
 import { ABSENCE_TYPES, WEEKDAY_LETTERS, absenceLabel, absenceOn } from "@/lib/coaches";
 import { getCoaches } from "@/lib/coaches-db";
 import { db, staff, teams as teamsTable } from "@/lib/db";
-import { applyCoachLabels, coachFullNameByTeam } from "@/lib/team-labels";
+import { applyCoachLabels, coachFullNameByTeam, sortTeamsByAge } from "@/lib/team-labels";
 import { MANAGEMENT_ROLES, isManagementRole } from "@/lib/update-recipients";
 import { formatDayMonth, formatISODate } from "@/lib/week";
 
@@ -37,7 +37,7 @@ export default async function CoachesPage({ searchParams }: Props) {
   const storedTeams = teamRows.filter((team) => !team.isComments);
   const fieldCoaches = coaches.filter((coach) => !coach.receivesAllUpdates);
   const management = coaches.filter((coach) => coach.receivesAllUpdates);
-  const teams = applyCoachLabels(
+  const teams = sortTeamsByAge(applyCoachLabels(
     storedTeams,
     coachFullNameByTeam(
       fieldCoaches.flatMap((coach) =>
@@ -50,7 +50,7 @@ export default async function CoachesPage({ searchParams }: Props) {
       ),
       fieldCoaches.map((coach) => ({ id: coach.id, name: coach.name })),
     ),
-  );
+  ));
   const today = formatISODate(new Date());
   const editing = params.edit ? fieldCoaches.find((coach) => coach.id === Number(params.edit)) : undefined;
   const showForm = Boolean(params.new) || Boolean(editing);

@@ -21,6 +21,7 @@ import {
 } from "@/lib/injuries";
 import { getInjuryDetail, listInjuries, listPlayers, type InjuryRow } from "@/lib/injuries-db";
 import { USER_ROLES, isManager } from "@/lib/roles";
+import { ageGroupRank } from "@/lib/team-labels";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "מעקב פצועים · מצב מנהל" };
@@ -134,7 +135,9 @@ async function AllInjuries({ user, params, today }: { user: CurrentAdmin; params
   const selected = selectedId ? allRows.find((row) => row.id === selectedId) : undefined;
   const detail = selected ? await getInjuryDetail(selected.id) : null;
 
-  const teams = [...new Map(players.map((p) => [p.teamId, p.teamName])).entries()];
+  const teams = [...new Map(players.map((p) => [p.teamId, p.teamName])).entries()].sort(
+    (a, b) => ageGroupRank(a[1]) - ageGroupRank(b[1]) || a[0] - b[0],
+  );
 
   return (
     <AdminShell user={user} title="מעקב פצועים" current="/admin/injuries">

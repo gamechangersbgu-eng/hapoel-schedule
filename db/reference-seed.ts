@@ -283,7 +283,7 @@ async function seedTeamAgeBandData(database: Db) {
     },
     {
       code: "football_school",
-      labelHe: "בית ספר לכדורגל",
+      labelHe: "אקדמיה לכדורגל",
       sortOrder: 2,
     },
     {
@@ -381,5 +381,8 @@ export const TEAM_AGE_BAND_BY_NAME: Record<string, string | null> = {
   "ילדות ב": "yeladot",
   "טרומיות": "yeladot",
   "בית ספר לכדורגל": "football_school",
+  "בית הספר לכדורגל": "football_school",
+  "בית ספר": "football_school",
+  "אקדמיה לכדורגל": "football_school",
   הערות: null,
 };

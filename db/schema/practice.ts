@@ -96,5 +96,7 @@ export const slotTrainingDetails = pgTable(
     rotationTemplateId: integer("rotation_template_id").references(
       () => rotationTemplates.id,
     ),
+    /** "training" or "tournament" (אקדמיה: טורניר/ליגה, free start and end). */
+    sessionKind: text("session_kind").notNull().default("training"),
   },
 );

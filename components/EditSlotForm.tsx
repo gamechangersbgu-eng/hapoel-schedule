@@ -16,6 +16,8 @@ import {
   slotTypesForScheduler,
 } from "@/lib/slot-types";
 import { TRAINING_SCHEDULE_DENIED } from "@/lib/roles";
+import { ACADEMY_DURATION } from "@/lib/pitch-rules";
+import { isFootballSchoolTeam } from "@/lib/team-labels";
 import {
   clocksAfterDurationChange,
   clocksAfterEndChange,
@@ -84,6 +86,9 @@ export function EditSlotForm({
     durationBetween(roundToQuarterHour(editing?.startTime ?? ""), roundToQuarterHour(editing?.endTime ?? "")),
   );
   const [rotationId, setRotationId] = useState<number | null>(editing?.rotationTemplateId ?? null);
+  const [tournament, setTournament] = useState(editing?.sessionKind === "tournament");
+  const academy = isFootballSchoolTeam(team);
+  const openHours = academy && tournament;
   const [slotType, setSlotType] = useState(defaultSlotType(canScheduleTrainings, team.isComments, editing?.type));
   const typeChoices = slotTypesForScheduler(canScheduleTrainings, team.isComments);
   const editingTraining = Boolean(
@@ -179,11 +184,11 @@ export function EditSlotForm({
   }
 
   function applyEnd(value: string) {
-    applyClocks(clocksAfterEndChange({ startTime, endTime, duration }, value));
+    applyClocks(clocksAfterEndChange({ startTime, endTime, duration }, value, { free: openHours, academy }));
   }
 
   function applyDuration(minutes: number) {
-    applyClocks(clocksAfterDurationChange({ startTime, endTime, duration }, minutes));
+    applyClocks(clocksAfterDurationChange({ startTime, endTime, duration }, minutes, { academy }));
   }
 
   function pickRotationTime(id: number, time: string) {
@@ -288,6 +293,7 @@ export function EditSlotForm({
           </p>
 
           <input type="hidden" name="rotationTemplateId" value={rotationId != null && rotationId > 0 ? rotationId : ""} />
+          <input type="hidden" name="sessionKind" value={openHours ? "tournament" : "training"} />
           <input type="hidden" name="durationMinutes" value={duration > 0 ? duration : ""} />
 
           <fieldset className="flex flex-col gap-1.5">
@@ -347,7 +353,21 @@ export function EditSlotForm({
             />
           ) : null}
 
-          <DurationPicker value={duration} onChange={applyDuration} />
+          {academy ? (
+            <button
+              type="button"
+              aria-pressed={tournament}
+              onClick={() => setTournament((value) => !value)}
+              className={chip(tournament)}
+            >
+              טורניר/ליגה · שעות פתוחות
+            </button>
+          ) : null}
+          {openHours ? (
+            <p className="text-xs font-semibold text-zinc-500">טורניר/ליגה: בחרו שעת התחלה ושעת סיום חופשיות.</p>
+          ) : (
+            <DurationPicker value={duration} onChange={applyDuration} extras={academy ? [ACADEMY_DURATION] : []} />
+          )}
 
           {repeatable ? (
             <RecurrenceFields

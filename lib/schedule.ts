@@ -10,7 +10,7 @@ import {
   teams as teamsTable,
 } from "@/lib/db";
 import { SUBDIVISION_SHORT, trainingEndClock } from "@/lib/pitch-rules";
-import { applyCoachLabels, coachFullNameByTeam } from "@/lib/team-labels";
+import { applyCoachLabels, coachFullNameByTeam, sortTeamsByAge } from "@/lib/team-labels";
 import type { SlotDTO, WeekData } from "@/lib/types";
 import { resolveWeekStart, weekDates, weekNumber } from "@/lib/week";
 
@@ -74,13 +74,13 @@ export async function getWeekData(weekParam?: string | null): Promise<WeekData> 
       .from(teamCoaches),
   ]);
   const fieldPeople = people.filter((person) => !person.receivesAllUpdates);
-  const teams = applyCoachLabels(
+  const teams = sortTeamsByAge(applyCoachLabels(
     teamRows,
     coachFullNameByTeam(
       coachLinks.filter((link) => link.staffId == null || fieldPeople.some((person) => person.id === link.staffId)),
       fieldPeople,
     ),
-  );
+  ));
   const substituteNames = new Map(people.map((person) => [person.id, person.name]));
   const ids = slots.map((slot) => slot.id);
   const [trainingRows, gameRows] = ids.length
@@ -120,6 +120,7 @@ export async function getWeekData(weekParam?: string | null): Promise<WeekData> 
         durationMinutes,
         rotationTemplateId: training?.rotationTemplateId ?? null,
         endTime: trainingEndClock(slot.startTime, durationMinutes),
+        sessionKind: training?.sessionKind === "tournament" ? "tournament" : training?.sessionKind === "training" ? "training" : null,
       };
     }),
   };

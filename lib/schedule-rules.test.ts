@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { timeLabel } from "../components/display-utils";
+import { compareDaySlots, slotMatchesPitch, timeLabel } from "../components/display-utils";
 import { matchCityInName } from "./opponent-city-match";
 import {
   DURATION_PRESETS,
@@ -11,6 +11,8 @@ import {
   clocksAfterDurationChange,
   clocksAfterEndChange,
   clocksAfterStartChange,
+  ACADEMY_DURATION_MINUTES,
+  durationAllowedForAcademy,
   durationAllowedForSave,
   durationLabelHe,
   isOfficialDuration,
@@ -52,6 +54,19 @@ test("training length is only the official options", () => {
   assert.equal(durationAllowedForSave(90, null), true);
   assert.equal(durationAllowedForSave(60, 90), true);
   assert.equal(durationAllowedForSave(75, 90), true);
+  assert.equal(durationAllowedForSave(ACADEMY_DURATION_MINUTES, null), false);
+  assert.equal(durationAllowedForAcademy(ACADEMY_DURATION_MINUTES, { tournament: false }), true);
+  assert.equal(durationAllowedForAcademy(180, { tournament: false }), false);
+  assert.equal(durationAllowedForAcademy(180, { tournament: true }), true);
+  assert.equal(durationAllowedForAcademy(0, { tournament: true }), false);
+  assert.equal(durationLabelHe(240), "4 שעות");
+
+  const openEnd = clocksAfterEndChange({ startTime: "09:00", endTime: "", duration: 0 }, "13:30", { free: true });
+  assert.deepEqual(openEnd, { startTime: "09:00", endTime: "13:30", duration: 270 });
+  const fourHours = clocksAfterDurationChange({ startTime: "16:00", endTime: "", duration: 0 }, 240, { academy: true });
+  assert.deepEqual(fourHours, { startTime: "16:00", endTime: "20:00", duration: 240 });
+  const notForOthers = clocksAfterDurationChange({ startTime: "16:00", endTime: "", duration: 0 }, 240);
+  assert.equal(notForOthers.duration, 0);
 
   const kept = clocksAfterStartChange({ startTime: "16:30", endTime: "18:15", duration: 105 }, "17:00");
   assert.deepEqual(kept, { startTime: "17:00", endTime: "18:45", duration: 105 });
@@ -265,4 +280,27 @@ test("the longest city name inside the opponent wins", () => {
   assert.equal(matchCityInName("מ.ס. אשדוד", cities)?.name, "אשדוד");
   assert.equal(matchCityInName("מ.כ. גבעתיים", cities), null);
   assert.equal(matchCityInName("בית״ר ירושלים", cities)?.name, "ירושלים");
+});
+
+test("a day off is listed after every other entry, and a pitch filter keeps that pitch", () => {
+  const row = (id: number, type: string, startTime: string | null) => ({
+    id,
+    teamId: 1,
+    date: "2026-11-22",
+    endDate: null,
+    startTime,
+    type,
+    note: null,
+  });
+  const ordered = [row(1, "off", null), row(2, "vasermil_2", "18:00"), row(3, "vasermil_1", "16:00"), row(4, "camp", null)].sort(
+    compareDaySlots,
+  );
+  assert.deepEqual(
+    ordered.map((slot) => slot.id),
+    [4, 3, 2, 1],
+  );
+  assert.equal(slotMatchesPitch(row(3, "vasermil_1", "16:00"), "vasermil_1"), true);
+  assert.equal(slotMatchesPitch(row(3, "vasermil_1", "16:00"), "vasermil_2"), false);
+  assert.equal(slotMatchesPitch(row(1, "off", null), "all"), true);
+  assert.equal(slotMatchesPitch(row(5, "other", "15:00"), "other"), true);
 });

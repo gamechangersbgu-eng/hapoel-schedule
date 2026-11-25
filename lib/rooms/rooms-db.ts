@@ -4,6 +4,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, gte, inArray, lte } from "drizzle-orm";
 import { db, gymBookings, slotGameDetails, slotTrainingDetails, slots, teams, videoRoomBookings } from "@/lib/db";
+import { sortTeamsByAge } from "@/lib/team-labels";
 import { formatDateHe, logChange } from "@/lib/history";
 import { getSlotType, isPitchSlot } from "@/lib/slot-types";
 import { approvalPlan } from "./room-requests";
@@ -58,11 +59,12 @@ async function loadBookings(kind: RoomKind, from: string, to: string): Promise<R
 }
 
 export async function loadTeamOptions(): Promise<TeamOption[]> {
-  return db
-    .select({ id: teams.id, name: teams.name })
+  const rows = await db
+    .select({ id: teams.id, name: teams.name, sortOrder: teams.sortOrder })
     .from(teams)
     .where(eq(teams.isComments, false))
     .orderBy(asc(teams.sortOrder));
+  return sortTeamsByAge(rows);
 }
 
 export async function getRoomWeek(kind: RoomKind, from: string, to: string) {

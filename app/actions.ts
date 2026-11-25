@@ -5,7 +5,8 @@ import { revalidatePath } from "next/cache";
 import { and, eq, gte, inArray, isNull, lte, ne, notInArray } from "drizzle-orm";
 import { ensureTrainingDuration, resolveRotationTemplateId } from "@/db/reference-seed";
 import { db, slotGameDetails, slotTrainingDetails, slots, teams } from "@/lib/db";
-import { DEFAULT_TRAINING_MINUTES, OFFICIAL_DURATION_ERROR_HE, coachClashes, durationAllowedForSave, durationBetween, roundToQuarterHour, toMinutes } from "@/lib/pitch-rules";
+import { DEFAULT_TRAINING_MINUTES, OFFICIAL_DURATION_ERROR_HE, coachClashes, durationAllowedForAcademy, durationAllowedForSave, durationBetween, roundToQuarterHour, toMinutes } from "@/lib/pitch-rules";
+import { isFootballSchoolTeam } from "@/lib/team-labels";
 import { getPitchDay } from "@/lib/pitch-board";
 import { parseSeriesChoices, readSeriesInterval } from "@/lib/recurrence";
 import { formatDateHe, logChange } from "@/lib/history";
@@ -64,6 +65,8 @@ export type SlotInput = {
   /** Practice game (משחק אימון). Ignored for every other type. */
   opponent?: string | null;
   medicName?: string | null;
+  /** Academy only. Anything else is stored as a normal training. */
+  sessionKind?: "training" | "tournament" | null;
 };
 
 export async function saveSlot(input: SlotInput) {
@@ -161,12 +164,13 @@ export async function saveSlot(input: SlotInput) {
         ? input.durationMinutes
         : null;
     if (durationMinutes) await ensureTrainingDuration(db, durationMinutes);
+    const sessionKind = input.sessionKind === "tournament" ? "tournament" : "training";
     await db
       .insert(slotTrainingDetails)
-      .values({ slotId, rotationTemplateId, durationMinutes })
+      .values({ slotId, rotationTemplateId, durationMinutes, sessionKind })
       .onConflictDoUpdate({
         target: slotTrainingDetails.slotId,
-        set: { rotationTemplateId, durationMinutes },
+        set: { rotationTemplateId, durationMinutes, sessionKind },
       });
   }
   if (slotId && isPracticeGame(input.type)) {
@@ -290,7 +294,17 @@ export async function saveSlotForm(formData: FormData) {
         .limit(1)
     : [];
 
-  if (durationMinutes > 0 && !durationAllowedForSave(durationMinutes, storedDuration?.durationMinutes)) {
+  const [slotTeam] = await db
+    .select({ name: teams.name, ageBandCode: teams.ageBandCode })
+    .from(teams)
+    .where(eq(teams.id, teamId))
+    .limit(1);
+  const academy = isFootballSchoolTeam(slotTeam);
+  const tournament = academy && String(formData.get("sessionKind") ?? "") === "tournament";
+  const durationOk = academy
+    ? durationAllowedForAcademy(durationMinutes, { tournament, previous: storedDuration?.durationMinutes })
+    : durationAllowedForSave(durationMinutes, storedDuration?.durationMinutes);
+  if (durationMinutes > 0 && !durationOk) {
     redirect(
       adminWeekPath(week, {
         team: String(teamId),
@@ -353,6 +367,7 @@ export async function saveSlotForm(formData: FormData) {
       status: "active",
       statusNote: null,
       substituteStaffId: null,
+      sessionKind: tournament ? "tournament" : "training",
     });
     if (result.error || result.created === 0) {
       redirect(
@@ -388,6 +403,7 @@ export async function saveSlotForm(formData: FormData) {
     durationMinutes: durationMinutes > 0 ? durationMinutes : null,
     opponent: isPracticeGame(type) ? String(formData.get("opponent") ?? "") : null,
     medicName: isPracticeGame(type) ? String(formData.get("medicName") ?? "") : null,
+    sessionKind: tournament ? "tournament" : "training",
   });
 
   if (result && "error" in result && result.error) {

@@ -31,6 +31,8 @@ export type SeriesSaveInput = {
   status: string;
   statusNote: string | null;
   substituteStaffId: number | null;
+  /** Academy טורניר/ליגה. Omitted means a normal training. */
+  sessionKind?: "training" | "tournament";
 };
 
 export type SeriesSaveResult = {
@@ -54,6 +56,7 @@ export async function previewSeries(input: {
   startTime: string;
   durationMinutes: number;
   substituteStaffId?: number | null;
+  openHours?: boolean;
 }): Promise<OccurrencePreview[]> {
   const dates = [...new Set(input.dates)].sort();
   if (input.pitchId) {
@@ -64,6 +67,7 @@ export async function previewSeries(input: {
       start: toMinutes(input.startTime),
       durationMinutes: input.durationMinutes,
       substituteStaffId: input.substituteStaffId ?? null,
+      openHours: input.openHours === true,
     });
     return classified.map((item) => ({
       date: item.date,
@@ -117,7 +121,7 @@ export async function saveTrainingSeries(input: SeriesSaveInput): Promise<Series
       .where(eq(teams.id, input.teamId))
       .limit(1);
     if (!isFootballSchoolTeam(team)) {
-      return { created: 0, skipped: [], error: "פעם בשבועיים זמין רק לבית הספר לכדורגל" };
+      return { created: 0, skipped: [], error: "פעם בשבועיים זמין רק לאקדמיה לכדורגל" };
     }
   }
 
@@ -132,6 +136,7 @@ export async function saveTrainingSeries(input: SeriesSaveInput): Promise<Series
         startTime: input.startTime,
         durationMinutes: input.durationMinutes,
         substituteStaffId: input.substituteStaffId,
+        openHours: input.sessionKind === "tournament",
       });
   const byDate = new Map(preview.map((item) => [item.date, item]));
 
@@ -215,6 +220,7 @@ export async function saveTrainingSeries(input: SeriesSaveInput): Promise<Series
         subdivisionCode: input.subdivisionCode,
         durationMinutes: input.durationMinutes > 0 ? input.durationMinutes : null,
         rotationTemplateId,
+        sessionKind: input.sessionKind === "tournament" ? "tournament" : "training",
       });
     }
   }

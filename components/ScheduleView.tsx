@@ -17,6 +17,8 @@ type ScheduleViewProps = {
   message?: string;
   /** Copy-week rewrites trainings. Only the head manager. */
   canScheduleTrainings?: boolean;
+  /** Phone view opens on this day when it belongs to the loaded week. */
+  focusDay?: string;
 };
 
 export function ScheduleView({
@@ -24,6 +26,7 @@ export function ScheduleView({
   editable = false,
   message,
   canScheduleTrainings = false,
+  focusDay,
 }: ScheduleViewProps) {
   const scope = editable ? "admin" : "public";
   /** null = all teams. Remembered in this browser (shared with the phone view on the public page). */
@@ -112,7 +115,7 @@ export function ScheduleView({
 
       {editable ? null : (
         <div className="md:hidden print:hidden">
-          <TeamWeek data={data} />
+          <TeamWeek data={data} focusDay={focusDay} />
         </div>
       )}
 

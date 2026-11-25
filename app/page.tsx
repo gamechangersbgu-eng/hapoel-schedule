@@ -8,11 +8,11 @@ import { getScheduleRevision } from "@/lib/schedule-revision";
 export const dynamic = "force-dynamic";
 
 type HomeProps = {
-  searchParams: Promise<{ week?: string }>;
+  searchParams: Promise<{ week?: string; day?: string }>;
 };
 
 export default async function HomePage({ searchParams }: HomeProps) {
-  const { week } = await searchParams;
+  const { week, day } = await searchParams;
   const [data, revision] = await Promise.all([
     getWeekData(week),
     getScheduleRevision(),
@@ -35,7 +35,7 @@ export default async function HomePage({ searchParams }: HomeProps) {
           כניסת מנהל
         </Link>
       </AppHeader>
-      <ScheduleView data={data} />
+      <ScheduleView data={data} focusDay={day} />
     </div>
   );
 }

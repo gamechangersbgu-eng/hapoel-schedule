@@ -38,7 +38,7 @@ const TEAM_NAMES = [
   "ילדות א",
   "ילדות ב",
   "טרומיות",
-  "בית ספר לכדורגל",
+  "אקדמיה לכדורגל",
 ];
 
 function atNoon(year: number, monthIndex: number, day: number) {

@@ -177,6 +177,7 @@ export default async function PitchBoardPage({ searchParams }: Props) {
                   statusNote: editing.statusNote,
                   substituteStaffId: editing.substituteStaffId,
                   seriesId: editing.seriesId,
+                  sessionKind: editing.sessionKind,
                 }
               : {
                   teamId: num(params.team),

@@ -6,7 +6,7 @@ export function Legend() {
       <p className="mb-0 text-[11px] font-bold tracking-wide text-[#8e0b20] lg:mb-1 lg:text-center">
         מקרא
       </p>
-      {SLOT_TYPES.filter((item) => item.id !== "other").map((item) => (
+      {SLOT_TYPES.map((item) => (
         <div key={item.id} className="flex items-center gap-2">
           <span
             className="h-5 w-5 shrink-0 rounded-sm border border-black/10"

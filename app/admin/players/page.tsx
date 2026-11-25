@@ -9,6 +9,7 @@ import {
   setPlayerActiveAction,
 } from "@/app/admin/players/actions";
 import { requireAdmin } from "@/lib/auth";
+import { sortTeamsByAge } from "@/lib/team-labels";
 import { db, players, teams } from "@/lib/db";
 import { listCoachOptions } from "@/lib/injuries-db";
 
@@ -30,10 +31,11 @@ export default async function PlayersPage({ searchParams }: Props) {
     db.select().from(players).orderBy(asc(players.sortOrder), asc(players.displayName)),
     listCoachOptions(),
   ]);
+  const orderedTeams = sortTeamsByAge(teamRows);
   const active = playerRows.filter((player) => player.isActive);
   const removed = playerRows.filter((player) => !player.isActive);
   const unassigned = active.filter((player) => player.coachStaffId == null).length;
-  const teamsWithPlayers = teamRows.filter((team) => active.some((player) => player.teamId === team.id));
+  const teamsWithPlayers = orderedTeams.filter((team) => active.some((player) => player.teamId === team.id));
   const openTeam = Number(params.team) || undefined;
 
   return (
@@ -148,7 +150,7 @@ export default async function PlayersPage({ searchParams }: Props) {
               <option value="" disabled>
                 בחירה
               </option>
-              {teamRows.map((team) => (
+              {orderedTeams.map((team) => (
                 <option key={team.id} value={team.id}>
                   {team.name}
                 </option>
