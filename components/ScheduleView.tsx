@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { copyPreviousWeekForm } from "@/app/actions";
+import { NotifyTeamToggle } from "@/components/NotifyTeamToggle";
 import { TRAINING_SCHEDULE_DENIED } from "@/lib/roles";
+import { NOTIFY_TEAM_FIELD } from "@/lib/training-notify";
 import { Legend } from "@/components/Legend";
 import { TeamFilter } from "@/components/TeamFilter";
 import { TeamWeek } from "@/components/TeamWeek";
@@ -63,8 +65,9 @@ export function ScheduleView({
         <div className="flex flex-wrap items-center gap-2">
           {editable && canScheduleTrainings ? (
             <>
-              <form action={copyPreviousWeekForm}>
+              <form action={copyPreviousWeekForm} className="flex flex-wrap items-center gap-2">
                 <input type="hidden" name="week" value={data.weekStart} />
+                <NotifyTeamToggle name={NOTIFY_TEAM_FIELD} />
                 <button
                   type="submit"
                   className="rounded-md bg-[#c8102e] px-3 py-1.5 text-sm font-bold text-white hover:bg-[#8e0b20]"

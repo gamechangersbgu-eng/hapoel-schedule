@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { deleteSlotForm, previewWeeklySeries, saveSlotForm } from "@/app/actions";
 import { DurationPicker } from "@/components/DurationPicker";
+import { NotifyTeamField, NotifyTeamToggle } from "@/components/NotifyTeamToggle";
 import { PracticeGameFields } from "@/components/PracticeGameFields";
 import { RecurrenceFields } from "@/components/RecurrenceFields";
 import { SeriesConflictReview } from "@/components/SeriesConflictReview";
@@ -16,6 +17,7 @@ import {
   slotTypesForScheduler,
 } from "@/lib/slot-types";
 import { TRAINING_SCHEDULE_DENIED } from "@/lib/roles";
+import { showTrainingNotifyToggle } from "@/lib/training-notify";
 import { ACADEMY_DURATION } from "@/lib/pitch-rules";
 import { isFootballSchoolTeam } from "@/lib/team-labels";
 import {
@@ -102,6 +104,7 @@ export function EditSlotForm({
   const [review, setReview] = useState<OccurrencePreview[] | null>(null);
   const [choices, setChoices] = useState<Record<string, SeriesChoice>>({});
   const [checking, setChecking] = useState(false);
+  const [notifyTeam, setNotifyTeam] = useState(false);
   const allowSubmit = useRef(false);
   const formRef = useRef<HTMLFormElement>(null);
   const seriesFlag = useRef<HTMLInputElement>(null);
@@ -125,6 +128,14 @@ export function EditSlotForm({
     intervalDays: interval,
   });
   const seriesOn = repeatable && repeat && occurrence.dates.length > 1;
+  const showNotify = showTrainingNotifyToggle({
+    canScheduleTrainings,
+    commentsRow: team.isComments,
+    slotType,
+    listedTypes: cellSlots.map((slot) => slot.type),
+  });
+  const saveTouchesTraining =
+    isTrainingScheduleType(slotType, { commentsRow: team.isComments }) || editingTraining;
 
   useEffect(() => {
     setReview(null);
@@ -215,6 +226,8 @@ export function EditSlotForm({
           </a>
         </div>
 
+        {showNotify ? <NotifyTeamToggle checked={notifyTeam} onChange={setNotifyTeam} /> : null}
+
         {cellSlots.length > 0 ? (
           <div className="mb-4 space-y-2">
             <p className="text-xs font-bold text-zinc-500">אימונים קיימים</p>
@@ -239,6 +252,9 @@ export function EditSlotForm({
                     <form action={deleteSlotForm}>
                       <input type="hidden" name="week" value={weekStart} />
                       <input type="hidden" name="id" value={slot.id} />
+                      <NotifyTeamField
+                        requested={notifyTeam && isTrainingScheduleType(slot.type, { commentsRow: team.isComments })}
+                      />
                       <button
                         type="submit"
                         className="h-full rounded-lg px-2 text-xs font-bold text-red-700 hover:bg-red-50"
@@ -295,6 +311,7 @@ export function EditSlotForm({
           <input type="hidden" name="rotationTemplateId" value={rotationId != null && rotationId > 0 ? rotationId : ""} />
           <input type="hidden" name="sessionKind" value={openHours ? "tournament" : "training"} />
           <input type="hidden" name="durationMinutes" value={duration > 0 ? duration : ""} />
+          <NotifyTeamField requested={notifyTeam && saveTouchesTraining} />
 
           <fieldset className="flex flex-col gap-1.5">
             <legend className="text-sm font-bold">סבב (לבחירת שעה מהירה)</legend>
@@ -448,6 +465,9 @@ export function EditSlotForm({
           >
             <input type="hidden" name="week" value={weekStart} />
             <input type="hidden" name="id" value={editing.id} />
+            <NotifyTeamField
+              requested={notifyTeam && isTrainingScheduleType(editing.type, { commentsRow: team.isComments })}
+            />
             <button type="submit" name="scope" value="future" className="min-h-11 rounded-lg text-sm font-bold text-red-800 ring-1 ring-red-200">
               מחיקת המועד הזה וכל הבאים
             </button>

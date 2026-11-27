@@ -20,6 +20,8 @@ import {
   timeLabel,
   todayISO,
 } from "@/components/display-utils";
+import { MobileDayNav } from "@/components/MobileDayNav";
+import { dayElementId, scrollToDay, todayJump } from "@/lib/mobile-day-nav";
 import { applyPushChoice, notificationsAreBlocked, resyncPushIfGranted, takeIosPushHint } from "@/lib/push-client";
 import { getSlotType, isCampSlot } from "@/lib/slot-types";
 import {
@@ -203,7 +205,7 @@ function TodayBlock({
   const next = day.items.length ? null : nextActivity(data, teamIds, today, now);
   return (
     <section
-      id={`day-${day.date}`}
+      id={dayElementId(day.date)}
       aria-label="היום"
       className="overflow-hidden rounded-2xl bg-white shadow-md ring-2 ring-[#c8102e] dark:bg-zinc-900"
     >
@@ -263,14 +265,14 @@ function DayRow({ day, labels }: { day: Day; labels: TeamLabels }) {
   const title = `יום ${HEBREW_DAY_NAMES[day.index]}`;
   if (day.items.length === 0 && day.notes.length === 0) {
     return (
-      <li id={`day-${day.date}`} className="px-1 py-1 text-base text-zinc-500 dark:text-zinc-400">
+      <li id={dayElementId(day.date)} className="px-1 py-1 text-base text-zinc-500 dark:text-zinc-400">
         <span className="font-bold text-zinc-700 dark:text-zinc-300">{title}</span> {formatDayMonth(day.date)}
         {" — "}אין פעילות
       </li>
     );
   }
   return (
-    <li id={`day-${day.date}`} className="flex flex-col gap-2">
+    <li id={dayElementId(day.date)} className="flex flex-col gap-2">
       <h3 className="px-1 text-lg font-extrabold dark:text-white">
         {title} <span className="text-base font-semibold text-zinc-500 dark:text-zinc-400">{formatDayMonth(day.date)}</span>
       </h3>
@@ -474,6 +476,7 @@ export function TeamWeek({ data, focusDay }: { data: WeekData; focusDay?: string
   const [selectedDay, setSelectedDay] = useState<string | null>(focusDay ?? null);
   const [now, setNow] = useState<Date | null>(null);
   const touch = useRef<{ x: number; y: number } | null>(null);
+  const clockReady = now != null;
 
   // localStorage and the clock only exist in the browser, so read them after mounting.
   useEffect(() => {
@@ -492,6 +495,12 @@ export function TeamWeek({ data, focusDay }: { data: WeekData; focusDay?: string
     const timer = window.setInterval(() => setNow(new Date()), 60_000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (!clockReady || !focusDay) return;
+    const handle = window.setTimeout(() => scrollToDay(focusDay), 0);
+    return () => window.clearTimeout(handle);
+  }, [clockReady, focusDay]);
 
   if (!now) return <div className="min-h-[60vh]" />;
 
@@ -568,12 +577,21 @@ export function TeamWeek({ data, focusDay }: { data: WeekData; focusDay?: string
       const next = data.dates[nextIndex];
       setSelectedDay(next);
       if (next < today) setShowPast(true);
-      window.setTimeout(() => document.getElementById(`day-${next}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+      window.setTimeout(() => scrollToDay(next), 0);
       return;
     }
     const target = addDaysISO(activeDay, delta);
     const week = formatISODate(sundayOf(parseISODate(target)));
     router.push(`/?week=${week}&day=${target}`);
+  }
+  function goToday() {
+    const target = todayJump(data.weekStart, today);
+    if (target.kind === "navigate") {
+      router.push(target.href);
+      return;
+    }
+    setSelectedDay(target.day);
+    window.setTimeout(() => scrollToDay(target.day), 0);
   }
   const todayDay = isThisWeek ? days.find((day) => day.date === today) : undefined;
   const past = isThisWeek ? days.filter((day) => day.date < today) : [];
@@ -606,26 +624,14 @@ export function TeamWeek({ data, focusDay }: { data: WeekData; focusDay?: string
       </div>
       <PushNotices blocked={pushBlocked} iosHint={iosHint} />
 
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-        <button
-          type="button"
-          onClick={() => moveDay(-1)}
-          className="min-h-11 rounded-xl bg-[#f4e6e8] px-2 text-sm font-black text-[#5c0814] dark:bg-zinc-800 dark:text-white"
-        >
-          → יום קודם
-        </button>
-        <p className="text-center text-sm font-black text-[#5c0814] dark:text-white">
-          יום {HEBREW_DAY_NAMES[data.dates.indexOf(activeDay)]}
-          <span className="block text-xs font-semibold text-zinc-500">{formatDayMonth(activeDay)}</span>
-        </p>
-        <button
-          type="button"
-          onClick={() => moveDay(1)}
-          className="min-h-11 rounded-xl bg-[#f4e6e8] px-2 text-sm font-black text-[#5c0814] dark:bg-zinc-800 dark:text-white"
-        >
-          יום הבא ←
-        </button>
-      </div>
+      <MobileDayNav
+        dayTitle={`יום ${HEBREW_DAY_NAMES[data.dates.indexOf(activeDay)]}`}
+        dateLabel={formatDayMonth(activeDay)}
+        onPrevious={() => moveDay(-1)}
+        onToday={goToday}
+        onNext={() => moveDay(1)}
+        todayCurrent={isThisWeek && activeDay === today}
+      />
 
       <div className="-mx-3 flex gap-2 overflow-x-auto px-3 pb-1 [scrollbar-width:none]" role="group" aria-label="סינון לפי מגרש">
         {MOBILE_PITCH_FILTERS.map((item) => {

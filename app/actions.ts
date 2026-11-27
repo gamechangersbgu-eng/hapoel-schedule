@@ -11,6 +11,7 @@ import { getPitchDay } from "@/lib/pitch-board";
 import { parseSeriesChoices, readSeriesInterval } from "@/lib/recurrence";
 import { formatDateHe, logChange } from "@/lib/history";
 import { bumpScheduleRevision } from "@/lib/schedule-revision";
+import { shouldNotifyTeams, teamNotificationRequested } from "@/lib/training-notify";
 import { notifyTeamsScheduleChanged } from "@/lib/web-push";
 import { getSlotsInWeek } from "@/lib/schedule";
 import { cityForOpponent } from "@/lib/opponent-cities";
@@ -44,6 +45,23 @@ async function trainingDenied(
   return blocked ? TRAINING_SCHEDULE_DENIED : null;
 }
 
+/** True when this write creates, edits, or removes a training (including turning one into something else). */
+async function touchesTraining(
+  type: string,
+  teamId: number,
+  existing?: { type: string; teamId: number } | null,
+) {
+  const ids = [...new Set([teamId, existing?.teamId].filter((id): id is number => typeof id === "number"))];
+  const rows = ids.length
+    ? await db.select({ id: teams.id, isComments: teams.isComments }).from(teams).where(inArray(teams.id, ids))
+    : [];
+  const comments = new Map(rows.map((row) => [row.id, row.isComments]));
+  return (
+    isTrainingScheduleType(type, { commentsRow: comments.get(teamId) }) ||
+    (existing != null && isTrainingScheduleType(existing.type, { commentsRow: comments.get(existing.teamId) }))
+  );
+}
+
 async function refreshSchedule() {
   await bumpScheduleRevision();
   revalidatePath("/");
@@ -67,6 +85,8 @@ export type SlotInput = {
   medicName?: string | null;
   /** Academy only. Anything else is stored as a normal training. */
   sessionKind?: "training" | "tournament" | null;
+  /** Owner opt-in. Training changes stay silent unless this is true. */
+  notifyTeam?: boolean;
 };
 
 export async function saveSlot(input: SlotInput) {
@@ -235,11 +255,18 @@ export async function saveSlot(input: SlotInput) {
   });
 
   await refreshSchedule();
-  await notifyTeamsScheduleChanged([input.teamId]);
+  if (
+    shouldNotifyTeams({
+      training: await touchesTraining(input.type, input.teamId, existing),
+      requested: input.notifyTeam === true,
+    })
+  ) {
+    await notifyTeamsScheduleChanged([input.teamId]);
+  }
   return { ok: true };
 }
 
-export async function deleteSlot(id: number) {
+export async function deleteSlot(id: number, options?: { notifyTeam?: boolean }) {
   const [existing] = await db.select().from(slots).where(eq(slots.id, id)).limit(1);
   if (!existing) {
     await requireAdmin();
@@ -257,7 +284,15 @@ export async function deleteSlot(id: number) {
     });
   }
   await refreshSchedule();
-  if (removed) await notifyTeamsScheduleChanged([removed.teamId]);
+  if (
+    removed &&
+    shouldNotifyTeams({
+      training: await touchesTraining(removed.type, removed.teamId),
+      requested: options?.notifyTeam === true,
+    })
+  ) {
+    await notifyTeamsScheduleChanged([removed.teamId]);
+  }
   return { ok: true };
 }
 
@@ -279,6 +314,7 @@ export async function saveSlotForm(formData: FormData) {
   const teamId = Number(formData.get("teamId"));
   const date = String(formData.get("date"));
   const idRaw = String(formData.get("id") ?? "").trim();
+  const notifyTeam = teamNotificationRequested(formData.get("notifyTeam"));
 
   const startTime = roundToQuarterHour(String(formData.get("startTime") || ""));
   const endTime = roundToQuarterHour(String(formData.get("endTime") || ""));
@@ -387,7 +423,9 @@ export async function saveSlotForm(formData: FormData) {
       date,
     });
     await refreshSchedule();
-    await notifyTeamsScheduleChanged([teamId]);
+    if (shouldNotifyTeams({ training: await touchesTraining(type, teamId), requested: notifyTeam })) {
+      await notifyTeamsScheduleChanged([teamId]);
+    }
     redirect(adminWeekPath(week, { saved: "1", skipped: result.skipped.length ? String(result.skipped.length) : undefined }));
   }
 
@@ -404,6 +442,7 @@ export async function saveSlotForm(formData: FormData) {
     opponent: isPracticeGame(type) ? String(formData.get("opponent") ?? "") : null,
     medicName: isPracticeGame(type) ? String(formData.get("medicName") ?? "") : null,
     sessionKind: tournament ? "tournament" : "training",
+    notifyTeam,
   });
 
   if (result && "error" in result && result.error) {
@@ -425,8 +464,9 @@ export async function deleteSlotForm(formData: FormData) {
   const id = Number(formData.get("id"));
   const scopeRaw = String(formData.get("scope") ?? "one");
   const scope = scopeRaw === "future" || scopeRaw === "series" ? scopeRaw : "one";
+  const notifyTeam = teamNotificationRequested(formData.get("notifyTeam"));
   if (scope === "one") {
-    const result = await deleteSlot(id);
+    const result = await deleteSlot(id, { notifyTeam });
     if (result && "error" in result && result.error) redirect(adminWeekPath(week, { error: result.error }));
   } else {
     const [existing] = await db
@@ -450,7 +490,14 @@ export async function deleteSlotForm(formData: FormData) {
         date: result.slot.date,
       });
       await refreshSchedule();
-      await notifyTeamsScheduleChanged([result.slot.teamId]);
+      if (
+        shouldNotifyTeams({
+          training: await touchesTraining(result.slot.type, result.slot.teamId),
+          requested: notifyTeam,
+        })
+      ) {
+        await notifyTeamsScheduleChanged([result.slot.teamId]);
+      }
     }
   }
   redirect(adminWeekPath(week));
@@ -479,14 +526,16 @@ export async function previewWeeklySeries(input: {
 
 export async function copyPreviousWeekForm(formData: FormData) {
   const week = String(formData.get("week") ?? "");
-  const result = await copyPreviousWeek(week);
+  const result = await copyPreviousWeek(week, {
+    notifyTeam: teamNotificationRequested(formData.get("notifyTeam")),
+  });
   if (result && "error" in result && result.error) {
     redirect(adminWeekPath(week, { error: result.error }));
   }
   redirect(adminWeekPath(week, { copied: "1" }));
 }
 
-export async function copyPreviousWeek(weekStart: string) {
+export async function copyPreviousWeek(weekStart: string, options?: { notifyTeam?: boolean }) {
   const user = await requireAdmin();
   if (!canScheduleTrainings(user.role)) return { error: TRAINING_SCHEDULE_DENIED };
   const previousStart = addDaysISO(weekStart, -7);
@@ -542,9 +591,12 @@ export async function copyPreviousWeek(weekStart: string) {
   });
 
   await refreshSchedule();
-  await notifyTeamsScheduleChanged([
-    ...new Set([...source.map((slot) => slot.teamId), ...removed.map((slot) => slot.teamId)]),
-  ]);
+  // Copy-week rewrites trainings (games stay). Notify the affected teams only when the owner asked.
+  if (options?.notifyTeam) {
+    await notifyTeamsScheduleChanged([
+      ...new Set([...source.map((slot) => slot.teamId), ...removed.map((slot) => slot.teamId)]),
+    ]);
+  }
   return { ok: true, count: source.length };
 }
 
