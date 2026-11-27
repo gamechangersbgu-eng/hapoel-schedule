@@ -8,7 +8,7 @@
     "db:migrate:apply": "tsx db/apply-migrations.ts",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --test lib/coach-clash.test.ts lib/club-feedback.test.ts lib/club-adjustments.test.ts lib/recurrence-fields.test.tsx lib/schedule-rules.test.ts lib/username.test.ts lib/team-alerts.test.ts lib/push-subscription.test.ts lib/injuries.test.ts db/cities-opponents-fill.test.ts db/admin-users-seed.test.ts services/scraper/scrape.test.ts services/notifications/maintenance-rules.test.ts lib/rooms/room-rules.test.ts lib/rooms/room-access.test.ts lib/rooms/room-requests.test.ts lib/training-access.test.ts lib/training-notify.test.ts lib/mobile-day-nav.test.ts lib/owner-controls.test.tsx lib/game-logistics.test.ts lib/schedule-display.test.tsx",
+    "test": "tsx --test lib/coach-clash.test.ts lib/club-feedback.test.ts lib/club-adjustments.test.ts lib/recurrence-fields.test.tsx lib/schedule-rules.test.ts lib/username.test.ts lib/team-alerts.test.ts lib/push-subscription.test.ts lib/injuries.test.ts db/cities-opponents-fill.test.ts db/admin-users-seed.test.ts services/scraper/scrape.test.ts services/notifications/maintenance-rules.test.ts lib/rooms/room-rules.test.ts lib/rooms/room-access.test.ts lib/rooms/room-requests.test.ts lib/training-access.test.ts lib/training-notify.test.ts lib/mobile-day-nav.test.ts lib/owner-controls.test.tsx lib/game-logistics.test.ts lib/schedule-display.test.tsx lib/club-logo.test.tsx",
     "db:seed": "tsx db/seed.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",

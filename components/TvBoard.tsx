@@ -3,6 +3,7 @@
 // Club TV screen: the whole week for every team on one screen, readable from across the room.
 // No buttons, no scrolling: rows and text scale with the screen size (vh / vw units).
 import { type ReactNode, useEffect, useState } from "react";
+import { ClubLogo } from "@/components/ClubLogo";
 import { TeamFilter } from "@/components/TeamFilter";
 import { readTeamSelection, saveTeamSelection } from "@/lib/team-selection";
 import {
@@ -334,16 +335,19 @@ export function TvBoard({ data: allData, notice, rooms = [] }: TvBoardProps) {
         </div>
       ) : null}
       <header className="flex shrink-0 items-center justify-between gap-[2vw] pb-[1.2vh]">
-        <div className="min-w-0">
-          <p className="font-semibold text-white/70" style={{ fontSize: "min(1.8vh, 1vw)" }}>
-            {data.clubName} · מחלקת הנוער
-          </p>
-          <h1 className="truncate font-black leading-tight" style={{ fontSize: "min(4.2vh, 2.4vw)" }}>
-            תכנית אימונים — שבוע {data.weekNumber}
-            <bdi className="ms-[1vw] font-semibold text-white/70" style={{ fontSize: "min(2.6vh, 1.5vw)" }}>
-              {formatWeekRange(data.weekStart)}
-            </bdi>
-          </h1>
+        <div className="flex min-w-0 items-center gap-[1vw]">
+          <ClubLogo plate size="tv" />
+          <div className="min-w-0">
+            <p className="font-semibold text-white/70" style={{ fontSize: "min(1.8vh, 1vw)" }}>
+              {data.clubName} · מחלקת הנוער
+            </p>
+            <h1 className="truncate font-black leading-tight" style={{ fontSize: "min(4.2vh, 2.4vw)" }}>
+              תכנית אימונים — שבוע {data.weekNumber}
+              <bdi className="ms-[1vw] font-semibold text-white/70" style={{ fontSize: "min(2.6vh, 1.5vw)" }}>
+                {formatWeekRange(data.weekStart)}
+              </bdi>
+            </h1>
+          </div>
         </div>
         <div className="shrink-0 text-left" dir="ltr">
           <p className="font-black tabular-nums leading-none" style={{ fontSize: "min(6vh, 3.4vw)" }}>

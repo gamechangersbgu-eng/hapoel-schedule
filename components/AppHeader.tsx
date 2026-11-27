@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { ClubLogo } from "@/components/ClubLogo";
 import { WeekNav } from "@/components/WeekNav";
 import { formatWeekRange } from "@/lib/week";
 
@@ -36,8 +37,9 @@ export function AppHeader({
         }`}
       >
         <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div>
+          <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
+            <ClubLogo plate />
+            <div className="min-w-0">
               <p className="text-[11px] font-semibold tracking-wide text-white/80">
                 מחלקת הנוער
               </p>

@@ -6,6 +6,7 @@ import { HEBREW_DAY_NAMES } from "@/components/display-utils";
 import { coachWarnings, dayWarnings, getPitchDay, toTime } from "@/lib/pitch-board";
 import { AdminNav } from "@/components/AdminNav";
 import { AdminUserMenu } from "@/components/AdminUserMenu";
+import { ClubLogo } from "@/components/ClubLogo";
 import { requireAdmin } from "@/lib/auth";
 import { canScheduleTrainings, TRAINING_SCHEDULE_DENIED } from "@/lib/roles";
 import { addDaysISO, formatDayMonth, formatISODate, weekDates } from "@/lib/week";
@@ -64,9 +65,12 @@ export default async function PitchBoardPage({ searchParams }: Props) {
           מצב מנהל
         </div>
         <div className="mx-auto flex max-w-[1400px] flex-wrap items-center justify-between gap-3 px-4 py-3">
-          <div>
-            <p className="text-xs font-semibold text-white/75">הפועל באר שבע · ניהול</p>
-            <h1 className="text-2xl font-black">לוח שיבוץ מגרשים</h1>
+          <div className="flex min-w-0 items-center gap-3">
+            <ClubLogo plate />
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-white/75">הפועל באר שבע · ניהול</p>
+              <h1 className="text-2xl font-black">לוח שיבוץ מגרשים</h1>
+            </div>
           </div>
           <nav className="flex gap-2 text-sm font-bold">
             <Link href="/" className="rounded-md border border-white/30 px-3 py-1.5 hover:bg-white/10">

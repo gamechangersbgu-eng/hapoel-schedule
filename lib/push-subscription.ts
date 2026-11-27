@@ -7,6 +7,11 @@ export const PUSH_TITLE = "עדכון בלוח האימונים";
 export const PUSH_TAG = "hapoel-schedule-update";
 /** Replaces the previous logistics note instead of stacking on the generic schedule tag. */
 export const COACH_UPDATE_PUSH_TAG = "hapoel-schedule-coach-update";
+/**
+ * Full-color crest on a notification. The query drops a crest cached from before this logo.
+ * Android may draw `badge` as a small monochrome mark; `icon` is the color logo.
+ */
+export const NOTIFICATION_ICON = "/icons/icon-192.png?v=2";
 
 export const PUSH_ALLOWED_ORIGINS = [GITHUB_PAGES_ORIGIN, NETLIFY_APP_ORIGIN] as const;
 
@@ -172,5 +177,7 @@ export function pushPayload(
     body: body || pushBodyForTeams(names),
     tag: tag || PUSH_TAG,
     url: schedulePath || "/",
+    icon: NOTIFICATION_ICON,
+    badge: NOTIFICATION_ICON,
   };
 }
