@@ -195,7 +195,8 @@ input[type="time"]::-webkit-calendar-picker-indicator {
     inset -2px 0 0 #ffd54f;
 }
 
-/* Phone view follows the phone's dark mode (only where the phone view is shown). */
+/* Phone week list follows the phone's dark mode. The team picker is not inside
+   .team-week, so this canvas does not apply there — its text must stay dark. */
 @media (prefers-color-scheme: dark) and (max-width: 767px) {
   html:has(.team-week) {
     color-scheme: dark;
@@ -204,6 +205,12 @@ input[type="time"]::-webkit-calendar-picker-indicator {
     background: #09090b;
     color: #f4f4f5;
   }
+}
+
+/* Picker sits on the light paper background. Lock color-scheme so the phone's
+   dark mode does not restyle this screen's controls. */
+.team-picker {
+  color-scheme: light;
 }
 
 .tv-cell.tv-row {
