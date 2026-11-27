@@ -321,7 +321,7 @@ function PushNotices({ blocked, iosHint }: { blocked: boolean; iosHint: boolean 
   );
 }
 
-function TeamPicker({
+export function TeamPicker({
   teams,
   current,
   alerts,
@@ -365,9 +365,11 @@ function TeamPicker({
   }
   return (
     <section className="flex flex-col gap-3 pb-24">
-      <div>
-        <h2 className="text-xl font-black text-slate-900 dark:text-white">אילו קבוצות לראות?</h2>
-        <p className="text-base text-slate-800 dark:text-zinc-200">
+      <div className="rounded-xl bg-white px-3 py-2" style={{ backgroundColor: "#ffffff" }}>
+        <h2 className="text-xl font-black text-black opacity-100" style={{ color: "#000000", opacity: 1 }}>
+          אילו קבוצות לראות?
+        </h2>
+        <p className="text-base text-black opacity-100" style={{ color: "#000000", opacity: 1 }}>
           אפשר לבחור כמה: למשל שני ילדים בגילאים שונים, או גם הקבוצה שמעל. הבחירה נשמרת בטלפון. פעמון דולק ליד קבוצה
           אומר שנשלחת התראה כשהלוח שלה משתנה.
         </p>
