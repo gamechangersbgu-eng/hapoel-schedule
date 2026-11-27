@@ -2,6 +2,7 @@
 
 import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 import { practiceGameDetail } from "@/components/display-utils";
+import { homeGamePitchText } from "@/lib/game-logistics";
 import { getSlotType, isCampSlot, isPitchSlot } from "@/lib/slot-types";
 import type { SlotDTO, TeamDTO } from "@/lib/types";
 import { HEBREW_DAY_LETTERS, formatDayMonth } from "@/lib/week";
@@ -53,6 +54,9 @@ function SlotChip({ slot, compact }: { slot: SlotDTO; compact?: boolean }) {
       {cancelled && slot.statusNote ? <span className="text-[10px] font-bold">{slot.statusNote}</span> : null}
       {kindLabel(slot.type) ? (
         <span className="text-[11px] font-bold leading-tight">{kindLabel(slot.type)}</span>
+      ) : null}
+      {homeGamePitchText(slot) ? (
+        <span className="max-w-full break-words text-[10px] font-bold leading-tight">{homeGamePitchText(slot)}</span>
       ) : null}
       {practiceGameDetail(slot) ? (
         <span className="max-w-full break-words text-[10px] font-semibold leading-tight">{practiceGameDetail(slot)}</span>

@@ -99,7 +99,10 @@ export const slotGameDetails = pgTable(
     driverId: integer("driver_id").references(() => drivers.id),
     cityId: integer("city_id").references(() => cities.id),
     kickoffTime: text("kickoff_time"),
+    /** Suggested departure from the club rules. Kept even when a manual time overrides it. */
     departureTime: text("departure_time"),
+    /** Manager override for an away game. Null means the schedule shows `departure_time`. */
+    manualDepartureTime: text("manual_departure_time"),
     travelMinutes: integer("travel_minutes"),
     coordinationNote: text("coordination_note"),
     /** Writer idempotency: e.g. `ifa_scraper` + IFA fixture id. */

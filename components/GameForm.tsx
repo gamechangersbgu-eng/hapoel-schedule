@@ -5,8 +5,10 @@
 import Link from "next/link";
 import { useState } from "react";
 import { deleteGame, saveGame } from "@/app/admin/games/actions";
+import { GameSaveButtons } from "@/components/GameSaveButtons";
 import { QuarterHourSelect } from "@/components/QuarterHourSelect";
 import { departureFor } from "@/lib/game-rules";
+import { normalizeClock } from "@/lib/game-logistics";
 import { matchCityInName } from "@/lib/opponent-city-match";
 import { roundToQuarterHour } from "@/lib/pitch-rules";
 import type { GameRow, GamesWeek } from "@/lib/games";
@@ -39,6 +41,7 @@ export function GameForm({
   const [opponent, setOpponent] = useState(game?.opponent ?? "");
   const [cityTouched, setCityTouched] = useState(Boolean(game?.cityId));
   const [cityId, setCityId] = useState<number>(game?.cityId || suggestedCity(game?.opponent ?? "", week));
+  const [manualDeparture, setManualDeparture] = useState(game?.manualDepartureTime ?? "");
   const [cancelled, setCancelled] = useState(game?.status === "cancelled");
 
   const team = week.teams.find((item) => item.id === teamId);
@@ -47,6 +50,8 @@ export function GameForm({
     kind === "away_game" && team && city && /^\d{2}:\d{2}$/.test(kickoff)
       ? departureFor({ teamName: team.name, date, kickoff, travelMinutes: city.travelMinutesFromBeerSheva, north: city.northOfHaderaLine })
       : null;
+  const manualClock = normalizeClock(manualDeparture);
+  const effectiveDeparture = manualClock ?? departure?.departure ?? null;
 
   // Show people who left the bank only if they are already on this game.
   const medics = week.medics.filter((item) => item.isActive || item.id === game?.medicId);
@@ -194,20 +199,46 @@ export function GameForm({
               {kind === "away_game" && cityId && !cityTouched ? (
                 <p className="text-sm font-bold text-emerald-800 sm:col-span-2">העיר מולאה לפי שם היריבה. אפשר לשנות.</p>
               ) : null}
-              {departure ? (
+              <label className={`${label} sm:col-span-2`}>
+                שעת יציאה ידנית
+                <input
+                  type="time"
+                  name="manualDeparture"
+                  className={field}
+                  step={60}
+                  value={manualDeparture}
+                  onChange={(event) => setManualDeparture(event.target.value)}
+                />
+              </label>
+              {effectiveDeparture ? (
                 <div className="rounded-lg bg-sky-50 px-3 py-2.5 text-sm ring-1 ring-sky-200 sm:col-span-2">
                   <p className="text-base font-black text-sky-950">
-                    יציאה מבאר שבע: <span dir="ltr" className="tabular-nums">{departure.departure}</span>
-                    <span className="ms-2 text-sm font-bold text-sky-800">(הגעה למגרש עד <span dir="ltr">{departure.arriveBy}</span>)</span>
+                    יציאה מבאר שבע: <span dir="ltr" className="tabular-nums">{effectiveDeparture}</span>
+                    {manualClock ? (
+                      <span className="ms-2 text-sm font-bold text-sky-800">ידני</span>
+                    ) : (
+                      <span className="ms-2 text-sm font-bold text-sky-800">לפי ההצעה</span>
+                    )}
                   </p>
-                  <ul className="mt-1 text-sky-900">
-                    {departure.parts.map((part) => (
-                      <li key={part.label}>• {part.label}: {part.minutes} דק׳</li>
-                    ))}
-                  </ul>
+                  {departure ? (
+                    <>
+                      <p className="mt-1 text-sky-900">
+                        הצעה לפי כללי המועדון: <span dir="ltr" className="tabular-nums">{departure.departure}</span>
+                        <span className="ms-2">(הגעה למגרש עד <span dir="ltr">{departure.arriveBy}</span>)</span>
+                        {manualClock ? " בלוח תוצג ההצעה רק כשהשדה הידני ריק." : ""}
+                      </p>
+                      <ul className="mt-1 text-sky-900">
+                        {departure.parts.map((part) => (
+                          <li key={part.label}>• {part.label}: {part.minutes} דק׳</li>
+                        ))}
+                      </ul>
+                    </>
+                  ) : (
+                    <p className="mt-1 text-sky-900">אין עדיין הצעה. בלוח תוצג השעה הידנית.</p>
+                  )}
                 </div>
               ) : (
-                <p className="text-sm text-zinc-500 sm:col-span-2">שעת היציאה תחושב אחרי שבוחרים קבוצה, עיר ושעת שריקה.</p>
+                <p className="text-sm text-zinc-500 sm:col-span-2">שעת היציאה תחושב אחרי שבוחרים קבוצה, עיר ושעת שריקה, או שאפשר למלא שעה ידנית.</p>
               )}
             </div>
           )}
@@ -227,10 +258,7 @@ export function GameForm({
             <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm font-bold text-red-800 ring-1 ring-red-200">{error}</p>
           ) : null}
 
-          <div className="flex gap-2">
-            <button type="submit" className="min-h-11 flex-1 rounded-lg bg-[#c8102e] text-base font-black text-white">שמירה</button>
-            <Link href={closeHref} className="min-h-11 rounded-lg px-4 py-2.5 text-base font-bold text-zinc-600 ring-1 ring-zinc-300">ביטול</Link>
-          </div>
+          <GameSaveButtons closeHref={closeHref} />
         </form>
         {game ? (
           <form action={deleteGame} className="mt-3 border-t border-zinc-200 pt-3">

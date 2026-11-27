@@ -9,6 +9,7 @@ import { writeFileSync } from "node:fs";
 import { asc, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/neon-http";
 import * as schema from "../db/schema/index";
+import { effectiveDepartureTime } from "../lib/game-logistics";
 import { SUBDIVISION_SHORT, trainingEndClock } from "../lib/pitch-rules";
 import { applyCoachLabels, coachFullNameByTeam } from "../lib/team-labels";
 
@@ -81,6 +82,14 @@ async function main() {
         .from(schema.slotGameDetails)
         .where(inArray(schema.slotGameDetails.slotId, ids))
     : [];
+  const pitchIds = [...new Set(gameRows.map((row) => row.pitchId).filter((id): id is number => id != null))];
+  const pitchRows = pitchIds.length
+    ? await db
+        .select({ id: schema.pitches.id, nameHe: schema.pitches.nameHe })
+        .from(schema.pitches)
+        .where(inArray(schema.pitches.id, pitchIds))
+    : [];
+  const pitchNameById = new Map(pitchRows.map((row) => [row.id, row.nameHe]));
 
   const placeBySlot = new Map(
     trainingRows
@@ -127,7 +136,8 @@ async function main() {
         durationMinutes,
         endTime,
         opponent: game?.opponent ?? null,
-        departureTime: game?.departureTime ?? null,
+        departureTime: effectiveDepartureTime(game?.manualDepartureTime, game?.departureTime),
+        pitchName: slot.type === "home_game" && game?.pitchId ? (pitchNameById.get(game.pitchId) ?? null) : null,
       };
     }),
   };

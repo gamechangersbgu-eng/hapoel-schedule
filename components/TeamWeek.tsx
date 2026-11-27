@@ -20,9 +20,11 @@ import {
   timeLabel,
   todayISO,
 } from "@/components/display-utils";
+import { GameScheduleDetail } from "@/components/GameScheduleDetail";
 import { MobileDayNav } from "@/components/MobileDayNav";
 import { dayElementId, scrollToDay, todayJump } from "@/lib/mobile-day-nav";
 import { applyPushChoice, notificationsAreBlocked, resyncPushIfGranted, takeIosPushHint } from "@/lib/push-client";
+import { homeGamePitchText } from "@/lib/game-logistics";
 import { getSlotType, isCampSlot } from "@/lib/slot-types";
 import {
   alertingTeamIds,
@@ -77,7 +79,7 @@ function countdown(slot: SlotDTO, now: Date): string | null {
 
 /** Spoken description for screen readers, e.g. "אימון · וסרמיל 1, 17:30". */
 function spoken(slot: SlotDTO) {
-  return [kindLabel(slot), timeLabel(slot), practiceGameDetail(slot), slot.note].filter(Boolean).join(", ");
+  return [kindLabel(slot), timeLabel(slot), homeGamePitchText(slot), practiceGameDetail(slot), slot.note].filter(Boolean).join(", ");
 }
 
 function SlotCard({ slot, teamLabel }: { slot: SlotDTO; teamLabel?: string }) {
@@ -118,17 +120,7 @@ function SlotCard({ slot, teamLabel }: { slot: SlotDTO; teamLabel?: string }) {
               {practiceGameDetail(slot)}
             </p>
           ) : null}
-          {isGame && (slot.opponent || slot.departureTime) ? (
-            <p className="mt-0.5 text-[15px] font-semibold leading-snug text-zinc-700 dark:text-zinc-200">
-              {slot.opponent ? `נגד ${slot.opponent}` : ""}
-              {slot.opponent && slot.departureTime ? " · " : ""}
-              {slot.departureTime ? (
-                <>
-                  יציאה מבאר שבע <span dir="ltr" className="tabular-nums">{slot.departureTime}</span>
-                </>
-              ) : null}
-            </p>
-          ) : null}
+          <GameScheduleDetail slot={slot} />
           {cancelled && slot.statusNote ? (
             <p className="mt-0.5 text-[15px] font-bold leading-snug text-zinc-800 dark:text-zinc-100">{slot.statusNote}</p>
           ) : null}

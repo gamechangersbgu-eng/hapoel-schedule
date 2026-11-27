@@ -5,6 +5,8 @@ import { GITHUB_PAGES_ORIGIN, NETLIFY_APP_ORIGIN } from "@/lib/app-base";
 
 export const PUSH_TITLE = "עדכון בלוח האימונים";
 export const PUSH_TAG = "hapoel-schedule-update";
+/** Replaces the previous logistics note instead of stacking on the generic schedule tag. */
+export const COACH_UPDATE_PUSH_TAG = "hapoel-schedule-coach-update";
 
 export const PUSH_ALLOWED_ORIGINS = [GITHUB_PAGES_ORIGIN, NETLIFY_APP_ORIGIN] as const;
 
@@ -157,11 +159,18 @@ export function pushBodyForTeams(names: string[]): string {
   return `יש עדכון בלוח של ${labels.join(" · ")}`;
 }
 
-export function pushPayload(names: string[], schedulePath: string) {
+export function pushPayload(
+  names: string[],
+  schedulePath: string,
+  override?: { title?: string; body?: string; tag?: string },
+) {
+  const title = override?.title?.trim();
+  const body = override?.body?.trim();
+  const tag = override?.tag?.trim();
   return {
-    title: PUSH_TITLE,
-    body: pushBodyForTeams(names),
-    tag: PUSH_TAG,
+    title: title || PUSH_TITLE,
+    body: body || pushBodyForTeams(names),
+    tag: tag || PUSH_TAG,
     url: schedulePath || "/",
   };
 }

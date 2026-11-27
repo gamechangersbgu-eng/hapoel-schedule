@@ -22,9 +22,11 @@ export type SlotDTO = {
   endTime?: string | null;
   /** Recurring training series, when this row is one occurrence. */
   seriesId?: number | null;
-  /** Games: opponent, and for away games the departure time from Beer Sheva. */
+  /** Games: opponent, and for away games the departure time from Beer Sheva (manual override or the suggestion). */
   opponent?: string | null;
   departureTime?: string | null;
+  /** Home games: pitch name when one is set (וסרמיל 1, …). */
+  pitchName?: string | null;
   /** Practice game (משחק אימון): free-text medic. League games use the medic bank instead. */
   medicName?: string | null;
   /** Academy טורניר/ליגה. Absent or "training" is a normal session. */

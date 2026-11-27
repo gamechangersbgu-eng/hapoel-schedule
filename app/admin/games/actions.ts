@@ -3,14 +3,23 @@
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { cities, db, slotGameDetails, slots, teams } from "@/lib/db";
+import { cities, db, drivers, medics, pitches, slotGameDetails, slots, teams } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
 import { departureFor } from "@/lib/game-rules";
+import {
+  coachNotifyPlan,
+  coachUpdatePageMessage,
+  coachUpdateRequested,
+  coachUpdateStatus,
+  effectiveDepartureTime,
+  readManualDeparture,
+  type CoachUpdateNotice,
+} from "@/lib/game-logistics";
 import { cityForOpponent, rememberOpponentCity } from "@/lib/opponent-cities";
 import { roundToQuarterHour } from "@/lib/pitch-rules";
 import { formatDateHe, logChange } from "@/lib/history";
 import { bumpScheduleRevision } from "@/lib/schedule-revision";
-import { notifyTeamsScheduleChanged } from "@/lib/web-push";
+import { notifyTeamCoachUpdate, notifyTeamsScheduleChanged } from "@/lib/web-push";
 import { GAME_DETAIL_SOURCES } from "@/shared/game";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -29,7 +38,7 @@ async function refresh() {
 }
 
 export async function saveGame(formData: FormData) {
-  await requireAdmin();
+  const user = await requireAdmin();
   const id = Number(formData.get("id") || 0);
   const week = String(formData.get("week") ?? "");
   const teamId = Number(formData.get("teamId"));
@@ -40,9 +49,12 @@ export async function saveGame(formData: FormData) {
   const num = (name: string) => Number(formData.get(name) || 0) || null;
   const cancelled = formData.get("status") === "cancelled";
   const statusNote = String(formData.get("statusNote") ?? "").trim() || null;
+  const manual = kind === "away_game" ? readManualDeparture(formData.get("manualDeparture")) : { ok: true as const, time: null };
+  const manualTime = manual.ok ? manual.time : null;
 
   const back = (error: string): never =>
     redirect(`/admin/games?week=${week}&${id ? `edit=${id}` : "new=1"}&error=${encodeURIComponent(error)}`);
+  if (!manual.ok) back("שעת היציאה הידנית לא תקינה");
   if (!teamId) back("יש לבחור קבוצה");
   if (!DATE_RE.test(date)) back("יש לבחור תאריך");
   if (!TIME_RE.test(kickoff)) back("יש לבחור שעת שריקה");
@@ -52,6 +64,7 @@ export async function saveGame(formData: FormData) {
 
   let departureTime: string | null = null;
   let travelMinutes: number | null = null;
+  let cityName: string | null = null;
   let cityId = kind === "away_game" ? num("cityId") : null;
   if (kind === "away_game") {
     if (cityId) await rememberOpponentCity(opponent, cityId);
@@ -60,6 +73,7 @@ export async function saveGame(formData: FormData) {
   if (cityId) {
     const [city] = await db.select().from(cities).where(eq(cities.id, cityId)).limit(1);
     if (city) {
+      cityName = city.name;
       travelMinutes = city.travelMinutesFromBeerSheva;
       departureTime = departureFor({
         teamName: team.name,
@@ -90,6 +104,7 @@ export async function saveGame(formData: FormData) {
     cityId,
     driverId: kind === "away_game" ? num("driverId") : null,
     departureTime,
+    manualDepartureTime: manualTime,
     travelMinutes,
   };
 
@@ -107,16 +122,92 @@ export async function saveGame(formData: FormData) {
   }
 
   const what = `${kind === "home_game" ? "משחק בית" : "משחק חוץ"} של ${team.name} ב-${formatDateHe(date)} ${kickoff}${opponent ? ` נגד ${opponent}` : ""}`;
+  const wantsCoach = coachUpdateRequested(formData.get("intent"));
+  let push: Awaited<ReturnType<typeof notifyTeamCoachUpdate>> | null = null;
+  if (wantsCoach) {
+    const notice = await coachNotice({
+      teamName: team.name,
+      kind,
+      dateLabel: formatDateHe(date),
+      kickoff,
+      opponent,
+      pitchId: details.pitchId,
+      medicId: details.medicId,
+      driverId: details.driverId,
+      cityName,
+      departureTime: effectiveDepartureTime(manualTime, departureTime),
+    });
+    const plan = coachNotifyPlan({ role: user.role, intent: formData.get("intent"), notice });
+    if (!plan.notify) {
+      await refresh();
+      redirect("/admin");
+    }
+    await refresh();
+    push = await notifyTeamCoachUpdate(teamId, { title: plan.title, body: plan.body });
+  } else {
+    await refresh();
+    await notifyTeamsScheduleChanged([teamId]);
+  }
+
+  const coachNote = push ? coachUpdatePageMessage(coachUpdateStatus(push), push.subscribers, push.sent) : null;
   await logChange({
     action: cancelled ? "cancel" : id ? "game" : "create",
-    summary: cancelled ? `בוטל ${what}${statusNote ? ` (${statusNote})` : ""}` : `${id ? "עודכן" : "נוסף"} ${what}`,
+    summary: cancelled
+      ? `בוטל ${what}${statusNote ? ` (${statusNote})` : ""}${coachNote ? ` · ${coachNote}` : ""}`
+      : `${id ? "עודכן" : "נוסף"} ${what}${coachNote ? ` · ${coachNote}` : ""}`,
     teamId,
     slotId,
     date,
   });
-  await refresh();
-  await notifyTeamsScheduleChanged([teamId]);
-  redirect(`/admin/games?week=${sundayOf(date)}&saved=1`);
+
+  const params = new URLSearchParams({ week: sundayOf(date) });
+  if (push) {
+    params.set("coach", coachUpdateStatus(push));
+    params.set("subs", String(push.subscribers));
+    params.set("sent", String(push.sent));
+  } else {
+    params.set("saved", "1");
+  }
+  redirect(`/admin/games?${params.toString()}`);
+}
+
+async function coachNotice(input: {
+  teamName: string;
+  kind: "home_game" | "away_game";
+  dateLabel: string;
+  kickoff: string;
+  opponent: string | null;
+  pitchId: number | null;
+  medicId: number | null;
+  driverId: number | null;
+  cityName: string | null;
+  departureTime: string | null;
+}): Promise<CoachUpdateNotice> {
+  const [pitchRows, medicRows, driverRows] = await Promise.all([
+    input.pitchId
+      ? db.select({ nameHe: pitches.nameHe }).from(pitches).where(eq(pitches.id, input.pitchId)).limit(1)
+      : Promise.resolve([]),
+    input.medicId
+      ? db.select({ name: medics.name, phone: medics.phone }).from(medics).where(eq(medics.id, input.medicId)).limit(1)
+      : Promise.resolve([]),
+    input.driverId
+      ? db.select({ name: drivers.name, phone: drivers.phone }).from(drivers).where(eq(drivers.id, input.driverId)).limit(1)
+      : Promise.resolve([]),
+  ]);
+  return {
+    teamName: input.teamName,
+    kind: input.kind,
+    dateLabel: input.dateLabel,
+    kickoff: input.kickoff,
+    opponent: input.opponent,
+    pitchName: pitchRows[0]?.nameHe ?? null,
+    medicName: medicRows[0]?.name ?? null,
+    medicPhone: medicRows[0]?.phone ?? null,
+    driverName: driverRows[0]?.name ?? null,
+    driverPhone: driverRows[0]?.phone ?? null,
+    cityName: input.cityName,
+    departureTime: input.departureTime,
+  };
 }
 
 export async function deleteGame(formData: FormData) {
