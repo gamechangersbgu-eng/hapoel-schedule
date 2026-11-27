@@ -5,6 +5,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { deleteBoardBooking, previewBoardSeries, saveBoardBooking } from "@/app/admin/pitches/actions";
+import { NotifyTeamField, NotifyTeamToggle } from "@/components/NotifyTeamToggle";
 import { QuarterHourSelect } from "@/components/QuarterHourSelect";
 import { DurationPicker } from "@/components/DurationPicker";
 import { RecurrenceFields } from "@/components/RecurrenceFields";
@@ -31,6 +32,7 @@ import {
   type SeriesIntervalDays,
 } from "@/lib/recurrence";
 import { teamCoachSummary } from "@/lib/coaches";
+import { NOTIFY_TEAM_FIELD } from "@/lib/training-notify";
 import { biweeklyRepeatAllowed, isFootballSchoolTeam } from "@/lib/team-labels";
 
 type Initial = {
@@ -85,6 +87,7 @@ export function BookingForm({
   const [review, setReview] = useState<OccurrencePreview[] | null>(null);
   const [choices, setChoices] = useState<Record<string, SeriesChoice>>({});
   const [checking, setChecking] = useState(false);
+  const [notifyTeam, setNotifyTeam] = useState(false);
   const allowSubmit = useRef(false);
   const formRef = useRef<HTMLFormElement>(null);
   const seriesFlag = useRef<HTMLInputElement>(null);
@@ -508,6 +511,8 @@ export function BookingForm({
             )
           ) : null}
 
+          <NotifyTeamToggle checked={notifyTeam} onChange={setNotifyTeam} name={NOTIFY_TEAM_FIELD} />
+
           <div className="flex items-center gap-2">
             {review ? (
               <button
@@ -544,6 +549,7 @@ export function BookingForm({
           >
             <input type="hidden" name="date" value={day.date} />
             <input type="hidden" name="id" value={initial.slotId} />
+            <NotifyTeamField requested={notifyTeam} />
             <button type="submit" name="scope" value="one" className="min-h-11 text-sm font-bold text-red-700 underline">
               מחיקת המועד הזה
             </button>

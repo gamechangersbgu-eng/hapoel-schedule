@@ -9,6 +9,7 @@ import { OFFICIAL_DURATION_ERROR_HE, checkBooking, durationAllowedForAcademy, du
 import { isFootballSchoolTeam } from "@/lib/team-labels";
 import { parseSeriesChoices, readSeriesInterval } from "@/lib/recurrence";
 import { bumpScheduleRevision } from "@/lib/schedule-revision";
+import { teamNotificationRequested } from "@/lib/training-notify";
 import { notifyTeamsScheduleChanged } from "@/lib/web-push";
 import { deleteTrainingScope, previewSeries, saveTrainingSeries } from "@/lib/training-series";
 import { requireAdmin } from "@/lib/auth";
@@ -60,6 +61,7 @@ export async function saveBoardBooking(formData: FormData) {
   const durationMinutes = durationFromClocks || Number(formData.get("durationMinutes")) || 0;
   const rotationRaw = String(formData.get("rotationTemplateId") ?? "");
   const note = String(formData.get("note") ?? "").trim() || null;
+  const notifyTeam = teamNotificationRequested(formData.get("notifyTeam"));
   const statusChoice = String(formData.get("status") ?? "active");
   const cancelled = statusChoice === "cancelled";
   const substituteStaffId = statusChoice === "substitute" ? Number(formData.get("substituteStaffId") || 0) || null : null;
@@ -117,6 +119,7 @@ export async function saveBoardBooking(formData: FormData) {
       statusNote,
       back,
       sessionKind: tournament ? "tournament" : "training",
+      notifyTeam,
     });
   }
 
@@ -191,7 +194,7 @@ export async function saveBoardBooking(formData: FormData) {
   });
 
   await refresh();
-  await notifyTeamsScheduleChanged([teamId]);
+  if (notifyTeam) await notifyTeamsScheduleChanged([teamId]);
   redirect(boardPath(date, { saved: "1" }));
 }
 
@@ -209,6 +212,7 @@ type SeriesContext = {
   statusNote: string | null;
   back: (error: string) => never;
   sessionKind: "training" | "tournament";
+  notifyTeam: boolean;
 };
 
 async function saveBoardSeries(formData: FormData, ctx: SeriesContext): Promise<never> {
@@ -262,7 +266,7 @@ async function saveBoardSeries(formData: FormData, ctx: SeriesContext): Promise<
     date: ctx.date,
   });
   await refresh();
-  await notifyTeamsScheduleChanged([ctx.teamId]);
+  if (ctx.notifyTeam) await notifyTeamsScheduleChanged([ctx.teamId]);
   redirect(boardPath(ctx.date, { saved: "1", skipped: result.skipped.length ? String(result.skipped.length) : undefined }));
 }
 
@@ -293,6 +297,7 @@ export async function deleteBoardBooking(formData: FormData) {
   await requireTrainingEditor(String(formData.get("date") ?? ""));
   const date = String(formData.get("date") ?? "");
   const id = Number(formData.get("id"));
+  const notifyTeam = teamNotificationRequested(formData.get("notifyTeam"));
   const scopeRaw = String(formData.get("scope") ?? "one");
   const scope = scopeRaw === "future" || scopeRaw === "series" ? scopeRaw : "one";
   if (id) {
@@ -307,7 +312,7 @@ export async function deleteBoardBooking(formData: FormData) {
         teamId: result.slot.teamId,
         date: result.slot.date,
       });
-      await notifyTeamsScheduleChanged([result.slot.teamId]);
+      if (notifyTeam) await notifyTeamsScheduleChanged([result.slot.teamId]);
     }
   }
   await refresh();
