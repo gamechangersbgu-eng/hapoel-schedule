@@ -1,15 +1,18 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   GITHUB_PAGES_ORIGIN,
   NETLIFY_APP_ORIGIN,
   appBasePathFrom,
+  publicAsset,
   resolvePushApiOrigin,
   schedulePathFor,
   serviceWorkerScript,
   shouldShowIosPushHint,
 } from "./app-base";
 import {
+  NOTIFICATION_ICON,
   isAllowedPushOrigin,
   namesForChange,
   parsePushSubscription,
@@ -66,7 +69,21 @@ test("subscriptions for a team change are matched once, and only when a team ove
   assert.equal(logistics.body, "עדכון למאמן: משחק חוץ · יציאה מבאר שבע: 14:30");
   assert.equal(logistics.tag, "hapoel-schedule-coach-update");
   assert.equal(logistics.url, "/?week=2026-11-22");
+  assert.equal(logistics.icon, NOTIFICATION_ICON);
+  assert.equal(logistics.badge, NOTIFICATION_ICON);
+  assert.equal(pushPayload(["נוער"], "/").icon, NOTIFICATION_ICON);
+  assert.equal(pushPayload(["נוער"], "/").badge, NOTIFICATION_ICON);
   assert.equal(pushPayload(["נוער"], "/").body, "יש עדכון בלוח של נוער");
+});
+
+test("schedule and coach pushes, and the service worker, use the academy logo", () => {
+  assert.equal(NOTIFICATION_ICON, "/icons/icon-192.png?v=2");
+  const sw = readFileSync(new URL("../public/sw.js", import.meta.url), "utf8");
+  assert.match(sw, /const ICON_PATH = "\/icons\/icon-192\.png\?v=2"/);
+  assert.match(sw, /icon: notificationIcon\(data\.icon\)/);
+  assert.match(sw, /badge: notificationIcon\(data\.badge\)/);
+  assert.match(sw, /return rooted\(ICON_PATH\)/);
+  assert.match(sw, /hapoel-schedule-v2/);
 });
 
 test("push CORS allows the Pages origin and the Netlify app only", () => {
@@ -120,6 +137,9 @@ test("Pages registers under /hapoel-schedule and posts subscriptions to Netlify"
   assert.equal(serviceWorkerScript("/"), "/sw.js");
   assert.equal(schedulePathFor("/hapoel-schedule"), "/hapoel-schedule/");
   assert.equal(schedulePathFor(""), "/");
+  assert.equal(publicAsset("/hbs-academy-logo.png", ""), "/hbs-academy-logo.png");
+  assert.equal(publicAsset("/hbs-academy-logo.png", "/hapoel-schedule"), "/hapoel-schedule/hbs-academy-logo.png");
+  assert.equal(publicAsset("icons/icon-192.png?v=2", "/hapoel-schedule/"), "/hapoel-schedule/icons/icon-192.png?v=2");
   assert.equal(resolvePushApiOrigin(GITHUB_PAGES_ORIGIN), NETLIFY_APP_ORIGIN);
   assert.equal(resolvePushApiOrigin(NETLIFY_APP_ORIGIN), "");
   assert.equal(resolvePushApiOrigin("http://localhost:3000"), "");

@@ -4,7 +4,7 @@
 // Android/desktop Chrome get an install button; iPhone gets short "Add to Home Screen" steps.
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { serviceWorkerScript } from "@/lib/app-base";
+import { publicAsset, serviceWorkerScript } from "@/lib/app-base";
 
 type InstallPrompt = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
 
@@ -83,7 +83,7 @@ export function PwaSetup() {
     >
       <div className="flex items-start gap-3">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/icons/icon-192.png" alt="" className="h-12 w-12 shrink-0 rounded-xl" />
+        <img src={publicAsset("/hbs-academy-logo.png")} alt="" className="h-12 w-12 shrink-0 object-contain" />
         <div className="min-w-0 flex-1">
           <p className="text-base font-black text-[#5c0814] dark:text-white">הלו״ז בלחיצה אחת ממסך הבית</p>
           {showIos && !prompt ? (

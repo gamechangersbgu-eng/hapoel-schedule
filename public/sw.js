@@ -7,12 +7,26 @@ const BASE = new URL("./", self.location).pathname.replace(/\/$/, "");
 function rooted(path) {
   return `${BASE}${path}`;
 }
-const CACHE = "hapoel-schedule-v1";
+const CACHE = "hapoel-schedule-v2";
+const ICON_PATH = "/icons/icon-192.png?v=2";
+
+function notificationIcon(value) {
+  if (
+    typeof value === "string" &&
+    value.startsWith("/icons/") &&
+    !value.includes("..") &&
+    !value.includes("\\") &&
+    !value.includes("//")
+  ) {
+    return rooted(value);
+  }
+  return rooted(ICON_PATH);
+}
 const NEVER_CACHE = [rooted("/admin"), rooted("/login"), rooted("/api/")];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll([rooted("/icons/icon-192.png")])).then(() => self.skipWaiting()),
+    caches.open(CACHE).then((cache) => cache.addAll([rooted(ICON_PATH)])).then(() => self.skipWaiting()),
   );
 });
 
@@ -77,8 +91,8 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(title, {
       body: data.body || "",
-      icon: rooted("/icons/icon-192.png"),
-      badge: rooted("/icons/icon-192.png"),
+      icon: notificationIcon(data.icon),
+      badge: notificationIcon(data.badge),
       dir: "rtl",
       lang: "he",
       tag: data.tag,

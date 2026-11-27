@@ -3,6 +3,7 @@ import Link from "next/link";
 import { count } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { adminUsers, db } from "@/lib/db";
+import { ClubLogo } from "@/components/ClubLogo";
 import { getCurrentAdmin } from "@/lib/auth";
 import { loginAction, setupOwnerAction } from "@/app/login/actions";
 
@@ -23,8 +24,13 @@ export default async function LoginPage({ searchParams }: Props) {
   return (
     <div className="flex min-h-full items-center justify-center bg-[linear-gradient(160deg,#c8102e_0%,#5c0814_100%)] p-4">
       <main className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
-        <p className="text-xs font-semibold text-zinc-500">הפועל באר שבע · מחלקת הנוער</p>
-        <h1 className="mt-1 text-2xl font-black text-[#8e0b20]">{setup ? "הגדרת מנהל ראשי" : "כניסת מנהל"}</h1>
+        <div className="flex items-center gap-3">
+          <ClubLogo size="login" />
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-zinc-500">הפועל באר שבע · מחלקת הנוער</p>
+            <h1 className="text-2xl font-black text-[#8e0b20]">{setup ? "הגדרת מנהל ראשי" : "כניסת מנהל"}</h1>
+          </div>
+        </div>
         {setup ? (
           <p className="mt-2 text-sm text-zinc-600">
             עוד אין משתמשים במערכת. המשתמש הראשון יהיה המנהל הראשי, והוא יוכל להוסיף מנהלים נוספים.

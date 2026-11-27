@@ -15,6 +15,13 @@ export function serviceWorkerScript(pathname: string, configured = ""): string {
   return `${appBasePathFrom(pathname, configured)}/sw.js`;
 }
 
+/** Public file, under the GitHub Pages folder when the site is built with one. */
+export function publicAsset(path: string, configured = process.env.NEXT_PUBLIC_BASE_PATH ?? ""): string {
+  const base = configured.replace(/\/$/, "");
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  return `${base}${normalized}`;
+}
+
 /** Path opened when a push is tapped. Absolute URLs are rejected by the API. */
 export function schedulePathFor(basePath: string): string {
   return basePath ? `${basePath}/` : "/";

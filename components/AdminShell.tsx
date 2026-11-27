@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { AdminNav } from "@/components/AdminNav";
 import { AdminUserMenu } from "@/components/AdminUserMenu";
+import { ClubLogo } from "@/components/ClubLogo";
 import type { CurrentAdmin } from "@/lib/auth";
 import { ROLE_LABELS, isManager } from "@/lib/roles";
 
@@ -23,9 +24,12 @@ export function AdminShell({
           {isManager(user.role) ? "מצב מנהל" : `כניסת ${ROLE_LABELS[user.role]}`}
         </div>
         <div className="mx-auto flex max-w-[1400px] flex-wrap items-center justify-between gap-3 px-4 py-3">
-          <div>
-            <p className="text-xs font-semibold text-white/75">הפועל באר שבע · ניהול</p>
-            <h1 className="text-2xl font-black">{title}</h1>
+          <div className="flex min-w-0 items-center gap-3">
+            <ClubLogo plate />
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-white/75">הפועל באר שבע · ניהול</p>
+              <h1 className="text-2xl font-black">{title}</h1>
+            </div>
           </div>
           <AdminUserMenu user={user} />
         </div>
