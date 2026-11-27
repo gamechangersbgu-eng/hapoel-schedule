@@ -321,7 +321,7 @@ function PushNotices({ blocked, iosHint }: { blocked: boolean; iosHint: boolean 
   );
 }
 
-function TeamPicker({
+export function TeamPicker({
   teams,
   current,
   alerts,
@@ -364,10 +364,12 @@ function TeamPicker({
     setPrefs((currentPrefs) => withBell(currentPrefs, id, !isTeamAlertOn(currentPrefs, id, true)));
   }
   return (
-    <section className="flex flex-col gap-3 pb-24">
+    // Not inside .team-week, so the page stays on the light paper background even when
+    // the phone prefers dark. Tailwind's dark: variant still matches, so ink here is pinned dark.
+    <section className="team-picker flex flex-col gap-3 bg-[#fff8f6] pb-24 text-[#111827] dark:bg-[#fff8f6] dark:text-[#111827]">
       <div>
-        <h2 className="text-xl font-black text-slate-900 dark:text-white">אילו קבוצות לראות?</h2>
-        <p className="text-base text-slate-800 dark:text-zinc-200">
+        <h2 className="text-xl font-black text-[#111827] dark:text-[#111827]">אילו קבוצות לראות?</h2>
+        <p className="text-base text-[#1f2937] dark:text-[#1f2937]">
           אפשר לבחור כמה: למשל שני ילדים בגילאים שונים, או גם הקבוצה שמעל. הבחירה נשמרת בטלפון. פעמון דולק ליד קבוצה
           אומר שנשלחת התראה כשהלוח שלה משתנה.
         </p>
@@ -433,7 +435,7 @@ function TeamPicker({
                 prefs,
               )
             }
-            className="min-h-12 flex-1 rounded-xl bg-[#c8102e] text-base font-black text-white disabled:bg-zinc-300"
+            className="min-h-12 flex-1 rounded-xl bg-[#c8102e] text-base font-black text-white disabled:bg-zinc-300 disabled:text-[#111827] dark:bg-[#c8102e] dark:text-white dark:disabled:bg-zinc-300 dark:disabled:text-[#111827]"
           >
             {chosen.length === 0 ? "בחרו לפחות קבוצה אחת" : chosen.length === 1 ? "הצגת הקבוצה" : `הצגת ${chosen.length} הקבוצות`}
           </button>
