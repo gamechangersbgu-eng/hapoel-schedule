@@ -98,6 +98,8 @@ export async function upsertIfaGame(
     }
   }
 
+  // manual_departure_time is an admin override and is intentionally absent here,
+  // so a later scrape does not clear a time the manager typed.
   const detailPayload = {
     gameKind: input.gameKind,
     opponent: input.opponent,

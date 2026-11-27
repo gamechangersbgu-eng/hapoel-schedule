@@ -4,13 +4,31 @@ import { AdminShell } from "@/components/AdminShell";
 import { GameForm } from "@/components/GameForm";
 import { HEBREW_DAY_NAMES } from "@/components/display-utils";
 import { requireAdmin } from "@/lib/auth";
+import { coachUpdatePageMessage } from "@/lib/game-logistics";
 import { gameWarnings, getGamesWeek } from "@/lib/games";
 import { addDaysISO, formatDayMonth, formatWeekRange, resolveWeekStart } from "@/lib/week";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "משחקים · מצב מנהל" };
 
-type Props = { searchParams: Promise<{ week?: string; edit?: string; new?: string; error?: string; saved?: string }> };
+type Props = {
+  searchParams: Promise<{
+    week?: string;
+    edit?: string;
+    new?: string;
+    error?: string;
+    saved?: string;
+    coach?: string;
+    subs?: string;
+    sent?: string;
+  }>;
+};
+
+function countParam(value: string | undefined) {
+  const count = Number(value);
+  if (!Number.isInteger(count) || count < 0 || count > 10000) return 0;
+  return count;
+}
 
 export default async function GamesPage({ searchParams }: Props) {
   const user = await requireAdmin();
@@ -20,6 +38,7 @@ export default async function GamesPage({ searchParams }: Props) {
   const warnings = gameWarnings(week);
   const base = `/admin/games?week=${weekStart}`;
   const editing = params.edit ? week.games.find((game) => game.slotId === Number(params.edit)) : undefined;
+  const coachMessage = coachUpdatePageMessage(params.coach, countParam(params.subs), countParam(params.sent));
   const name = <T extends { id: number; name: string }>(rows: T[], id: number | null) => rows.find((r) => r.id === id);
 
   return (
@@ -33,7 +52,9 @@ export default async function GamesPage({ searchParams }: Props) {
         <Link href={`${base}&new=1`} className="rounded-lg bg-[#c8102e] px-4 py-2 text-sm font-black text-white">+ משחק חדש</Link>
       </div>
 
-      {params.saved ? (
+      {coachMessage ? (
+        <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800 ring-1 ring-emerald-200">{coachMessage}</p>
+      ) : params.saved ? (
         <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800 ring-1 ring-emerald-200">המשחק נשמר.</p>
       ) : null}
 
@@ -72,7 +93,7 @@ export default async function GamesPage({ searchParams }: Props) {
                           {game.opponent ? `נגד ${game.opponent}` : "יריבה לא הוזנה"}
                           {home
                             ? ` · ${pitch?.nameHe ?? "מגרש לא נבחר"} · חובש: ${medic?.name ?? "—"}`
-                            : ` · ${city?.name ?? "עיר לא נבחרה"} · נהג: ${driver ? `${driver.name} ${driver.phone}` : "—"}${game.departureTime ? ` · יציאה ${game.departureTime}` : ""}`}
+                            : ` · ${city?.name ?? "עיר לא נבחרה"} · נהג: ${driver ? `${driver.name} ${driver.phone}` : "—"}${game.departureTime ? ` · יציאה ${game.departureTime}${game.manualDepartureTime ? " (ידני)" : ""}` : ""}`}
                         </span>
                         {cancelled ? <span className="rounded-full bg-zinc-800 px-2.5 py-0.5 text-xs font-black text-white">בוטל</span> : null}
                         {issues.length ? (

@@ -12,6 +12,7 @@ import {
   timeLabel,
   todayISO,
 } from "@/components/display-utils";
+import { tvHomeGameLine } from "@/lib/game-logistics";
 import { SLOT_TYPES, getSlotType, isCampSlot } from "@/lib/slot-types";
 import type { SlotDTO, TeamDTO, WeekData } from "@/lib/types";
 import { formatDayMonth, formatWeekRange } from "@/lib/week";
@@ -110,7 +111,7 @@ const SHORT_PITCH: Record<string, string> = {
 /** Second line of a chip: where / what, in as few words as possible. */
 function chipLine(slot: SlotDTO) {
   if (SHORT_PITCH[slot.type]) return `${SHORT_PITCH[slot.type]}${slot.place ? ` · ${slot.place}` : ""}`;
-  if (slot.type === "home_game") return slot.opponent ? `בית · ${slot.opponent}` : "משחק בית";
+  if (slot.type === "home_game") return tvHomeGameLine(slot);
   if (slot.type === "away_game") return slot.opponent ? `חוץ · ${slot.opponent}` : "משחק חוץ";
   if (slot.type === "practice_game") return slot.opponent ? `משחק אימון · ${slot.opponent}` : "משחק אימון";
   if (slot.type === "off") return "חופש";

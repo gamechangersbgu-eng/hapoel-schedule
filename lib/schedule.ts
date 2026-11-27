@@ -1,6 +1,7 @@
 import { and, asc, eq, gte, inArray, lte, or } from "drizzle-orm";
 import {
   db,
+  pitches,
   settings as settingsTable,
   slotGameDetails,
   slotTrainingDetails,
@@ -9,6 +10,7 @@ import {
   teamCoaches,
   teams as teamsTable,
 } from "@/lib/db";
+import { effectiveDepartureTime } from "@/lib/game-logistics";
 import { SUBDIVISION_SHORT, trainingEndClock } from "@/lib/pitch-rules";
 import { applyCoachLabels, coachFullNameByTeam, sortTeamsByAge } from "@/lib/team-labels";
 import type { SlotDTO, WeekData } from "@/lib/types";
@@ -89,6 +91,11 @@ export async function getWeekData(weekParam?: string | null): Promise<WeekData> 
         db.select().from(slotGameDetails).where(inArray(slotGameDetails.slotId, ids)),
       ])
     : [[], []];
+  const pitchIds = [...new Set(gameRows.map((row) => row.pitchId).filter((id): id is number => id != null))];
+  const pitchRows = pitchIds.length
+    ? await db.select({ id: pitches.id, nameHe: pitches.nameHe }).from(pitches).where(inArray(pitches.id, pitchIds))
+    : [];
+  const pitchNameById = new Map(pitchRows.map((row) => [row.id, row.nameHe]));
   const placeBySlot = new Map(
     trainingRows
       .filter((row) => row.subdivisionCode && row.subdivisionCode !== "whole")
@@ -110,13 +117,15 @@ export async function getWeekData(weekParam?: string | null): Promise<WeekData> 
     teams,
     slots: slots.map((slot) => {
       const training = trainingBySlot.get(slot.id);
+      const game = gameBySlot.get(slot.id);
       const durationMinutes = training?.durationMinutes ?? null;
       return {
         ...toSlotDTO(slot, substituteNames),
         place: placeBySlot.get(slot.id) ?? null,
-        opponent: gameBySlot.get(slot.id)?.opponent ?? null,
-        departureTime: gameBySlot.get(slot.id)?.departureTime ?? null,
-        medicName: gameBySlot.get(slot.id)?.medicName ?? null,
+        opponent: game?.opponent ?? null,
+        departureTime: effectiveDepartureTime(game?.manualDepartureTime, game?.departureTime),
+        pitchName: slot.type === "home_game" && game?.pitchId ? (pitchNameById.get(game.pitchId) ?? null) : null,
+        medicName: game?.medicName ?? null,
         durationMinutes,
         rotationTemplateId: training?.rotationTemplateId ?? null,
         endTime: trainingEndClock(slot.startTime, durationMinutes),

@@ -4,6 +4,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, gte, inArray, lte } from "drizzle-orm";
 import { db, gymBookings, slotGameDetails, slotTrainingDetails, slots, teams, videoRoomBookings } from "@/lib/db";
+import { effectiveDepartureTime } from "@/lib/game-logistics";
 import { sortTeamsByAge } from "@/lib/team-labels";
 import { formatDateHe, logChange } from "@/lib/history";
 import { getSlotType, isPitchSlot } from "@/lib/slot-types";
@@ -108,7 +109,9 @@ async function loadTeamEvents(kind: RoomKind, teamId: number, dates: string[]): 
       const kickoff = game?.kickoffTime || slot.startTime;
       if (!kickoff) continue;
       const kick = toMinutes(kickoff);
-      const departure = slot.type === "away_game" && game?.departureTime ? toMinutes(game.departureTime) : null;
+      const leave =
+        slot.type === "away_game" ? effectiveDepartureTime(game?.manualDepartureTime, game?.departureTime) : null;
+      const departure = leave ? toMinutes(leave) : null;
       events.push({
         teamId,
         date: slot.date,

@@ -56,6 +56,17 @@ test("subscriptions for a team change are matched once, and only when a team ove
   assert.equal(pushBodyForTeams(["נוער"]), "יש עדכון בלוח של נוער");
   assert.equal(pushPayload(["נוער"], "/").tag, "hapoel-schedule-update");
   assert.equal(pushPayload(["נוער"], "/").title, "עדכון בלוח האימונים");
+  assert.equal(pushPayload(["נוער"], "/").body, "יש עדכון בלוח של נוער");
+  const logistics = pushPayload([], "/?week=2026-11-22", {
+    title: "עדכון למאמן",
+    body: "עדכון למאמן: משחק חוץ · יציאה מבאר שבע: 14:30",
+    tag: "hapoel-schedule-coach-update",
+  });
+  assert.equal(logistics.title, "עדכון למאמן");
+  assert.equal(logistics.body, "עדכון למאמן: משחק חוץ · יציאה מבאר שבע: 14:30");
+  assert.equal(logistics.tag, "hapoel-schedule-coach-update");
+  assert.equal(logistics.url, "/?week=2026-11-22");
+  assert.equal(pushPayload(["נוער"], "/").body, "יש עדכון בלוח של נוער");
 });
 
 test("push CORS allows the Pages origin and the Netlify app only", () => {

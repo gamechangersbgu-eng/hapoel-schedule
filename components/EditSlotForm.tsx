@@ -16,6 +16,7 @@ import {
   isTrainingScheduleType,
   slotTypesForScheduler,
 } from "@/lib/slot-types";
+import { homeGamePitchText } from "@/lib/game-logistics";
 import { TRAINING_SCHEDULE_DENIED } from "@/lib/roles";
 import { showTrainingNotifyToggle } from "@/lib/training-notify";
 import { ACADEMY_DURATION } from "@/lib/pitch-rules";
@@ -245,6 +246,7 @@ export function EditSlotForm({
                     <span>
                       {style?.label}
                       {slot.opponent ? ` · ${slot.opponent}` : ""}
+                      {homeGamePitchText(slot) ? ` · ${homeGamePitchText(slot)}` : ""}
                     </span>
                     <span>{slot.startTime || slot.note || "עריכה"}</span>
                   </a>

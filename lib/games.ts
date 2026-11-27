@@ -14,6 +14,7 @@ import {
   teamCoaches,
   teams as teamsTable,
 } from "@/lib/db";
+import { awayDepartureWarning, effectiveDepartureTime } from "@/lib/game-logistics";
 import { HOME_GAME_BLOCK_MINUTES, toMinutes, toTime } from "@/lib/pitch-rules";
 import { applyCoachLabels, coachFullNameByTeam } from "@/lib/team-labels";
 import { weekDates } from "@/lib/week";
@@ -30,7 +31,10 @@ export type GameRow = {
   medicId: number | null;
   cityId: number | null;
   driverId: number | null;
+  /** Effective departure: manual override, or the suggested time when manual is empty. */
   departureTime: string | null;
+  /** Set only when a manager typed a departure. Null means the suggestion is in use. */
+  manualDepartureTime: string | null;
   travelMinutes: number | null;
   status: string;
   statusNote: string | null;
@@ -128,7 +132,8 @@ export async function getGamesWeek(weekStart: string): Promise<GamesWeek> {
       medicId: game?.medicId ?? null,
       cityId: game?.cityId ?? null,
       driverId: game?.driverId ?? null,
-      departureTime: game?.departureTime ?? null,
+      departureTime: effectiveDepartureTime(game?.manualDepartureTime, game?.departureTime),
+      manualDepartureTime: game?.manualDepartureTime ?? null,
       travelMinutes: game?.travelMinutes ?? null,
       status: slot.status,
       statusNote: slot.statusNote,
@@ -167,7 +172,8 @@ export function gameWarnings(week: GamesWeek): Record<number, string[]> {
       if (!game.pitchId) add(game.slotId, "לא נבחר מגרש");
       if (!game.medicId) add(game.slotId, "לא שובץ חובש");
     } else {
-      if (!game.cityId) add(game.slotId, "לא נבחרה עיר, ולכן אין שעת יציאה");
+      const departureWarning = awayDepartureWarning({ cityId: game.cityId, departureTime: game.departureTime });
+      if (departureWarning) add(game.slotId, departureWarning);
       if (!game.driverId) add(game.slotId, "לא שובץ נהג");
     }
     for (const other of active) {

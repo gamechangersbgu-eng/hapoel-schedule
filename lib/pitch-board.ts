@@ -13,6 +13,7 @@ import {
   teamAgeBandSubdivisions,
   teams as teamsTable,
 } from "@/lib/db";
+import { effectiveDepartureTime } from "@/lib/game-logistics";
 import { loadDurations, loadRotations } from "@/lib/rotations";
 
 import {
@@ -201,7 +202,8 @@ async function loadGames(teamName: Record<number, string>, dates: string[]): Pro
     if (!kickoff) continue;
     const away = slot.type === "away_game";
     const kick = toMinutes(kickoff);
-    const departure = away && game?.departureTime ? toMinutes(game.departureTime) : null;
+    const leave = away ? effectiveDepartureTime(game?.manualDepartureTime, game?.departureTime) : null;
+    const departure = leave ? toMinutes(leave) : null;
     byDate.get(slot.date)?.push({
       slotId: slot.id,
       teamId: slot.teamId,
